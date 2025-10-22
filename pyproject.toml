@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "xcore"
+version = "0.1.0"
+description = "for base html core app"
+authors = ["Eliezer Traore <68350805+traoreera@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+python-fasthtml = ">=0.12.18,<0.13.0"
+sqlalchemy = ">=2.0.41,<3.0.0"
+python-dotenv = ">=1.1.0,<2.0.0"
+alembic = ">=1.16.1,<2.0.0"
+passlib = { extras = ["bcrypt"], version = ">=1.7.4,<2.0.0" }
+flake8 = ">=7.2.0,<8.0.0"
+apscheduler = ">=3.11.0,<4.0.0"
+pyotp = ">=2.9.0,<3.0.0"
+pydantic = { extras = ["email"], version = ">=2.11.7,<3.0.0" }
+python-jose = ">=3.4.0,<4.0.0"
+pillow = ">=11.2.1,<12.0.0"
+qrcode = { extras = ["pil"], version = ">=8.2,<9.0" }
+paho-mqtt = ">=2.1.0,<3.0.0"
+psutil = ">=7.0.0,<8.0.0"
+rich = ">=14.0.0,<15.0.0"
+gunicorn = ">=23.0.0,<24.0.0"
+black = ">=25.1.0,<26.0.0"
+watchdog = ">=6.0.0,<7.0.0"
+markdown = ">=3.8.2,<4.0.0"
+mysql-connector-python = "^9.4.0"
+toml = "^0.10.2"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^4.3.0"
+black = "^25.9.0"
+flake8 = "^7.3.0"
+autoflake = "^2.3.1"
+isort = "^6.1.0"
+autopep8 = "^2.3.2"
+pytest = "^8.4.2"
+pytest-asyncio = "^1.2.0"
+httpx = "^0.28.1"
+faker = "^37.8.0"
+pytest-cov = "^7.0.0"
+bandit = "^1.8.6"
+fastapi = "^0.118.2"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.flake8]
+max-line-length = 88
+
+
+
+[tool.poetry.scripts]
+migrate = "tools.migrate:main"
+dbutils = "tools.model_discovery:main"
+auto_migrate = "tools.auto_migrate:main"
+migration_utils = "tools.migration_utils:main"

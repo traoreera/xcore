@@ -1,0 +1,99 @@
+{
+    "$schema": "https://json.schemastore.org/webpack-config.json",
+    "version": 1,
+    "manager": {
+        "dotenv": "./manager/.env",
+        "plugins": {
+            "directory": "./plugins",
+            "interval": 2,
+            "entry_point": "run"
+        },
+        "tasks": {
+            "directory": "./backgroundtask",
+            "default": "./manager/plTask.py"
+        },
+        "log": {
+            "file": "manager.log",
+            "console": true
+        },
+        "snapshot": {
+            "extensions": [
+                ".log",
+                ".pyc",
+                ".html",
+                "*.lock",
+                "*.toml",
+                "*.json",
+                "*.txt",
+                "*.md"
+            ],
+            "filenames": [
+                "__pycache__",
+                "__init__.py",
+                ".env",
+                ".git",
+                "poetry.lock",
+                "pyproject.toml",
+                "requirements.txt",
+                "plugin.json",
+                "README.md",
+                "LICENSE",
+                "LICENSE.txt",
+                "CHANGELOG.md",
+                "HISTORY.md",
+                "CONTRIBUTING.md",
+                "CODE_OF_CONDUCT.md"
+            ],
+            "hidden": true
+        }
+    },
+    "secure": {
+        "password": {
+            "algorithms": [
+                "bcrypt"
+            ],
+            "scheme": "bcrypt",
+            "category": "password"
+        },
+        "dotenv": "./security/.env"
+    },
+    "migration": {
+        "url": "sqlite:///test.db",
+        "alembic_config": "alembic.ini",
+        "auto_discover_models": true,
+        "automigration": {
+            "models": [
+                "./data/models",
+                "./manager/models"
+            ]
+        },
+        "model_discovery": {
+            "plugins_path": "plugins",
+            "exclude_directories": [
+                "__pycache__",
+                ".git",
+                "node_modules",
+                "venv",
+                ".pytest_cache"
+            ],
+            "include_file_patterns": [
+                "*.py"
+            ],
+            "exclude_file_patterns": [
+                "__init__.py",
+                "test_*.py",
+                "*_test.py"
+            ]
+        },
+        "backup": {
+            "auto_backup_before_migration": true,
+            "backup_directory": "backups",
+            "max_backup_files": 10,
+            "backup_name_format": "backup_{timestamp}.db"
+        },
+        "logger": {
+            "console": true,
+            "file": "migration.log"
+        }
+    }
+}
