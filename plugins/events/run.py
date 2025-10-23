@@ -1,5 +1,5 @@
-from fastapi import APIRouter
-
+from fastapi import APIRouter, Depends
+from auth import dependencies
 PLUGIN_INFO = {
     "name": "Events",
     "version": "1.0.0",
@@ -25,13 +25,14 @@ class Plugin:
 
     @router.get("/")
     @staticmethod
-    def run():
-
+    def run(curent_user=Depends(dependencies.get_current_user)):
+        
+        print(curent_user.email)
         return {"tag_for_identified": "trigger"}
 
     @router.get("/test")
     @staticmethod
-    def test():
+    async def test():
 
         return {"tag_for_identified": "hunt"}
 

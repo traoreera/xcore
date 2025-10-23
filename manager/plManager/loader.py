@@ -4,14 +4,14 @@ import pathlib
 import pkgutil
 import sys
 from typing import Any, Dict, List
+import logging
+
 
 from manager.schemas.plugins import Plugin
 from manager.tools.error import Error
-
-from . import logging
-from .installer import Installer
-from .repository import Repository
-from .validator import Validator
+from manager.plManager.installer import Installer
+from manager.plManager.repository import Repository
+from manager.plManager.validator import Validator
 
 # ============================================================================
 

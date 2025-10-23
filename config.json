@@ -103,6 +103,24 @@
         "logs": {
             "console": false,
             "file": "app.log"
-        }
+        },
+        "extensions": [
+            "auth",
+            "data",
+            "manager",
+            "logger",
+            "security",
+            "tools",
+            "xcore"
+        ],
+        "requirements": [
+            "auth==1.0.0",
+            "data==1.0.0",
+            "manager==1.0.0",
+            "logger==1.0.0",
+            "security==1.0.0",
+            "tools==1.0.0",
+            "xcore==1.0.0"
+        ]
     }
 }

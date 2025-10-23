@@ -1,17 +1,18 @@
 import threading
 import time
 from typing import Optional
+from admin import dependencies
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
-import runtimer
+import manager.runtimer as runtimer
 from manager.schemas.taskManager import (
     RestartService,
     TaskListResponse,
     TaskResourcesResponse,
     TaskStatusResponse,
 )
-from runtimer import backgroundtask, backgroundtask_manager, core_task_threads, crontab
+from manager.runtimer import backgroundtask, backgroundtask_manager, core_task_threads, crontab
 
 task = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -25,8 +26,8 @@ except ImportError:
 # ────────────────────────────────
 
 
-@task.get("/resources", response_model=TaskResourcesResponse)
-def resources():
+@task.get("/resources", response_model=TaskResourcesResponse,)
+def resources(user=Depends(dependencies.require_admin)):
     """
     Retourne la consommation de ressources (CPU, RAM, durée, etc.) pour chaque service actif.
     """

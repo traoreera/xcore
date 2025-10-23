@@ -1,0 +1,1 @@
+from security.hash import Hash

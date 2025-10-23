@@ -2,11 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import declarative_base, registry, sessionmaker
 
-from data import Base
-from manager.plManager import logger
 
-# Base: registry = declarative_base()
-
+from .import Base
 
 def get_db():
     try:
@@ -16,7 +13,6 @@ def get_db():
 
     if engine:
         Base.metadata.create_all(engine)
-        logger.info("Using first database for application")
         Session = sessionmaker(bind=engine, autoflush=False)
         session = Session()
         try:
@@ -25,6 +21,3 @@ def get_db():
             session.close()
     else:
         return None
-
-
-logger.info("🗃️  Module de session de base de données chargé avec succès")

@@ -31,6 +31,7 @@ mysql-connector-python = "^9.4.0"
 toml = "^0.10.2"
 uvicorn = "^0.38.0"
 bcrypt = "4.0.1"
+pip = "^25.2"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.3.0"
