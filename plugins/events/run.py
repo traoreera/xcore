@@ -1,22 +1,17 @@
 from fastapi import APIRouter
 
-
-
-router = APIRouter(
-    prefix="/presence",
-    tags=["Presence", "Plugin"],
-)
-
-
 PLUGIN_INFO = {
-    "name": "Presence",
+    "name": "Events",
     "version": "1.0.0",
     "author": "traore Eliezer",
-    "Api_prefix": "/app/presence",
-    "tag_for_identified": ["Plugin", "Presence"],
+    "Api_prefix": "/app/events",
+    "tag_for_identified": ["Plugin", "events"],
     "trigger": 2,
 }
-
+router = APIRouter(
+    prefix=PLUGIN_INFO["Api_prefix"],
+    tags=PLUGIN_INFO["tag_for_identified"],
+)
 
 
 class Plugin:
@@ -27,21 +22,18 @@ class Plugin:
         self.Api_prefix = PLUGIN_INFO["Api_prefix"]
         self.tag_for_identified = PLUGIN_INFO["tag_for_identified"]
         self.trigger = PLUGIN_INFO["trigger"]
-    
 
     @router.get("/")
     @staticmethod
     def run():
-        
+
         return {"tag_for_identified": "trigger"}
-    
 
     @router.get("/test")
     @staticmethod
     def test():
-        
-        return {"tag_for_identified": "trigger"}
 
+        return {"tag_for_identified": "hunt"}
 
     def response_model(self):
         return {
@@ -51,20 +43,17 @@ class Plugin:
             "Api_prefix": self.Api_prefix,
             "tag_for_identified": self.tag_for_identified,
             "trigger": self.trigger,
-
-            "add_time": ["2023-05-27","2023-05-28", "2023-05-29"],
+            "add_time": ["2023-05-27", "2023-05-28", "2023-05-29"],
         }
-
 
     @router.get("/response")
     @staticmethod
     def response():
-        
-        return Plugin.response_model(self:=Plugin())
-    
+
+        return Plugin.response_model(self := Plugin())
 
     @router.post("/response")
     @staticmethod
-    def response(rr:str):
+    def response(rr: str):
         print("rr >>", rr)
-        return Plugin.response_model(self:=Plugin())
+        return Plugin.response_model(self := Plugin())

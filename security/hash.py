@@ -1,4 +1,5 @@
 from passlib.context import CryptContext
+
 from . import cfg  # ton module de config
 
 
@@ -17,9 +18,7 @@ def _get_schemes():
     return schemes
 
 
-pwd_cxt = CryptContext(
-    schemes=_get_schemes()
-)
+pwd_cxt = CryptContext(schemes=_get_schemes())
 
 
 class Hash:
@@ -34,17 +33,15 @@ class Hash:
     @staticmethod
     def verify(hashed_password: str, plain_password: str) -> bool:
         if not hashed_password or not plain_password:
-            print("password ou hashed_password vide")
             return False
 
-        if not pwd_cxt.verify(plain_password, hashed_password):
-            print("🚫 Mauvais mot de passe.")
+        if not pwd_cxt.verify(
+            plain_password,
+            hashed_password,
+        ):
             return False
 
         if pwd_cxt.needs_update(hashed_password):
-            new_hash = pwd_cxt.hash(plain_password)
-            print("🔁 Migration du hash vers un nouvel algorithme.")
-            print(f"Ancien : {hashed_password[:25]}... → Nouveau : {new_hash[:25]}...")
-            # 👉 à toi d’enregistrer `new_hash` dans ta base ici
+            pass  # TODO: mettre à jour le hachage
 
         return True

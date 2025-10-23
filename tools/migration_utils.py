@@ -12,8 +12,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-
-
 # Add the project root to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -21,11 +19,11 @@ try:
     from sqlalchemy import create_engine, inspect
 
     from data import Base
-    from .import logger, cfg
+
+    from . import cfg, logger
 except ImportError as e:
     print(f"❌ Import error: {e}")
     sys.exit(1)
-
 
 
 class DatabaseInspector:
@@ -180,14 +178,16 @@ def main():
         ],
         help="Action to perform",
     )
-    parser.add_argument("--url", help="Database URL (default: cfg.get('database_url', 'url'))")
+    parser.add_argument(
+        "--url", help="Database URL (default: cfg.get('database_url', 'url'))"
+    )
     parser.add_argument("--output", help="Output file for schema export")
     parser.add_argument("--backup", help="Backup file name (for create/restore)")
 
     args = parser.parse_args()
 
     # Fallback sur DATABASE.URL si --url n’est pas fourni
-    
+
     db_url = args.url or cfg.get("database_url", "url")
     if args.action == "inspect":
         inspector = DatabaseInspector(db_url)

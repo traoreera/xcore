@@ -1,22 +1,20 @@
+from typing import Any
+
 from sqlalchemy.orm import session
 
-
-from ..schemas.plugins import Plugin
+from manager.crud.plugin import PluginsCrud
 from manager.db import get_db
+from manager.plManager import logger
+from manager.schemas.plugins import Plugin
 
-from ..crud.plugin import PluginsCrud
-from . import get_logger, logging
+from . import logging
 
 
 class Repository:
     """Interface CRUD pour la gestion des plugins enregistrés en base."""
 
-    def __init__(
-        self,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        self.logger = logger or get_logger(__name__)
-
+    def __init__(self, logger: logging.Logger | Any = logger) -> None:
+        self.logger = logger
         self.db = PluginsCrud(db=next(get_db()))
 
     def get_all_active(self) -> list:

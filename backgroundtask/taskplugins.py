@@ -1,7 +1,5 @@
 import time
 
-
-
 metadata = {
     "title": "Plugins Listerner",
     "description": """

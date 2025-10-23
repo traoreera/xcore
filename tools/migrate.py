@@ -25,13 +25,12 @@ try:
     from alembic.script import ScriptDirectory
     from data import Base
 
-    from .import logger,cfg
-    
+    from . import cfg, logger
+
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print("📦 Please install required dependencies: pip install alembic sqlalchemy")
     sys.exit(1)
-
 
 
 class MigrationManager:
@@ -56,7 +55,6 @@ class MigrationManager:
     def get_database_url(self) -> str:
         """Récupère l'URL de la base de données"""
         try:
-            
 
             url = cfg.get("database", "url")
             logger.info(f"🔗 URL de base de données récupérée: {url[:10]}***")

@@ -1,5 +1,8 @@
 from typing import Any, List, Optional
+
+from manager.plManager import logger
 from manager.tools.error import Error
+
 try:
     from fasthtml.common import Route
 except ImportError:
@@ -9,7 +12,6 @@ except ImportError:
 class AppType:
     FASTAPI = "fastapi"
     FASTHTML = "fasthtml"
-
 
 
 class Reloader:
@@ -24,30 +26,32 @@ class Reloader:
         self.app_type = app_type
 
     # ------------------------------------------------------------
-    # 🔁 Méthode principale : reload
+    # Méthode principale : reload
     # ------------------------------------------------------------
     @Error.exception_handler
     def reload(self) -> Any:
         """Recharge les routes principales de l'application."""
-        print(f"🔄 Reloading core routes for {self.app_type.upper()}...")
+        logger.info(f"Reloading core routes for {self.app_type.upper()}...")
 
         if self.app_type == AppType.FASTHTML:
-            self._reload_fasthtml()
+            self.__reload_fasthtml()
+            logger.info("Core routes reloaded successfully.")
 
         elif self.app_type == AppType.FASTAPI:
-            self._reload_fastapi()
-
-        else:
-            print(f"⚠️ Unknown app type: {self.app_type}")
+            self.__reload_fastapi()
+            logger.info("Core routes reloaded successfully.")
             return self.app
 
-        print("✅ Core routes reloaded successfully.")
+        else:
+            logger.warning(f"Unknown app type: {self.app_type}")
+            return self.app
+
         return self.app
 
     # ------------------------------------------------------------
     # 🧩 FASTHTML
     # ------------------------------------------------------------
-    def _reload_fasthtml(self):
+    def __reload_fasthtml(self):
         if not Route:
             raise ImportError("fasthtml.common.Route introuvable")
 
@@ -59,58 +63,52 @@ class Reloader:
         for route in self.base_routes:
             route.to_app(app=self.app)
 
-        print(f"✅ {len(self.base_routes)} routes rechargées ({original_count - len(self.app.routes)} supprimées).")
+        logger.info(
+            f"{len(self.base_routes)} routes rechargées ({original_count - len(self.app.routes)} supprimées)."
+        )
 
     # ------------------------------------------------------------
     # 🧩 FASTAPI
     # ------------------------------------------------------------
-    def _reload_fastapi(self):
+    def __reload_fastapi(self):
         from fastapi import FastAPI
 
         app: FastAPI = self.app
 
-        
         for route in app.routes:
             if route in self.base_routes:
                 app.routes.append(route)
             else:
                 app.routes.remove(route)
 
-
-
         # Réinjection des routes de base
         for route in self.base_routes:
             app.include_router(route)
 
-        print(f"✅ {len(self.base_routes)} routes FastAPI réinjectées.")
+        logger.info(f"{len(self.base_routes)} routes FastAPI réinjectées.")
 
     # ------------------------------------------------------------
     # 🚀 Execution dynamique des plugins
     # ------------------------------------------------------------
+    @Error.exception_handler
     def exec_plugins(self, plugins: List[Any]):
-        print("🚀 Exécution dynamique des plugins...")
-        try:
-            for plugin in plugins:
-                self._add_plugin(plugin)
-        except Exception as e:
-            print(f"❌ Erreur lors du chargement des plugins: {e}")
+        logger.info("🚀 Exécution dynamique des plugins...")
+        for plugin in plugins:
+            self._add_plugin(plugin)
         return self.app
 
+    @Error.exception_handler
     def _add_plugin(self, plugin: Any):
         """Ajoute un plugin dynamiquement à l'application."""
-        try:
-            if self.app_type == AppType.FASTHTML and hasattr(plugin, "router"):
-                plugin.router.to_app(self.app)
 
-            elif self.app_type == AppType.FASTAPI and hasattr(plugin, "router"):
-                self.app.include_router(plugin.router)
-            
-            else:
-                print(f"⚠️ Plugin {plugin} invalide ou sans router.")
-                return
+        if self.app_type == AppType.FASTHTML and hasattr(plugin, "router"):
+            plugin.router.to_app(self.app)
+        elif self.app_type == AppType.FASTAPI and hasattr(plugin, "router"):
+            self.app.include_router(plugin.router)
 
-            name = plugin.PLUGIN_INFO.get("name", "unknown")
-            print(f"✅ Plugin {name} ajouté avec succès.")
-        except Exception as e:
-            name = getattr(plugin, "PLUGIN_INFO", {}).get("name", "unknown")
-            print(f"❌ Erreur d'ajout du plugin {name}: {e}")
+        else:
+            logger.warning(f"Plugin {plugin} invalide ou sans router.")
+            return
+
+        name = plugin.PLUGIN_INFO.get("name", "unknown")
+        logger.info(f"Plugin {name} ajouté avec succès.")

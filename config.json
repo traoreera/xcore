@@ -10,11 +10,14 @@
         },
         "tasks": {
             "directory": "./backgroundtask",
-            "default": "./manager/plTask.py"
+            "default": "./manager/plTask.py",
+            "auto_restart": true,
+            "interval": 2,
+            "max_retries": 3
         },
         "log": {
             "file": "manager.log",
-            "console": true
+            "console": false
         },
         "snapshot": {
             "extensions": [
@@ -92,8 +95,14 @@
             "backup_name_format": "backup_{timestamp}.db"
         },
         "logger": {
-            "console": true,
+            "console": false,
             "file": "migration.log"
+        }
+    },
+    "xcore": {
+        "logs": {
+            "console": false,
+            "file": "app.log"
         }
     }
 }

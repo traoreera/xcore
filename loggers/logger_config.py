@@ -86,8 +86,8 @@ def setup_logger(
 
 def get_logger(
     module_name: str,
-    log_file: Optional[str]='app.log',
-    console: bool=True,
+    log_file: Optional[str] = "app.log",
+    console: bool = True,
 ) -> logging.Logger:
     """Récupère un logger configuré"""
     log_path = os.path.join("./logs", log_file) if log_file else None

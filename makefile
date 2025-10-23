@@ -133,7 +133,7 @@ run-dev: ## Lancer en mode développement (reload automatique)
 
 run-st: ## Lancer en mode production / statique (sans reload)
 	@echo "🚀 Lancement en mode statique..."
-	@python -m uvicorn main:app --host 0.0.0.0 --port 8081
+	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8081
 
 testing: ## Installer pip sans cache (debug)
 	@echo "📦 Installation pip sans cache..."

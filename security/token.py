@@ -1,6 +1,7 @@
 import datetime
-from jose import JWTError, jwt
+
 from fastapi import HTTPException, status
+from jose import JWTError, jwt
 
 from . import TokenConfig
 
@@ -17,7 +18,9 @@ class Token:
                 minutes=TokenConfig.ACCESS_TOKEN_EXPIRE_MINUTES
             )
             to_encode.update({"exp": expire})
-            token = jwt.encode(to_encode, TokenConfig.JWTKEY, algorithm=TokenConfig.ALGORITHM)
+            token = jwt.encode(
+                to_encode, TokenConfig.JWTKEY, algorithm=TokenConfig.ALGORITHM
+            )
             return token
 
         except Exception as e:
@@ -31,7 +34,9 @@ class Token:
         """Vérifie et décode un JWT, renvoie le payload s'il est valide."""
 
         try:
-            payload = jwt.decode(token, TokenConfig.JWTKEY, algorithms=[TokenConfig.ALGORITHM])
+            payload = jwt.decode(
+                token, TokenConfig.JWTKEY, algorithms=[TokenConfig.ALGORITHM]
+            )
             email: str = payload.get("sub")
             if email is None:
                 raise credentials_exception

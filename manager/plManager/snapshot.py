@@ -1,7 +1,10 @@
 import hashlib
 import os
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, Set
+
+from manager.tools.error import Error
+
 from ..conf import cfg
 from . import logger
 
@@ -19,12 +22,11 @@ class Snapshot:
         ignore_ext: Set[str] | None = None,
         ignore_file: Set[str] | None = None,
     ):
-        self.ignore_hidden = ignore_hidden or cfg.get('snapshot', 'hidden')
-        self.ignore_ext = ignore_ext or cfg.get('snapshot', 'extensions')
-        self.ignore_file = ignore_file or cfg.get('snapshot', 'filenames')
+        self.ignore_hidden = ignore_hidden or cfg.get("snapshot", "hidden")
+        self.ignore_ext = ignore_ext or cfg.get("snapshot", "extensions")
+        self.ignore_file = ignore_file or cfg.get("snapshot", "filenames")
 
     # ------------------------------------------------------------
-
     def _hash_file(self, path: Path) -> str:
         """Retourne un hash SHA256 pour un fichier."""
         try:
@@ -96,3 +98,6 @@ class Snapshot:
         """Renvoie True si le snapshot a changé."""
         d = self.diff(old, new)
         return bool(d["added"] or d["removed"] or d["modified"])
+
+    def __call__(self, directory: str | Path) -> Dict[str, Set[str]]:
+        return self.diff(self.create(directory), self.create(directory))

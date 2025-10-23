@@ -1,17 +1,19 @@
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 from typing import List, Optional
-from security import Hash, Token
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
 from data.models import User
 from data.schemas.users import (
-    UserCreate,
-    UserResponse,
-    UserPublic,
-    UpdateUser,
     RemoveUser,
+    UpdateUser,
+    UserCreate,
     UserInDB,
     UserListResponse,
+    UserPublic,
+    UserResponse,
 )
+from security import Hash, Token
 
 # ==========================================================
 # CRUD UTILISATEUR — Clean, sécurisé, production-ready
@@ -64,7 +66,9 @@ class UserCRUD:
         """Lister les utilisateurs avec pagination."""
         users = db.query(User).offset(skip).limit(limit).all()
         total = db.query(User).count()
-        return UserListResponse(total=total, items=[UserPublic.model_validate(u) for u in users])
+        return UserListResponse(
+            total=total, items=[UserPublic.model_validate(u) for u in users]
+        )
 
     # ------------------------------------------------------
     @staticmethod
@@ -111,7 +115,6 @@ class UserCRUD:
 
         token = Token.create({"sub": user.email})
         return {"access_token": token, "token_type": "bearer"}
-
 
     @staticmethod
     def get_all(db: Session) -> List[UserPublic]:

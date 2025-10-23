@@ -4,8 +4,9 @@ from sqlalchemy import TIMESTAMP, Boolean, Column, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from ..schemas.plugins import Plugin
 from manager.db import Base
+
+from ..schemas.plugins import Plugin
 
 
 class PluginsModels(Base):  # type: ignore

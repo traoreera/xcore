@@ -1,178 +1,147 @@
-import os
 import json
-import sys
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
+
 from rich import print_json
 
 
-
 class Configure:
+    """Charge et manipule un fichier JSON de configuration."""
 
-    def __init__(self, file:str,):
+    def __init__(self, file: str):
         self.file = file
-
-        with open(self.file, 'r') as f:
+        with open(self.file, "r") as f:
             self.cfg = json.load(f)
-        
-    def __call__(self,conf:str) -> Optional[Dict | Dict ]:
-        if conf in self.cfg:
-            return self.cfg[conf]
-        elif conf=="All":
+
+    def __call__(self, conf: str) -> Optional[Dict[str, Any]]:
+        if conf == "All":
             return self.cfg
+        return self.cfg.get(conf)
 
 
+class BaseCfg:
+    """Classe de base pour gérer un module de configuration."""
 
-
-class CfgManager:
-    
-    def __init__(self,conf:Configure):
-        self.conf = conf('manager')
-        self.all = conf('All')
+    def __init__(self, conf: Configure, section: str):
+        self.section = section
+        self.conf: Optional[Dict] = conf(section)
+        self.all = conf("All")
         self.file = conf.file
 
+    def get_section(self) -> Optional[Dict]:
+        return self.conf
 
-    def cfgplugins(self) -> Dict[str, Dict[str, str]] | None:
+    def get(self, key: str):
         if self.conf is None:
             return None
-        return self.conf['plugins']
+        return self.conf.get(key)
 
-    def cfgtasks(self) -> Dict[str, Dict[str, str]] | None: 
-        if self.conf is None:
-            return None
-        return self.conf['tasks']
-    
-    def cfgsnapshot(self) -> Dict[str, Dict[str, str]] | None: 
-        if self.conf is None:
-            return None
-        return self.conf['snapshot']
-
-    def dotenv(self) -> Dict[str, Dict[str, str]] | None: 
-        if self.conf is None:
-            return None
-        return self.conf['dotenv']
-
-    def cfglog(self) -> Dict[str, Dict[str, str]] | None: 
-        if self.conf is None:
-            return None
-        return self.conf['log']
-
-    def addcfg(self, key: str, value: str) -> None:
+    def add(self, key: str, value: Any) -> None:
         if self.conf is None:
             self.conf = {}
         self.conf[key] = value
 
-    def removecfg(self, key: str) -> None:
-        if self.conf is None: return
-        if key in self.conf:
+    def remove(self, key: str) -> None:
+        if self.conf and key in self.conf:
             del self.conf[key]
-    
 
     def save(self):
-        if self.all is None: return 
-        self.all['manager'].update(self.conf)
-
-        with open(self.file, 'w') as f:
+        if self.all is None or self.conf is None:
+            return
+        self.all[self.section].update(self.conf)
+        with open(self.file, "w") as f:
             json.dump(self.all, f, indent=4)
 
     def print(self):
-        print_json(data=self.conf)
-    
-    def get(self,module:str, key:str):
-
-        if module == 'log':
-            return self.cfglog()[key]
-        
-        elif module == 'plugins':
-            return self.cfgplugins()[key]
-        elif module == 'tasks':
-            return self.cfgtasks()[key]
-
-        elif module == 'snapshot':
-            return self.cfgsnapshot()[key]
+        if self.conf:
+            print_json(data=self.conf)
 
 
-        
+class CfgManager(BaseCfg):
+    def __init__(self, conf: Configure):
+        super().__init__(conf, "manager")
+
+    def cfgplugins(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("plugins") if self.conf else None
+
+    def cfgtasks(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("tasks") if self.conf else None
+
+    def cfgsnapshot(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("snapshot") if self.conf else None
+
+    def cfgdotenv(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("dotenv") if self.conf else None
+
+    def cfglog(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("log") if self.conf else None
+
+    def get(self, module: str, key: str):
+        mapping = {
+            "log": self.cfglog,
+            "plugins": self.cfgplugins,
+            "tasks": self.cfgtasks,
+            "snapshot": self.cfgsnapshot,
+        }
+        func = mapping.get(module)
+        return func().get(key) if func and func() else None
+
+    def dict(self):
+        return self.conf
+
+
+class Secure(BaseCfg):
+    def __init__(self, conf: Configure):
+        super().__init__(conf, "secure")
+
+    def cfgPassword(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("password") if self.conf else None
+
+    def cfgdotenv(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("dotenv") if self.conf else None
+
+    def get(self, module: str, key: str):
+        if module == "password":
+            pwd = self.cfgPassword()
+            return pwd.get(key) if pwd else None
         return None
 
-class Secure:
 
-    def __init__(self,conf:Configure):
-        self.conf = conf('secure')
-        self.all = conf('All')
-        self.file = conf.file
-    
+class Migration(BaseCfg):
+    def __init__(self, conf: Configure):
+        super().__init__(conf, "migration")
 
-    def cfgPassword(self,) -> Dict[str, Dict[str, str]] | None:
-        if self.conf is None:
-            return None
-        return self.conf['password']
-    
+    def cfgLogger(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("logger") if self.conf else None
 
-    def dotenv(self,):
-        if self.conf is None:
-            return None
-        return self.conf['dotenv']
+    def cfgAutoMigration(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("automigration") if self.conf else None
 
+    def cfgAutoDiscovery(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("model_discovery") if self.conf else None
 
-
-    def save(self):
-        if self.all is None: return 
-        self.all['secure'].update(self.conf)
-
-        with open(self.file, 'w') as f:
-            json.dump(self.all, f, indent=4)
-    
-
-    def remove(self, key: str) -> None:
-        if self.conf is None: return
-        if key in self.conf:
-            del self.conf[key]
+    def get(self, module: str, key: str):
+        mapping = {
+            "log": self.cfgLogger,
+            "automigration": self.cfgAutoMigration,
+            "discovery": self.cfgAutoDiscovery,
+        }
+        func = mapping.get(module)
+        result = func() if func else self.conf
+        return result.get(key) if result else None
 
 
-    def get(self,module:str, key:str):
+class XCore(BaseCfg):
 
-        if module == 'password':
-            return self.cfgPassword()[key]
-        return None 
+    def __init__(self, conf):
+        super().__init__(conf, "xcore")
 
+    def cfgLogger(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("logs") if self.conf else None
 
-class Migration:
-
-    def __init__(self,conf:Configure):
-        self.conf = conf('migration')
-        self.all = conf('All')
-        self.file = conf.file
-    
-
-
-    def cfgLogger(self,):
-        if self.conf is None:
-            return None
-        return self.conf['logger']
-    
-    def cfgAutoMigration(self,):
-
-        if self.conf is None:
-            return None
-        return self.conf['automigration']
-    
-    def cfgAutoDiscovery(self,):
-
-        if self.conf is None:
-            return None
-        return self.conf['model_discovery']
-
-
-    def get(self, module, key):
-        if module == 'log':
-            return self.cfgLogger()[key]
-        
-        if module == "automigration":
-            return self.cfgAutoMigration()[key]
-        
-        if module =="discovery":
-            return self.cfgAutoDiscovery()[key]
-
-        else:
-            return self.conf[key]
-        return None
+    def get(self, module: str, key: str):
+        mapping = {
+            "log": self.cfgLogger,
+        }
+        func = mapping.get(module)
+        result = func() if func else self.conf
+        return result.get(key) if result else None

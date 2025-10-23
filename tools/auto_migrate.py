@@ -9,11 +9,10 @@ import os
 import sys
 from typing import Any, Dict, List
 
+from . import cfg, logger
+
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from .import logger,cfg
-
 
 
 class AutoMigrationManager:
@@ -44,7 +43,7 @@ class AutoMigrationManager:
 
         # Découvrir les modèles core
 
-        for model in cfg.get('automigration', 'models'):
+        for model in cfg.get("automigration", "models"):
             if os.path.exists(model):
                 for root, dirs, files in os.walk(model):
                     for file in files:
@@ -55,7 +54,9 @@ class AutoMigrationManager:
                                     content = f.read()
                                     if self.contains_sqlalchemy_model(content):
                                         models["core_models"].append(file_path)
-                                        logger.info(f"📋 Core model trouvé: {file_path}")
+                                        logger.info(
+                                            f"📋 Core model trouvé: {file_path}"
+                                        )
                             except Exception as e:
                                 logger.warning(f"⚠️ Erreur lecture {file_path}: {e}")
 
@@ -117,10 +118,13 @@ class AutoMigrationManager:
                 for line in lines:
                     line = line.strip()
                     if line.startswith("class ") and (
-                        "(Base)" in line or "(target_metadata = data.Base.metadata)" in line
+                        "(Base)" in line
+                        or "(target_metadata = data.Base.metadata)" in line
                     ):
                         class_name = line.split("(")[0].replace("class ", "").strip()
-                        imports.append(f"from {module_path.removeprefix('..')} import {class_name}")
+                        imports.append(
+                            f"from {module_path.removeprefix('..')} import {class_name}"
+                        )
 
             except Exception as e:
                 logger.warning(f"⚠️ Erreur génération import pour {file_path}: {e}")

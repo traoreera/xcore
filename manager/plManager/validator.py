@@ -9,6 +9,11 @@ class Validator:
     def __init__(self) -> None:
 
         self.logger = logger
+        return
+
+    def __call__(self, module: Any):
+
+        return self.valdiate(module)
 
     def _validate_plugin(self, mod: Any) -> bool:
         name = getattr(mod, "__name__", "unknown")

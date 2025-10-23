@@ -1,5 +1,6 @@
 import importlib.util
-import sys, os
+import os
+import sys
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -153,7 +154,7 @@ class ModuleRuntimeManager:
 
     def add_task(self, task: TaskManager):
         try:
-            logger.info(f"📦 Ajout de la tache {task.title}")
+            logger.info(f"Ajout de la tache {task.title}")
             return self.__save_task(task)
         except Exception as e:
             self.db.rollback()
@@ -165,11 +166,11 @@ class ModuleRuntimeManager:
             self.db.add(TaskModel(task=task))
             self.db.commit()
             # self.db.refresh(task)
-            logger.info(f"✅ Tache {task.title} ajoutée avec succès.")
+            logger.info(f"Tache {task.title} ajoutée avec succès.")
             return task
         except Exception as e:
             self.db.rollback()
-            logger.error(f"❌ Erreur lors de l'ajout de la tache {task.title} : {e}")
+            logger.error(f"Erreur lors de l'ajout de la tache {task.title} : {e}")
             return None
 
     def get_enabled_modules(self):
@@ -178,7 +179,7 @@ class ModuleRuntimeManager:
     def load_module_target(self, module_name):
         try:
             module_path = self.module_dir / f"{module_name}.py"
-            logger.info(f"📦 Chargement du module {module_name}.")
+            logger.info(f"Chargement du module {module_name}.")
             spec = importlib.util.spec_from_file_location(module_name, module_path)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -187,16 +188,16 @@ class ModuleRuntimeManager:
 
                 if module.metadata:
                     try:
-                        logger.info(f"✅ Module {module_name} chargé.")
+                        logger.info(f"Module {module_name} chargé.")
                         if responses := module.metadata.get("con"):
                             core_task_threads.extend(responses)
                     except Exception as e:
-                        logger.warning(f"❌ Erreur chargement {module_name} : {e}")
+                        logger.warning(f"Erreur chargement {module_name} : {e}")
                 return module.service_main
             logger.error(f"{module_name} ne contient pas de service_main()")
             return None
         except Exception as e:
-            logger.error(f"❌ Erreur chargement {module_name} : {e}")
+            logger.error(f"Erreur chargement {module_name} : {e}")
             return None
 
     def list_tasks(self):
@@ -211,7 +212,7 @@ class ModuleRuntimeManager:
                 if event.is_directory or not event.src_path.endswith(".py"):
                     return
                 module_name = Path(event.src_path).stem
-                logger.info(f"📦 Nouveau fichier détecté : {module_name}")
+                logger.info(f"Nouveau fichier détecté : {module_name}")
                 self.outer.register_new_modules()
                 self.outer.load_module_target(module_name)
 
@@ -220,3 +221,16 @@ class ModuleRuntimeManager:
         observer.daemon = True
         observer.start()
         logger.info(f"🛡️ Surveillance du dossier '{self.module_dir}' activée.")
+
+    def start_module(
+        self,
+        module_name: str,
+    ):
+
+        if (
+            mod := self.db.query(TaskModel)
+            .filter(TaskModel.module == module_name)
+            .first()
+        ):
+            return self.load_module_target(mod.module)
+        return None

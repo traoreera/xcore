@@ -1,5 +1,7 @@
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
 from data.crud import make_uid
 
 
@@ -7,7 +9,7 @@ class UserCreate(BaseModel):
     id: str = Field(default_factory=make_uid)
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(..., min_length=6, max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
     model_config = ConfigDict(from_attributes=True)
 
 

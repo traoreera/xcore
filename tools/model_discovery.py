@@ -10,10 +10,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+from . import cfg, logger
+
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from .import logger, cfg
 
 
 class ModelDiscovery:
@@ -86,7 +86,7 @@ class ModelDiscovery:
         all_models = {"core_models": [], "plugin_models": {}}
 
         # Découvrir les modèles core
-        core_paths = cfg.get("automigration", 'models')
+        core_paths = cfg.get("automigration", "models")
         for core_path in core_paths:
             if os.path.exists(core_path):
                 core_files = self.find_python_files(core_path)

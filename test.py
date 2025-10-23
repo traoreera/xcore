@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import declarative_base, registry, sessionmaker
-from manager.plManager import logger
+
 from data import Base
+from manager.plManager import logger
 
-
-#Base: registry = declarative_base()
+# Base: registry = declarative_base()
 
 
 def get_db():

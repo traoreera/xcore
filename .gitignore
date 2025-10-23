@@ -1,3 +1,38 @@
-.env
-logs
+# Byte-code files
+*.pyc
+__pycache__/
+
+# Virtual environment
+.env/
+venv/
+env/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Log files
+*.log
+logs/
+
+# Database files (if local, e.g., SQLite)
 *.db
+*.sqlite3
+
+# Environment variables and sensitive data
+.env
+.flaskenv
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Test reports
+.pytest_cache/
+htmlcov/
+
+# Other temporary files
+tmp/
