@@ -1,8 +1,10 @@
 from pydantic import BaseModel, EmailStr
 
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+
 
 class UserRead(BaseModel):
     id: int
@@ -11,6 +13,7 @@ class UserRead(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class Token(BaseModel):
     access_token: str

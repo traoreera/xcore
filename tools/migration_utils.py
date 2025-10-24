@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 try:
     from sqlalchemy import create_engine, inspect
 
-    from data import Base
+    from database import Base
 
     from . import cfg, logger
 except ImportError as e:
@@ -50,7 +50,7 @@ class DatabaseInspector:
 
             return tables_info
         except Exception as e:
-            logger.error(f"❌ Error inspecting tables: {e}")
+            print(f"❌ Error inspecting tables: {e}")
             return {}
 
     def export_schema(self, output_file: str):
@@ -69,7 +69,7 @@ class DatabaseInspector:
 
             logger.info(f"✅ Schema exported to {output_file}")
         except Exception as e:
-            logger.error(f"❌ Error exporting schema: {e}")
+            print(f"❌ Error exporting schema: {e}")
 
 
 class BackupManager:
@@ -77,34 +77,35 @@ class BackupManager:
 
     def __init__(self, database_url: str = cfg.get("database_url", "url")):
         self.database_url = database_url
-        self.backup_dir = Path("backups")
+        self.backup_dir = Path(cfg.get("backup", "backup_directory"))
         self.backup_dir.mkdir(exist_ok=True)
 
     def create_backup(self, backup_name: Optional[str] = None) -> Optional[str]:
         """Create database backup"""
         try:
             if not self.database_url.startswith("sqlite:"):
-                logger.error("❌ Backup only supported for SQLite")
+                print("❌ Backup only supported for SQLite")
                 return None
 
             db_file = self.database_url.replace("sqlite:///", "")
 
             if not os.path.exists(db_file):
-                logger.error(f"❌ Database file not found: {db_file}")
+                print(f"❌ Database file not found: {db_file}")
                 return None
 
             if not backup_name:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_name = f"backup_{timestamp}.db"
+                backup_name_format = cfg.get("backup", "backup_name_format")
+                backup_name = backup_name_format.format(timestamp=timestamp)
 
             backup_path = self.backup_dir / backup_name
             shutil.copy2(db_file, backup_path)
 
-            logger.info(f"✅ Backup created: {backup_path}")
+            print(f"✅ Backup created: {backup_path}")
             return str(backup_path)
 
         except Exception as e:
-            logger.error(f"❌ Error creating backup: {e}")
+            print(f"❌ Error creating backup: {e}")
             return None
 
     def restore_backup(
@@ -113,13 +114,13 @@ class BackupManager:
         """Restore a backup"""
         try:
             if not self.database_url.startswith("sqlite:"):
-                logger.error("❌ Restore only supported for SQLite")
+                print("❌ Restore only supported for SQLite")
                 return False
 
             db_file = self.database_url.replace("sqlite:///", "")
 
             if not os.path.exists(backup_file):
-                logger.error(f"❌ Backup file not found: {backup_file}")
+                print(f"❌ Backup file not found: {backup_file}")
                 return False
 
             target_file = target_file or db_file
@@ -129,7 +130,7 @@ class BackupManager:
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error restoring backup: {e}")
+            print(f"❌ Error restoring backup: {e}")
             return False
 
     def list_backups(self) -> list:
@@ -138,28 +139,30 @@ class BackupManager:
             backups = list(self.backup_dir.glob("*.db"))
             list_backups = [str(backup) for backup in backups]
             for backup in list_backups:
-                logger.info(f"✅ Backup found: {backup}")
+                print(
+                    f"backup: {backup} |  size: {os.path.getsize(backup)} |   created: {os.path.getctime(backup)}"
+                )
         except Exception as e:
-            logger.error(f"❌ Error listing backups: {e}")
+            print(f"Error listing backups: {e}")
             return []
 
     def delete_backup(self, backup_file: str) -> bool:
         try:
             os.remove(backup_file)
-            logger.info(f"✅ Backup deleted: {backup_file}")
+            print(f"Backup deleted: {backup_file}")
             return True
         except Exception as e:
-            logger.error(f"❌ Error deleting backup: {e}")
+            print(f"Error deleting backup: {e}")
             return False
 
     def delete_all_backups(self) -> bool:
         try:
             for backup_file in self.backup_dir.glob("*.db"):
                 os.remove(backup_file)
-            logger.info("✅ All backups deleted")
+            print("All backups deleted")
             return True
         except Exception as e:
-            logger.error(f"❌ Error deleting backups: {e}")
+            print(f"Error deleting backups: {e}")
             return False
 
 

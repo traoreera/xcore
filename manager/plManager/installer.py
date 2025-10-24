@@ -21,7 +21,7 @@ class Installer:
         logger.info("Installation des plugins")
         return Installer.__install_plugin_env(path)
 
-    @Error.exception_handler
+    # @Error.exception_handler
     @staticmethod
     def __install_plugin_env(plugin_path: pathlib.Path) -> dict:
         plugin_config_file = plugin_path / "plugin.json"

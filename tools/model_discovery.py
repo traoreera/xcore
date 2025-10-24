@@ -43,7 +43,7 @@ class ModelDiscovery:
         return {
             "migration": {
                 "auto_discover_models": True,
-                "model_discovery": {
+                "explusion_patern": {
                     "plugins_path": "plugins",
                     "exclude_directories": ["__pycache__", ".git"],
                     "include_file_patterns": ["*.py"],
@@ -61,14 +61,12 @@ class ModelDiscovery:
             logger.warning(f"⚠️ Répertoire non trouvé: {directory}")
             return python_files
 
-        exclude_dirs = self.config["migration"]["model_discovery"][
-            "exclude_directories"
-        ]
-        exclude_patterns = self.config["migration"]["model_discovery"][
-            "exclude_file_patterns"
-        ]
+        exclude_dirs = cfg.get("exclusion_patern", "exclude_directories")
+        exclude_patterns = cfg.get("exclusion_patern", "exclude_file_patterns")
 
-        for file_path in directory_path.rglob("*.py"):
+        for file_path in directory_path.rglob(
+            cfg.get("exclusion_patern", "include_file_patterns")
+        ):
             # Vérifier si le fichier est dans un répertoire exclu
             if any(excluded in file_path.parts for excluded in exclude_dirs):
                 continue
@@ -87,6 +85,16 @@ class ModelDiscovery:
 
         # Découvrir les modèles core
         core_paths = cfg.get("automigration", "models")
+        plugins_paths = cfg.get("automigration", "plugins")
+
+        for core_path in plugins_paths:
+            if os.path.exists(core_path):
+                core_files = self.find_python_files(core_path)
+                for file_path in core_files:
+                    models = self.analyze_python_file(file_path)
+                    all_models["plugin_models"].extend(models)
+                    logger.info(f"📋 Trouvé {len(models)} modèles dans {file_path}")
+
         for core_path in core_paths:
             if os.path.exists(core_path):
                 core_files = self.find_python_files(core_path)
@@ -106,7 +114,9 @@ class ModelDiscovery:
                 content = f.read()
 
             # Recherche simple par patterns
-            if "class " in content and ("Base" in content or "deps.Base" in content):
+            if "class " in content and (
+                "Base" in content or "database.Base" in content
+            ):
                 lines = content.split("\n")
                 current_class = None
                 table_name = None

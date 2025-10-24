@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends
+
 from auth import dependencies
+
 PLUGIN_INFO = {
     "name": "Events",
     "version": "1.0.0",
@@ -23,14 +25,14 @@ class Plugin:
         self.tag_for_identified = PLUGIN_INFO["tag_for_identified"]
         self.trigger = PLUGIN_INFO["trigger"]
 
-    @router.get("/")
+    @router.get("/", operation_id=f"run_{PLUGIN_INFO['name']}_get")
     @staticmethod
     def run(curent_user=Depends(dependencies.get_current_user)):
-        
+
         print(curent_user.email)
         return {"tag_for_identified": "trigger"}
 
-    @router.get("/test")
+    @router.get("/test", operation_id=f"test_{PLUGIN_INFO['name']}_get")
     @staticmethod
     async def test():
 
@@ -47,7 +49,7 @@ class Plugin:
             "add_time": ["2023-05-27", "2023-05-28", "2023-05-29"],
         }
 
-    @router.get("/response")
+    @router.get("/response", operation_id=f"response_{PLUGIN_INFO['name']}_get")
     @staticmethod
     def response():
 

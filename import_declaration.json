@@ -1,0 +1,35 @@
+{
+  "core_models": [
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "file_path": "auth/models.py",
+      "module_path": "auth.models"
+    },
+    {
+      "class_name": "TaskModel",
+      "table_name": "tasks",
+      "file_path": "manager/models/tasks.py",
+      "module_path": "manager.models.tasks"
+    },
+    {
+      "class_name": "PluginsModels",
+      "table_name": "plugins",
+      "file_path": "manager/models/plugins.py",
+      "module_path": "manager.models.plugins"
+    },
+    {
+      "class_name": "Role",
+      "table_name": "roles",
+      "file_path": "admin/models.py",
+      "module_path": "admin.models"
+    },
+    {
+      "class_name": "Permission",
+      "table_name": "permissions",
+      "file_path": "admin/models.py",
+      "module_path": "admin.models"
+    }
+  ],
+  "plugin_models": {}
+}

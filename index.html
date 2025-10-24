@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Modeler Pro</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #f5f5f5;
+            font-family: "Inter", sans-serif
+        }
+
+        svg {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            position: relative;
+            z-index: 1
+        }
+
+        #toolbar {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 9999;
+            background: rgba(255, 255, 255, .95);
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 8px 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+            display: flex;
+            gap: 10px;
+            align-items: center
+        }
+
+        button {
+            border: none;
+            background: #007bff;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        button:hover {
+            background: #0056b3
+        }
+
+        .editing {
+            background: #ffc107 !important;
+            color: #000 !important
+        }
+
+        .table-box {
+            fill: #fff;
+            stroke: #ccc;
+            stroke-width: 1.5;
+            rx: 10;
+            ry: 10;
+            filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .15))
+        }
+
+        .table-title {
+            font-weight: 700;
+            fill: #007bff;
+            font-size: 15px
+        }
+
+        .column-text {
+            fill: #333;
+            font-size: 12px
+        }
+
+        .link {
+            stroke: #007bff;
+            stroke-width: 1.8;
+            opacity: .6;
+            transition: all .3s ease
+        }
+
+        .temp-line {
+            stroke: #ff5722;
+            stroke-width: 2;
+            stroke-dasharray: 4
+        }
+
+        .highlight {
+            fill: #fff59d !important;
+            stroke: #fbc02d !important
+        }
+
+        #sidepanel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 300px;
+            height: 100vh;
+            background: #fff;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, .2);
+            z-index: 10000;
+            padding: 16px;
+            overflow-y: auto;
+            display: none
+        }
+
+        #sidepanel h3 {
+            margin-top: 0;
+            color: #007bff
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 5px;
+            margin: 4px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px
+        }
+
+        .col-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2px 0
+        }
+
+        .col-item span {
+            font-size: 13px
+        }
+
+        .col-item button {
+            background: #dc3545;
+            padding: 2px 6px;
+            font-size: 12px
+        }
+    </style>
+</head>
+
+<body>
+    <div id="toolbar">
+        <button id="editModeBtn">✏️ Édition</button>
+        <button id="addBlockBtn">➕ Bloc</button>
+        <button id="saveBtn">💾 Sauvegarde</button>
+        <button id="exportBtn">📤 Export JSON</button>
+        <button id="resetBtn">🔄 Reset</button>
+    </div>
+
+    <div id="sidepanel">
+        <h3>Éditer la table</h3>
+        <div id="tableName"></div>
+        <h4>Colonnes</h4>
+        <div id="columnsList"></div>
+        <hr>
+        <input id="newColName" placeholder="Nom colonne">
+        <input id="newColType" placeholder="Type">
+        <button id="addColBtn">Ajouter colonne</button>
+    </div>
+
+    <svg id="dbMap"></svg>
+
+    <script>
+        let editMode = false, creatingLink = false, linkSource = null, nodes = [], links = [], tempLine = null, currentEdit = null;
+
+        async function init() {
+            const svg = d3.select("#dbMap"), zoomGroup = svg.append("g");
+            const data = await fetch("inspect.json").then(r => r.json());
+            const saved = JSON.parse(localStorage.getItem("db_model") || "{}");
+            const tables = Object.entries(data.tables);
+            if (saved.nodes) { nodes = saved.nodes; links = saved.links; }
+            else {
+                nodes = tables.map(([n, t], i) => ({
+                    id: n, columns: t.columns.map(c => ({ name: c.name, type: c.type })),
+                    x: window.innerWidth / 2 + 500 * Math.cos(i / tables.length * 2 * Math.PI),
+                    y: window.innerHeight / 2 + 500 * Math.sin(i / tables.length * 2 * Math.PI)
+                }));
+                links = [];
+                for (const [n, t] of tables)
+                    t.foreign_keys.forEach(fk => {
+                        if (fk.referred_table && data.tables[fk.referred_table])
+                            links.push({ source: n, target: fk.referred_table });
+                    });
+            }
+
+            const linkGroup = zoomGroup.append("g"), nodeGroup = zoomGroup.append("g");
+            render();
+
+            function render() {
+                linkGroup.selectAll("line").data(links).join(
+                    e => e.append("line").attr("class", "link")
+                ).attr("x1", d => getNode(d.source).x).attr("y1", d => getNode(d.source).y)
+                    .attr("x2", d => getNode(d.target).x).attr("y2", d => getNode(d.target).y);
+
+                const node = nodeGroup.selectAll(".node").data(nodes, d => d.id).join(
+                    e => {
+                        const g = e.append("g").attr("class", "node").call(d3.drag().on("drag", dragged));
+                        g.append("rect").attr("class", "table-box")
+                            .attr("width", 230).attr("height", d => 35 + d.columns.length * 15)
+                            .on("click", (ev, d) => onClickNode(ev, d))
+                            .on("contextmenu", (ev, d) => onRightClick(ev, d));
+                        g.append("text").attr("class", "table-title").attr("x", 10).attr("y", 20).text(d => d.id);
+                        g.each(function (d) {
+                            const g2 = d3.select(this);
+                            d.columns.forEach((c, i) => {
+                                g2.append("text").attr("class", "column-text").attr("x", 12).attr("y", 40 + i * 15)
+                                    .text(`${c.name} (${c.type})`);
+                            });
+                        });
+                        return g;
+                    }
+                ).attr("transform", d => `translate(${d.x - 115},${d.y - (d.columns.length * 8)})`);
+            }
+
+            function dragged(ev, d) { if (!editMode) return; d.x = ev.x; d.y = ev.y; render(); }
+            function getNode(id) { return nodes.find(n => n.id === id); }
+
+            function onClickNode(ev, node) {
+                if (!editMode) return;
+                if (!creatingLink) {
+                    linkSource = node; creatingLink = true;
+                    tempLine = zoomGroup.append("line").attr("class", "temp-line")
+                        .attr("x1", node.x).attr("y1", node.y).attr("x2", node.x).attr("y2", node.y);
+                    svg.on("mousemove", e => {
+                        const pt = d3.pointer(e); tempLine.attr("x2", pt[0]).attr("y2", pt[1]);
+                    });
+                } else {
+                    if (node !== linkSource) {
+                        links.push({ source: linkSource.id, target: node.id });
+                        tempLine.remove(); tempLine = null; creatingLink = false; linkSource = null; svg.on("mousemove", null); render();
+                    }
+                }
+            }
+
+            function onRightClick(ev, node) {
+                ev.preventDefault();
+                currentEdit = node;
+                showPanel(node);
+            }
+
+            function showPanel(node) {
+                const p = document.getElementById("sidepanel");
+                p.style.display = "block";
+                document.getElementById("tableName").innerHTML = `<strong>${node.id}</strong>`;
+                const cols = document.getElementById("columnsList");
+                cols.innerHTML = "";
+                node.columns.forEach((c, i) => {
+                    const div = document.createElement("div");
+                    div.className = "col-item";
+                    div.innerHTML = `<span>${c.name} (${c.type})</span><button data-i="${i}">×</button>`;
+                    div.querySelector("button").onclick = () => { node.columns.splice(i, 1); render(); showPanel(node); };
+                    cols.appendChild(div);
+                });
+            }
+
+            document.getElementById("addColBtn").onclick = () => {
+                if (!currentEdit) return;
+                const n = document.getElementById("newColName").value.trim(),
+                    t = document.getElementById("newColType").value.trim();
+                if (!n || !t) return;
+                currentEdit.columns.push({ name: n, type: t });
+                document.getElementById("newColName").value = "";
+                document.getElementById("newColType").value = "";
+                render(); showPanel(currentEdit);
+            };
+
+            svg.call(d3.zoom().scaleExtent([0.3, 3]).on("zoom", e => zoomGroup.attr("transform", e.transform)));
+
+            document.getElementById("editModeBtn").onclick = () => {
+                editMode = !editMode;
+                document.getElementById("editModeBtn").classList.toggle("editing", editMode);
+            };
+            document.getElementById("addBlockBtn").onclick = () => {
+                if (!editMode) return alert("Active le mode édition !");
+                const id = prompt("Nom du nouveau bloc :"); if (!id) return;
+                nodes.push({ id, x: window.innerWidth / 2, y: window.innerHeight / 2, columns: [] });
+                render();
+            };
+            document.getElementById("saveBtn").onclick = () => {
+                localStorage.setItem("db_model", JSON.stringify({ nodes, links }));
+                alert("💾 Modèle sauvegardé !");
+            };
+            document.getElementById("exportBtn").onclick = () => {
+                const blob = new Blob([JSON.stringify({ nodes, links }, null, 2)], { type: "application/json" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "database_model.json";
+                a.click();
+            };
+            document.getElementById("resetBtn").onclick = () => {
+                localStorage.removeItem("db_model"); location.reload();
+            };
+        }
+        init();
+    </script>
+</body>
+
+</html>

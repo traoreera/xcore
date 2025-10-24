@@ -4,7 +4,7 @@ import time
 
 from . import logger
 from .loader import Loader
-from .reloader import AppType, Reloader
+from .reloader import  Reloader
 from .snapshot import Snapshot
 
 
@@ -14,11 +14,10 @@ class Manager:
     def __init__(
         self,
         app,
+        base_routes,
         plugins_dir="plugins",
         entry_point="run",
         interval=2,
-        app_type=AppType.FASTHTML,
-        base_routes: list = [],
     ):
         self.app = app
         self.plugins_dir = plugins_dir
@@ -29,15 +28,12 @@ class Manager:
             app=app,
             logger=logger,
         )
+        self.loader.bind_to_fastapi()
         self.snapshot = Snapshot()
         self.interval = interval
         self.running = False
-
-        self.reloader = Reloader(
-            app=app,
-            base_routes=base_routes,
-            app_type=app_type,
-        )
+        self.base_routes = base_routes
+        self.reloader = Reloader(app=app)
 
         if not os.path.exists(self.plugins_dir):
             os.makedirs(self.plugins_dir, exist_ok=True)
@@ -51,14 +47,12 @@ class Manager:
         plugins = self.loader.load_plugins()
         if reload_app:
             logger.info("Rechargement complet demandé")
-            self.reloader.reload()
+            self.reloader.reload(base_routes=self.base_routes)
         self.reloader.exec_plugins(plugins=plugins)
 
     # ------------------------------------------------------
 
-    def _watch_loop(
-        self,
-    ):
+    def _watch_loop(self):
         """Surveille le dossier des plugins et recharge en cas de changement."""
 
     def start_watching(self, service):

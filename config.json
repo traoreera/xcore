@@ -17,7 +17,7 @@
         },
         "log": {
             "file": "manager.log",
-            "console": false
+            "console": true
         },
         "snapshot": {
             "extensions": [
@@ -66,12 +66,16 @@
         "auto_discover_models": true,
         "automigration": {
             "models": [
-                "./data/models",
-                "./manager/models"
+                "./auth",
+                "./manager/models/",
+                "./admin/",
+                "./otpProvider"
+            ],
+            "plugins": [
+                "./plugins"
             ]
         },
-        "model_discovery": {
-            "plugins_path": "plugins",
+        "explusion_patern": {
             "exclude_directories": [
                 "__pycache__",
                 ".git",
@@ -79,9 +83,7 @@
                 "venv",
                 ".pytest_cache"
             ],
-            "include_file_patterns": [
-                "*.py"
-            ],
+            "include_file_patterns": "*.py",
             "exclude_file_patterns": [
                 "__init__.py",
                 "test_*.py",
@@ -95,14 +97,18 @@
             "backup_name_format": "backup_{timestamp}.db"
         },
         "logger": {
-            "console": false,
+            "console": true,
             "file": "migration.log"
         }
     },
     "xcore": {
         "logs": {
-            "console": false,
+            "console": true,
             "file": "app.log"
+        },
+        "data": {
+            "url": "sqlite:///test.db",
+            "echo": true
         },
         "extensions": [
             "auth",
@@ -114,13 +120,8 @@
             "xcore"
         ],
         "requirements": [
-            "auth==1.0.0",
-            "data==1.0.0",
-            "manager==1.0.0",
-            "logger==1.0.0",
-            "security==1.0.0",
-            "tools==1.0.0",
-            "xcore==1.0.0"
+            "config.json",
+            "config.py"
         ]
     }
 }

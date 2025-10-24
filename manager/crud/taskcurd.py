@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from ..db import get_db
-from ..models.tasks import TaskModel
-from ..plManager import logger
-from ..schemas.plugins import TaskManager
+from manager.db import get_db
+from manager.models.tasks import TaskModel
+from manager.plManager import logger
+from manager.schemas.plugins import TaskManager
 
 core_task_threads = []
 

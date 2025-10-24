@@ -1,6 +1,8 @@
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from . import models, schemas, Hash
+from sqlalchemy.orm import Session
+
+from . import Hash, models, schemas
+
 
 def register_user(db: Session, user: schemas.UserCreate):
     if db.query(models.User).filter(models.User.email == user.email).first():
@@ -12,6 +14,7 @@ def register_user(db: Session, user: schemas.UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
 
 def authenticate_user(db: Session, email: str, password: str):
     user = db.query(models.User).filter(models.User.email == email).first()

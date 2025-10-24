@@ -2,12 +2,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import declarative_base, registry, sessionmaker
 
+from appcfg import xcfg
 
-from .import Base
+from . import Base
+
 
 def get_db():
     try:
-        engine = create_engine("sqlite:///./test.db", echo=True)
+        engine = create_engine(
+            xcfg.get("database", "url"), echo=xcfg.get("database", "echo")
+        )
     except ProgrammingError:
         engine = None
 

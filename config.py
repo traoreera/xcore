@@ -119,11 +119,23 @@ class Migration(BaseCfg):
     def cfgAutoDiscovery(self) -> Optional[Dict[str, Any]]:
         return self.conf.get("model_discovery") if self.conf else None
 
+    def cfgExclusionpatern(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("explusion_patern") if self.conf else None
+
+    def cfgBasepatern(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("base_patern") if self.conf else None
+
+    def cfgbackup(self) -> Optional[Dict[str, Any]]:
+        return self.conf.get("backup") if self.conf else None
+
     def get(self, module: str, key: str):
         mapping = {
             "log": self.cfgLogger,
             "automigration": self.cfgAutoMigration,
             "discovery": self.cfgAutoDiscovery,
+            "exclusion_patern": self.cfgExclusionpatern,
+            "base_patern": self.cfgBasepatern,
+            "backup": self.cfgbackup,
         }
         func = mapping.get(module)
         result = func() if func else self.conf
@@ -138,10 +150,13 @@ class XCore(BaseCfg):
     def cfgLogger(self) -> Optional[Dict[str, Any]]:
         return self.conf.get("logs") if self.conf else None
 
+    def database(
+        self,
+    ) -> Optional[Dict[str, Any]]:
+        return self.conf.get("data") if self.conf else None
+
     def get(self, module: str, key: str):
-        mapping = {
-            "log": self.cfgLogger,
-        }
+        mapping = {"log": self.cfgLogger, "database": self.database}
         func = mapping.get(module)
         result = func() if func else self.conf
         return result.get(key) if result else None

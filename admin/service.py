@@ -1,9 +1,13 @@
-from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from . import models, schemas
 from sqlalchemy.orm import Session
-from auth import models as auth_models, Hash
+
+from auth import Hash
+from auth import models as auth_models
+
+from . import models
 from . import models as admin_models
+from . import schemas
+
 
 def create_role(db: Session, role: schemas.RoleCreate):
     if db.query(models.Role).filter(models.Role.name == role.name).first():
@@ -15,8 +19,10 @@ def create_role(db: Session, role: schemas.RoleCreate):
     db.refresh(db_role)
     return db_role
 
+
 def list_roles(db: Session):
     return db.query(models.Role).all()
+
 
 def delete_role(db: Session, role_id: int):
     role = db.query(models.Role).get(role_id)
@@ -26,6 +32,18 @@ def delete_role(db: Session, role_id: int):
     db.commit()
 
 
+def attribute_role_to_user(db: Session, user_id: int, role_id: int):
+    user = db.query(auth_models.User).get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    role = db.query(admin_models.Role).get(role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    user.roles.append(role)
+    db.commit()
+
+    return user.responseModel()
 
 
 def init_root_admin(db: Session):
@@ -34,15 +52,21 @@ def init_root_admin(db: Session):
     ROOT_ROLE = "superadmin"
 
     # 1. Vérifie si le rôle superadmin existe
-    role = db.query(admin_models.Role).filter(admin_models.Role.name == ROOT_ROLE).first()
+    role = (
+        db.query(admin_models.Role).filter(admin_models.Role.name == ROOT_ROLE).first()
+    )
     if not role:
-        role = admin_models.Role(name=ROOT_ROLE, description="Root administrator with full privileges")
+        role = admin_models.Role(
+            name=ROOT_ROLE, description="Root administrator with full privileges"
+        )
         db.add(role)
         db.commit()
         db.refresh(role)
 
     # 2. Vérifie si le compte root existe
-    user = db.query(auth_models.User).filter(auth_models.User.email == ROOT_EMAIL).first()
+    user = (
+        db.query(auth_models.User).filter(auth_models.User.email == ROOT_EMAIL).first()
+    )
     if not user:
         hashed = Hash.hash(ROOT_PASSWORD)
         user = auth_models.User(email=ROOT_EMAIL, password_hash=hashed, is_active=True)

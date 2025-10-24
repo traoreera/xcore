@@ -23,7 +23,7 @@ try:
     from alembic.config import Config
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
-    from data import Base
+    from database import Base
 
     from . import cfg, logger
 
