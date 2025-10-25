@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from security.token import Token
 
-from . import dependencies, schemas, service
+from . import dependencies, schemas, service, authCache
 
 authRouter = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -25,6 +25,7 @@ def login(
 
 
 @authRouter.get("/me", response_model=schemas.UserRead)
+@authCache.cached
 def get_me(current_user=Depends(dependencies.get_current_user)):
     return schemas.UserRead(
         id=current_user.id, email=current_user.email, is_active=current_user.is_active

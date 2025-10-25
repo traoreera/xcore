@@ -7,7 +7,7 @@ class UserCreate(BaseModel):
 
 
 class UserRead(BaseModel):
-    id: int
+    id: str
     email: str
     is_active: bool
 

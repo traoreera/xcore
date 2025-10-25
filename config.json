@@ -1,5 +1,5 @@
 {
-    "$schema": "https://json.schemastore.org/webpack-config.json",
+    "$schema": "https://raw.githubusercontent.com/traoreera/xcore/master/config.json",
     "version": 1,
     "manager": {
         "dotenv": "./manager/.env",
@@ -123,5 +123,10 @@
             "config.json",
             "config.py"
         ]
+    },
+    "redis": {
+        "host": "localhost",
+        "port": 6379,
+        "db": 0
     }
 }

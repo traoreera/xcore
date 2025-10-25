@@ -48,6 +48,8 @@ faker = "^37.8.0"
 pytest-cov = "^7.0.0"
 bandit = "^1.8.6"
 fastapi = "^0.118.2"
+aiocache = "^0.12.3"
+redis = {extras = ["hiredis"], version = "^7.0.0"}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -14,6 +14,7 @@ from manager import  Manager, cfg
 from manager.routes.task import task
 from otpprovider.routes import optProvider
 
+
 app = FastAPI(title="Core API with Plugin System", version="1.0.0")
 
 
@@ -22,6 +23,14 @@ app.include_router(task)
 app.include_router(authRouter)
 app.include_router(adminrouter)
 app.include_router(optProvider)
+
+
+
+
+
+
+
+
 
 
 manager = Manager(

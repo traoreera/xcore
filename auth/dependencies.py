@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from database.db import get_db
 from security.token import Token
 
-from . import models
+from . import models, authCache
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
 
 
 def get_current_user(

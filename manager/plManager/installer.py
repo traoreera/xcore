@@ -21,23 +21,13 @@ class Installer:
         logger.info("Installation des plugins")
         return Installer.__install_plugin_env(path)
 
-    # @Error.exception_handler
+    @Error.exception_handler #TODO:try to install requirement with other file 
     @staticmethod
     def __install_plugin_env(plugin_path: pathlib.Path) -> dict:
-        plugin_config_file = plugin_path / "plugin.json"
         pyproject_file = plugin_path / "pyproject.toml"
-        requirements_file = plugin_path / "requirements.txt"
-
-        config = {}
-        if plugin_config_file.exists():
-            config = json.loads(plugin_config_file.read_text())
-            logger.info(f"Config chargée pour {plugin_path.name}")
-        else:
-            logger.warning(f"plugin.json manquant pour {plugin_path.name}")
 
         if pyproject_file.exists():
             try:
-                logger.info(f"Installation des dépendances pour {plugin_path.name}")
                 subprocess.run(
                     [
                         "poetry",
@@ -78,21 +68,3 @@ class Installer:
             except subprocess.CalledProcessError as e:
                 logger.error(f"Erreur d’installation pour {plugin_path.name}")
                 logger.exception(e.stdout)
-
-        if pyproject_file.exists():
-            try:
-                data = toml.load(pyproject_file)
-                deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-                deps.pop("python", None)
-                with open(requirements_file, "w") as f:
-                    for k, v in deps.items():
-                        if isinstance(v, dict):
-                            f.write(f"{k}{v.get('version', '')}\n")
-                        else:
-                            f.write(f"{k}{v}\n")
-                logger.info(f"requirements.txt généré pour {plugin_path.name}")
-            except Exception as e:
-                logger.error(f"Impossible de générer requirements.txt")
-                logger.exception(e)
-
-        return config

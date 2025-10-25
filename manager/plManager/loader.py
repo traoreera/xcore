@@ -4,6 +4,7 @@ import logging
 import pathlib
 import pkgutil
 import sys
+import json
 from typing import Any, Dict, List
 
 from manager.plManager.installer import Installer
@@ -33,6 +34,7 @@ class Loader(Repository):
     # ------------------------------------------------------
     # 🔄 PURGE CACHE
     # ------------------------------------------------------
+    
     def _purge_module_cache(self, base_name: str, dry_run: bool = False) -> None:
         """Nettoie sys.modules pour permettre un rechargement propre"""
         relative_name = f"{self.plugin_dir}.{base_name}"
@@ -102,9 +104,20 @@ class Loader(Repository):
 
             if not Validator()(mod):
                 continue
+    
+            with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "r") as f:
+                plugin_data = f.read()
+                data = json.loads(plugin_data)
+            if rp:= data.get('requirements', None):
+                if not rp['isIstalled']:
+                    response = Installer()(path=pathlib.Path(plugin["path"])) #TODO: threading this part
+                    rp['isIstalled'] = True
+                    with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "w") as f:
+                        f.write(json.dumps(data))
 
-            response = Installer()(path=pathlib.Path(plugin["path"]))
             loaded_plugins.append(mod)
+
+
 
         # 🔁 Intégration FastAPI
         if self.app:

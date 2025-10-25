@@ -4,5 +4,8 @@
     "author": "HuntersX",
     "active": true,
     "entry_point": "run",
-    "async": true
+    "async": true,
+    "requirements": {
+        "isIstalled": true
+    }
 }
