@@ -6,7 +6,7 @@ PLUGIN_INFO = {
     "name": "Events",
     "version": "1.0.0",
     "author": "traore Eliezer",
-    "Api_prefix": "/app/events",
+    "Api_prefix": "/app/v1/events",
     "tag_for_identified": ["Plugin", "events"],
     "trigger": 2,
 }
@@ -14,6 +14,7 @@ router = APIRouter(
     prefix=PLUGIN_INFO["Api_prefix"],
     tags=PLUGIN_INFO["tag_for_identified"],
 )
+second_v1 = APIRouter(prefix=PLUGIN_INFO["Api_prefix"])
 
 
 class Plugin:

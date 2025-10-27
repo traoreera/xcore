@@ -166,10 +166,12 @@ class RedisCache(BaseCfg):
     def __init__(self, conf: Configure):
         super().__init__(conf, "redis")
 
-    
-    def cfgRedis(self) -> Optional[Dict[str, Any]]:
+    def cfgRedis(
+        self,
+    ) -> Optional[Dict[str, Any]]:
         return {
             "host": self.conf.get("host") or "localhost",
             "port": self.conf.get("port") or 6379,
-            "db": self.conf.get("db"),
+            "db": self.conf.get("db") or 0,
+            "TTL": self.conf.get("TTL") or 60,
         }

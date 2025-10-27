@@ -1,3 +1,3 @@
-from .cached import Cached, CacheManager 
+from .cached import Cached, CacheManager
 
 __all__ = ["Cached", "CacheManager"]

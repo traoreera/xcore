@@ -2,6 +2,7 @@ import time
 from typing import Annotated, Union
 
 from fastapi import FastAPI, Header, Request
+from fastapi.middleware.cors import  CORSMiddleware
 from user_agents import parse
 
 import manager.runtimer as taskRuntimer
@@ -9,36 +10,45 @@ from admin.routes import adminrouter
 from admin.service import init_root_admin
 from appcfg import logger
 from auth.routes import authRouter
-from loggers.logger_config import get_logger
-from manager import  Manager, cfg
+
+from manager import Manager, cfg
 from manager.routes.task import task
 from otpprovider.routes import optProvider
 
-
 app = FastAPI(title="Core API with Plugin System", version="1.0.0")
-
-
+v1 = FastAPI(title="core V1", version="v1",)
+v2 = FastAPI(title="core V2", version="V1.1")
 # base router
-app.include_router(task)
-app.include_router(authRouter)
-app.include_router(adminrouter)
-app.include_router(optProvider)
+v1.include_router(task)
+v1.include_router(authRouter)
+v1.include_router(adminrouter)
+v1.include_router(optProvider)
 
 
 
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:8080",
+]
 
 
+v1.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
-
-
-
+app.mount("/v1", v1)
 manager = Manager(
-    app=app,
+    app=v1,
     entry_point=cfg.get("plugins", "entry_point"),
     plugins_dir=cfg.get("plugins", "directory"),
     interval=cfg.get("plugins", "interval"),
-    base_routes=app.routes
+    base_routes=app.routes,
 )
 
 

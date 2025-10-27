@@ -1,21 +1,28 @@
-import redis
 import json
 from functools import wraps
 from typing import Any
+
+import redis
 from pydantic import BaseModel
+
+from config import Configure, RedisCache
+
+cfg = RedisCache(conf=Configure(file="./config.json")).cfgRedis()
 
 
 class CacheManager:
     def __init__(
         self,
-        endpoint: str = "localhost",
-        port: int = 6379,
-        default_ttl: int = 60,
+        endpoint: str = cfg["host"],
+        port: int = cfg["port"],
+        default_ttl: int = cfg["TTL"],
         default_namespace: str = "xcore",
     ):
         self.default_ttl = default_ttl
         self.default_namespace = default_namespace
-        self.__cache = redis.Redis(host=endpoint, port=port, db=0, decode_responses=True)
+        self.__cache = redis.Redis(
+            host=endpoint, port=port, db=0, decode_responses=True
+        )
 
     # ------------------------------------------------------
     # 🔹 Basic cache operations (JSON + Pydantic safe)
@@ -29,16 +36,20 @@ class CacheManager:
         except json.JSONDecodeError:
             return value
 
-    def set(self,key:str, value: Any):
+    def set(self, key: str, value: Any):
         # Sérialisation : si Pydantic, on convertit en dict avant JSON
         if isinstance(value, BaseModel):
             value = value.model_dump()  # pour Pydantic v2
 
         elif not isinstance(value, (str, int, float, bytes)):
             value = json.dumps(value, default=str)
-        
+
         print(key, json.dumps(value, default=str))
-        return self.__cache.set(f"{self.default_namespace}:{key}",json.dumps(value, default=str), ex=self.default_ttl)
+        return self.__cache.set(
+            f"{self.default_namespace}:{key}",
+            json.dumps(value, default=str),
+            ex=self.default_ttl,
+        )
 
     def remove(self, key: str):
         return self.__cache.delete(f"{self.default_namespace}:{key}")
@@ -67,7 +78,7 @@ class Cached:
             if cached_value is not None:
                 return cached_value
             result = func(*args, **kwargs)
-            self.cache_manager.set(key,result)
+            self.cache_manager.set(key, result)
             return result
 
         return wrapper

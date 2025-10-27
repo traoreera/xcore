@@ -1,12 +1,12 @@
 import asyncio
 import importlib
+import json
 import logging
 import pathlib
 import pkgutil
 import sys
-import json
+from starlette.routing import Route, Mount
 from typing import Any, Dict, List
-
 from manager.plManager.installer import Installer
 from manager.plManager.repository import Repository
 from manager.plManager.validator import Validator
@@ -34,7 +34,7 @@ class Loader(Repository):
     # ------------------------------------------------------
     # 🔄 PURGE CACHE
     # ------------------------------------------------------
-    
+
     def _purge_module_cache(self, base_name: str, dry_run: bool = False) -> None:
         """Nettoie sys.modules pour permettre un rechargement propre"""
         relative_name = f"{self.plugin_dir}.{base_name}"
@@ -104,20 +104,20 @@ class Loader(Repository):
 
             if not Validator()(mod):
                 continue
-    
+
             with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "r") as f:
                 plugin_data = f.read()
                 data = json.loads(plugin_data)
-            if rp:= data.get('requirements', None):
-                if not rp['isIstalled']:
-                    response = Installer()(path=pathlib.Path(plugin["path"])) #TODO: threading this part
-                    rp['isIstalled'] = True
+            if rp := data.get("requirements", None):
+                if not rp["isIstalled"]:
+                    response = Installer()(
+                        path=pathlib.Path(plugin["path"])
+                    )  # TODO: threading this part
+                    rp["isIstalled"] = True
                     with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "w") as f:
                         f.write(json.dumps(data))
 
             loaded_plugins.append(mod)
-
-
 
         # 🔁 Intégration FastAPI
         if self.app:
@@ -225,15 +225,17 @@ class Loader(Repository):
 
         # --- 1️⃣ Sauvegarde des routes natives (FastAPI core) ---
         base_routes = list(self.app.routes)
-        base_paths = {(r.path, tuple(sorted(r.methods))) for r in base_routes}
+        base_paths = {
+            (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
+            for r in base_routes if hasattr(r, "path")
+        }
 
         # --- 2️⃣ Purge des anciennes routes plugin ---
         before = len(self.app.routes)
-        self.app.routes[:] = [
-            r
-            for r in self.app.routes
-            if (r.path, tuple(sorted(r.methods))) in base_paths
-        ]
+        base_paths = {
+            (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
+            for r in base_routes if hasattr(r, "path")
+        }
         self.app.router.routes[:] = self.app.routes
         after = len(self.app.routes)
         if before != after:

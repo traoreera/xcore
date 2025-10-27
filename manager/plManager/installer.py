@@ -1,4 +1,3 @@
-import json
 import pathlib
 import subprocess
 import sys
@@ -21,7 +20,7 @@ class Installer:
         logger.info("Installation des plugins")
         return Installer.__install_plugin_env(path)
 
-    @Error.exception_handler #TODO:try to install requirement with other file 
+    @Error.exception_handler  # TODO:try to install requirement with other file
     @staticmethod
     def __install_plugin_env(plugin_path: pathlib.Path) -> dict:
         pyproject_file = plugin_path / "pyproject.toml"
