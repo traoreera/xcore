@@ -29,8 +29,6 @@ class Plugin:
     @router.get("/", operation_id=f"run_{PLUGIN_INFO['name']}_get")
     @staticmethod
     def run(curent_user=Depends(dependencies.get_current_user)):
-
-        print(curent_user.email)
         return {"tag_for_identified": "trigger"}
 
     @router.get("/test", operation_id=f"test_{PLUGIN_INFO['name']}_get")

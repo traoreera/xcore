@@ -5,8 +5,10 @@ import logging
 import pathlib
 import pkgutil
 import sys
-from starlette.routing import Route, Mount
 from typing import Any, Dict, List
+
+from starlette.routing import Mount, Route
+
 from manager.plManager.installer import Installer
 from manager.plManager.repository import Repository
 from manager.plManager.validator import Validator
@@ -227,14 +229,16 @@ class Loader(Repository):
         base_routes = list(self.app.routes)
         base_paths = {
             (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
-            for r in base_routes if hasattr(r, "path")
+            for r in base_routes
+            if hasattr(r, "path")
         }
 
         # --- 2️⃣ Purge des anciennes routes plugin ---
         before = len(self.app.routes)
         base_paths = {
             (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
-            for r in base_routes if hasattr(r, "path")
+            for r in base_routes
+            if hasattr(r, "path")
         }
         self.app.router.routes[:] = self.app.routes
         after = len(self.app.routes)

@@ -2,9 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import declarative_base, registry, sessionmaker
 
-from appcfg import xcfg
-
-from . import Base
+from . import Base, xcfg
 
 
 def get_db():

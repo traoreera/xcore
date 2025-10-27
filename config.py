@@ -4,11 +4,26 @@ from typing import Any, Dict, Optional
 from rich import print_json
 
 
-class Configure:
+class TypeConfig:
+
+    confTypes = {
+        "DEV": "config_dev.json",
+        "PROD": "config_prod.json",
+        "TEST": "config_test.json",
+        "QA": "config.json",
+    }
+    default = confTypes["QA"]
+
+    def set_config(self, type_conf: str):
+        self.default = type_conf
+
+
+class Configure(TypeConfig):
     """Charge et manipule un fichier JSON de configuration."""
 
-    def __init__(self, file: str):
-        self.file = file
+    def __init__(self):
+
+        self.file = self.default
         with open(self.file, "r") as f:
             self.cfg = json.load(f)
 
@@ -160,6 +175,11 @@ class XCore(BaseCfg):
         func = mapping.get(module)
         result = func() if func else self.conf
         return result.get(key) if result else None
+
+    def cfgAcessMidlware(
+        self,
+    ):
+        return self.conf.get("middleware")["ACCESS_RULES"]
 
 
 class RedisCache(BaseCfg):

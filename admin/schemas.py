@@ -11,7 +11,20 @@ class RoleCreate(RoleBase):
 
 
 class RoleRead(RoleBase):
-    id: int
+    id: str
 
     class Config:
         from_attributes = True
+
+
+class PermissionBase(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class PermissionCreate(PermissionBase):
+    role_id: str
+
+
+class PermissionRead(PermissionBase):
+    id: str

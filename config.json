@@ -108,7 +108,7 @@
         },
         "data": {
             "url": "sqlite:///test.db",
-            "echo": true
+            "echo": false
         },
         "extensions": [
             "auth",
@@ -122,7 +122,41 @@
         "requirements": [
             "config.json",
             "config.py"
-        ]
+        ],
+        "middleware": {
+            "ACCESS_RULES": {
+                "/admin/roles": {
+                    "roles": [
+                        "admin",
+                        "superadmin"
+                    ]
+                },
+                "/admin/permissions": {
+                    "permissions": [
+                        "manage_permissions"
+                    ]
+                },
+                "/users": {
+                    "roles": [
+                        "superadmin"
+                    ],
+                    "method": "DELETE"
+                },
+                "/settings": {
+                    "roles": [
+                        "admin"
+                    ],
+                    "permissions": [
+                        "manage_settings"
+                    ]
+                },
+                "/reports*": {
+                    "permissions": [
+                        "view_reports"
+                    ]
+                }
+            }
+        }
     },
     "redis": {
         "host": "localhost",

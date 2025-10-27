@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from config import Configure, RedisCache
 
-cfg = RedisCache(conf=Configure(file="./config.json")).cfgRedis()
+cfg = RedisCache(conf=Configure()).cfgRedis()
 
 
 class CacheManager:

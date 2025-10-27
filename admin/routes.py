@@ -24,7 +24,7 @@ def list_roles(db: Session = Depends(get_db), user=Depends(dependencies.require_
 
 @adminrouter.delete("/roles/{role_id}")
 def delete_role(
-    role_id: int,
+    role_id: str,
     db: Session = Depends(get_db),
     user=Depends(dependencies.require_admin),
 ):
@@ -40,3 +40,38 @@ def attribute_role_to_user(
     user=Depends(dependencies.require_admin),
 ):
     return service.attribute_role_to_user(db, user_id, role_id)
+
+
+@adminrouter.post("/roles/{role_id}/permissions/{permission_id}")
+def afect_role_to_permission(
+    role_id: str,
+    permission_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(dependencies.require_admin),
+):
+    return service.affect_role_to_permission(db, role_id, permission_id)
+
+
+@adminrouter.get("/permissions", response_model=list[schemas.PermissionRead])
+def list_permissions(
+    db: Session = Depends(get_db), user=Depends(dependencies.require_admin)
+):
+    return service.list_permissions(db)
+
+
+@adminrouter.delete("/permissions/{permission_id}")
+def delete_permission(
+    permission_id: str,
+    db: Session = Depends(get_db),
+    user=Depends(dependencies.require_admin),
+):
+    return service.delete_permission(db, permission_id)
+
+
+@adminrouter.post("/permissions", response_model=schemas.PermissionRead)
+def create_permission(
+    permission: schemas.PermissionCreate,
+    db: Session = Depends(get_db),
+    user=Depends(dependencies.require_admin),
+):
+    return service.create_permission(db, permission)
