@@ -2,12 +2,14 @@ import os
 
 from dotenv import find_dotenv, load_dotenv
 
-from config import Configure, Secure
+from configurations import secure
 
-cfg = Secure(conf=Configure())
+cfg = secure.Secure(secure.Configure())
 
 load_dotenv(
-    dotenv_path=find_dotenv(filename=cfg.cfgdotenv(), raise_error_if_not_found=True)
+    dotenv_path=find_dotenv(
+        filename=cfg.custom_config["dotenv"], raise_error_if_not_found=True
+    )
 )
 
 

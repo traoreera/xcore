@@ -37,7 +37,13 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             )
 
         try:
-            payload = self.token.verify(token, HTTPException)
+            payload = self.token.verify(
+                token,
+                HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Unauthorized process",
+                ),
+            )
         except Exception:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,8 +90,8 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
     # ------------------------------------------------------
     # Utils
     # ------------------------------------------------------
-
-    def _get_token_from_header(self, request: Request) -> Optional[str]:
+    @staticmethod
+    def _get_token_from_header(request: Request) -> Optional[str]:
         """Récupère le token Bearer dans le header Authorization"""
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -106,7 +112,8 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
                     return rule_data
         return None
 
-    def _path_match(self, path: str, rule_path: str) -> bool:
+    @staticmethod
+    def _path_match(path: str, rule_path: str) -> bool:
         """Supporte les wildcard `*` dans les chemins de règles."""
         if rule_path.endswith("*"):
             return path.startswith(rule_path[:-1])

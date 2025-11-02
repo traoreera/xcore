@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database.db import get_db
@@ -34,8 +34,8 @@ def delete_role(
 
 @adminrouter.post("/users/{user_id}/roles/{role_id}")
 def attribute_role_to_user(
-    user_id: int,
-    role_id: int,
+    user_id: str,
+    role_id: str,
     db: Session = Depends(get_db),
     user=Depends(dependencies.require_admin),
 ):
@@ -68,10 +68,20 @@ def delete_permission(
     return service.delete_permission(db, permission_id)
 
 
-@adminrouter.post("/permissions", response_model=schemas.PermissionRead)
+@adminrouter.post(
+    "/permissions",
+)  # response_model=schemas.PermissionRead
 def create_permission(
     permission: schemas.PermissionCreate,
     db: Session = Depends(get_db),
     user=Depends(dependencies.require_admin),
 ):
+    rols = [r for r in user.roles]
+    if permission.role_id == "string" or None:
+        if len(rols) > 0:
+            permission.role_id = rols[0]
+            raise HTTPException(
+                status_code=400,
+                detail="This user requires a role to create apermission",
+            )
     return service.create_permission(db, permission)

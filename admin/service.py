@@ -1,8 +1,8 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from auth import Hash
 from auth import models as auth_models
+from security.hash import Hash
 
 from . import models, schemas
 
@@ -104,6 +104,8 @@ def create_permission(db: Session, permission: schemas.PermissionCreate):
         .first()
     ):
         raise HTTPException(status_code=400, detail="Permission already exists")
+    if not (db.query(models.Role).get(permission.role_id)):
+        raise HTTPException(status_code=400, detail="Role not found")
 
     db_permission = models.Permission(
         name=permission.name,

@@ -134,7 +134,9 @@
                 "/admin/permissions": {
                     "permissions": [
                         "manage_permissions"
-                    ]
+                    ],"roles": [
+                    "admin"
+                  ],"method": ["DELETE"]
                 },
                 "/users": {
                     "roles": [

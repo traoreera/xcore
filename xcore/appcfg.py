@@ -1,8 +1,10 @@
-from config import Configure, XCore
+from configurations import core
 from loggers.logger_config import get_logger
 
-xcfg = XCore(conf=Configure())
+xcfg = core.Xcorecfg(conf=core.Configure())
 
 logger = get_logger(
-    "Xcore", log_file=xcfg.get("log", "file"), console=xcfg.get("log", "console")
+    module_name="xcore",
+    log_file=xcfg.custom_config["logs"]["file"],
+    console=xcfg.custom_config["logs"]["console"],
 )

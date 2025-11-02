@@ -6,8 +6,8 @@ try:
     get_logger("Manager").info("Starting plManager")
     logger = get_logger(
         "Manager",
-        log_file=cfg.get("log", "file"),
-        console=cfg.get("log", "console"),
+        log_file=cfg.custom_config["log"]["file"],
+        console=cfg.custom_config["log"]["console"],
     )
 
 except ImportError:

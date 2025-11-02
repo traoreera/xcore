@@ -7,8 +7,6 @@ import pkgutil
 import sys
 from typing import Any, Dict, List
 
-from starlette.routing import Mount, Route
-
 from manager.plManager.installer import Installer
 from manager.plManager.repository import Repository
 from manager.plManager.validator import Validator

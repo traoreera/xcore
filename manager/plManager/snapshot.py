@@ -22,9 +22,9 @@ class Snapshot:
         ignore_ext: Set[str] | None = None,
         ignore_file: Set[str] | None = None,
     ):
-        self.ignore_hidden = ignore_hidden or cfg.get("snapshot", "hidden")
-        self.ignore_ext = ignore_ext or cfg.get("snapshot", "extensions")
-        self.ignore_file = ignore_file or cfg.get("snapshot", "filenames")
+        self.ignore_hidden = ignore_hidden or cfg.custom_config["snapshot"]["hidden"]
+        self.ignore_ext = ignore_ext or cfg.custom_config["snapshot"]["extensions"]
+        self.ignore_file = ignore_file or cfg.custom_config["snapshot"]["filenames"]
 
     # ------------------------------------------------------------
     def _hash_file(self, path: Path) -> str:

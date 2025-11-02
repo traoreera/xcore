@@ -114,25 +114,27 @@ plugin_name/
 **Exemple de metadata dans `run.py` :**
 
 ```python
+from fastapi import APIRouter, Request
 PLUGIN_INFO = {
     "version": "1.0.0",
     "author": "Nom Auteur",
     "Api_prefix": "/app/plugin_name",
     "tag_for_identified": ["plugin_name"],
 }
-```
-
-**Route FastAPI dans `router.py` :**
-
-```python
-from fastapi import APIRouter
-
 router = APIRouter(prefix="/plugin_name", tags=["plugin_name"])
 
-@router.get("/status")
-async def status():
-    return {"status": "ok"}
+#creation du plugins
+class Plugin:
+    
+    def __init__(self,):
+        super(Plugin, self).__init__()
+
+    @router.get("/")
+    @staticmethod
+    def run(request:Request): # point d'entre
+        return {"status" "ok"}
 ```
+
 
 **Exécution du plugin :**
 
@@ -147,12 +149,10 @@ async def status():
 
 | Endpoint                | Description                                            |
 | ----------------------- | ------------------------------------------------------ |
-| `/admin/plugins`        | Liste des plugins, version, statut actif/inactif       |
-| `/admin/plugins/reload` | Reload dynamique des plugins et routes                 |
-| `/admin/tasks`          | Liste et état des tâches planifiées                    |
-| `/admin/logs`           | Logs centralisés des plugins et du core                |
-| `/health`               | Vérification globale : DB, scheduler, plugins, sandbox |
-
+| `admin`                 | tout ce qui concerne l'administration du serveur       |
+| `manager`               | gestion des taches programme via scheduler             |
+| `user`                  | connexion creation de compte et gestion de compte      |
+| `/auth`                 | authentification                                       |
 ---
 
 ## Scheduler & Tâches

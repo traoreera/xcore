@@ -96,7 +96,7 @@ class ServiceManager:
     def __init__(self):
         self.services = {}
         self.restart_attempts = {}
-        if cfg.get("tasks", "auto_restart"):
+        if cfg.custom_config["tasks"]["auto_restart"]:
             self.add_service("auto_restart", self.auto_restart)
 
     def add_service(self, name, target):
@@ -204,8 +204,8 @@ class ServiceManager:
 
         self.__monitor(
             serviced=serviced,
-            interval=cfg.get("tasks", "interval"),
-            max_retries=cfg.get("tasks", "max_retries"),
+            interval=cfg.custom_config["tasks"]["interval"],
+            max_retries=cfg.custom_config["tasks"]["max_retries"],
         )
 
     def __monitor(self, serviced: Any, interval: int, max_retries: int):

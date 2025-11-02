@@ -11,7 +11,9 @@ crontab = TaskManager()
 
 
 try:
-    backgroundtask = ModuleRuntimeManager(module_dir=cfg.get("tasks", "directory"))
+    backgroundtask = ModuleRuntimeManager(
+        module_dir=cfg.custom_config["tasks"]["directory"]
+    )
     logger.info("ModuleRuntimeManager initialisé avec succès")
 except Exception as e:
     logger.error(

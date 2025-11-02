@@ -5,17 +5,17 @@ from typing import Any
 import redis
 from pydantic import BaseModel
 
-from config import Configure, RedisCache
+from configurations.redis import Configure, Rediscfg
 
-cfg = RedisCache(conf=Configure()).cfgRedis()
+cfg = Rediscfg(Configure())
 
 
 class CacheManager:
     def __init__(
         self,
-        endpoint: str = cfg["host"],
-        port: int = cfg["port"],
-        default_ttl: int = cfg["TTL"],
+        endpoint: str = cfg.custom_config["host"],
+        port: int = cfg.custom_config["port"],
+        default_ttl: int = cfg.custom_config["TTL"],
         default_namespace: str = "xcore",
     ):
         self.default_ttl = default_ttl

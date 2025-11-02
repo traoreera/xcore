@@ -8,7 +8,8 @@ from . import Base, xcfg
 def get_db():
     try:
         engine = create_engine(
-            xcfg.get("database", "url"), echo=xcfg.get("database", "echo")
+            xcfg.custom_config["data"]["url"],
+            echo=xcfg.custom_config["data"]["echo"],
         )
     except ProgrammingError:
         engine = None

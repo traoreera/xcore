@@ -7,7 +7,7 @@ def _get_schemes():
     """Récupère la liste des algorithmes depuis la config."""
     try:
         # Appel à ta config custom
-        schemes = cfg.get("password", "algorithms")
+        schemes = cfg.custom_config["password"]["scheme"]
     except Exception:
         # Si la clé n'existe pas, valeur par défaut
         schemes = ["bcrypt"]
