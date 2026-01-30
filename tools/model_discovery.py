@@ -61,18 +61,25 @@ class ModelDiscovery:
             logger.warning(f"⚠️ Répertoire non trouvé: {directory}")
             return python_files
 
-        exclude_dirs = cfg.get("exclusion_patern", "exclude_directories")
-        exclude_patterns = cfg.get("exclusion_patern", "exclude_file_patterns")
-
         for file_path in directory_path.rglob(
-            cfg.get("exclusion_patern", "include_file_patterns")
+            cfg.custom_config["explusion_patern"]["include_file_patterns"]
         ):
             # Vérifier si le fichier est dans un répertoire exclu
-            if any(excluded in file_path.parts for excluded in exclude_dirs):
+            if any(
+                excluded in file_path.parts
+                for excluded in cfg.custom_config["explusion_patern"][
+                    "exclude_directories"
+                ]
+            ):
                 continue
 
             # Vérifier si le fichier correspond aux patterns exclus
-            if any(file_path.match(pattern) for pattern in exclude_patterns):
+            if any(
+                file_path.match(pattern)
+                for pattern in cfg.custom_config["explusion_patern"][
+                    "exclude_file_patterns"
+                ]
+            ):
                 continue
 
             python_files.append(str(file_path))
@@ -84,18 +91,16 @@ class ModelDiscovery:
         all_models = {"core_models": [], "plugin_models": {}}
 
         # Découvrir les modèles core
-        core_paths = cfg.get("automigration", "models")
-        plugins_paths = cfg.get("automigration", "plugins")
 
-        for core_path in plugins_paths:
+        for core_path in cfg.custom_config["automigration"]["plugins"]:
             if os.path.exists(core_path):
                 core_files = self.find_python_files(core_path)
                 for file_path in core_files:
                     models = self.analyze_python_file(file_path)
-                    all_models["plugin_models"].extend(models)
+                    all_models["plugin_models"].update(models)
                     logger.info(f"📋 Trouvé {len(models)} modèles dans {file_path}")
 
-        for core_path in core_paths:
+        for core_path in cfg.custom_config["automigration"]["models"]:
             if os.path.exists(core_path):
                 core_files = self.find_python_files(core_path)
                 for file_path in core_files:

@@ -43,7 +43,7 @@ class AutoMigrationManager:
 
         # Découvrir les modèles core
 
-        for model in cfg.get("automigration", "models"):
+        for model in cfg.custom_models["automigration"]["models"]:
             if os.path.exists(model):
                 for root, dirs, files in os.walk(model):
                     for file in files:

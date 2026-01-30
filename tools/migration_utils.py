@@ -29,7 +29,7 @@ except ImportError as e:
 class DatabaseInspector:
     """Database inspection utilities"""
 
-    def __init__(self, database_url: str = cfg.get("database_url", "url")):
+    def __init__(self, database_url: str = cfg.custom_config["url"]):
         self.database_url = database_url
         self.engine = create_engine(database_url)
 
@@ -75,9 +75,9 @@ class DatabaseInspector:
 class BackupManager:
     """Backup management utilities"""
 
-    def __init__(self, database_url: str = cfg.get("database_url", "url")):
+    def __init__(self, database_url: str = cfg.custom_config):
         self.database_url = database_url
-        self.backup_dir = Path(cfg.get("backup", "backup_directory"))
+        self.backup_dir = Path(cfg.custom_config["backup_directory"])
         self.backup_dir.mkdir(exist_ok=True)
 
     def create_backup(self, backup_name: Optional[str] = None) -> Optional[str]:
@@ -95,7 +95,7 @@ class BackupManager:
 
             if not backup_name:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_name_format = cfg.get("backup", "backup_name_format")
+                backup_name_format = cfg.custom_config["backup_name_format"]
                 backup_name = backup_name_format.format(timestamp=timestamp)
 
             backup_path = self.backup_dir / backup_name
@@ -182,7 +182,7 @@ def main():
         help="Action to perform",
     )
     parser.add_argument(
-        "--url", help="Database URL (default: cfg.get('database_url', 'url'))"
+        "--url", help="Database URL (default: cfg.custom_config['url'])"
     )
     parser.add_argument("--output", help="Output file for schema export")
     parser.add_argument("--backup", help="Backup file name (for create/restore)")
@@ -191,11 +191,11 @@ def main():
 
     # Fallback sur DATABASE.URL si --url n’est pas fourni
 
-    db_url = args.url or cfg.get("database_url", "url")
+    db_url = args.url or cfg.custom_config["url"]
     if args.action == "inspect":
         inspector = DatabaseInspector(db_url)
-        tables = inspector.get_table_info()
-        print(json.dumps(tables, indent=2, default=str))
+        inspector.get_table_info()
+        # print(json.dumps(tables, indent=2, default=str))
 
     elif args.action == "export":
         if not args.output:

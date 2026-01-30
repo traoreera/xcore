@@ -1,0 +1,52 @@
+{
+    "folders": [
+        {
+            "name": "xcore",
+            "path": "."
+        },
+        {
+            "name": "manager",
+            "path": "manager"
+        },
+        {
+            "name": "xcore",
+            "path": "xcore"
+        },
+        {
+            "name": "plugins",
+            "path": "plugins"
+        },
+        {
+            "name": "admins",
+            "path": "admin"
+        },
+        {
+            "name": "auths",
+            "path": "auths"
+        },
+        {
+            "name": "cache",
+            "path": "cache"
+        },
+        {
+            "name": "configurations",
+            "path": "configurations"
+        },
+        {
+            "name": "database",
+            "path": "database"
+        },
+        {
+            "name": "security",
+            "path": "security"
+        },
+        {
+            "name": "middleware",
+            "path": "middleware"
+        },
+        {
+            "name": "LibraryHub",
+            "path": "plugins/LibraryHub"
+        }
+    ]
+}

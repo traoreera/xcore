@@ -27,7 +27,6 @@ class Reloader:
         if hasattr(self.app, "_original_openapi"):
             self.app.openapi = self.app._original_openapi
             self.app.openapi_schema = None
-
         return self.app
 
     # ------------------------------------------------------------

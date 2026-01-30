@@ -17,7 +17,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine
 
     from alembic import command
     from alembic.config import Config
@@ -56,7 +56,7 @@ class MigrationManager:
         """Récupère l'URL de la base de données"""
         try:
 
-            url = cfg.get("database", "url")
+            url = cfg.custom_config["database"]["url"]
             logger.info(f"🔗 URL de base de données récupérée: {url[:10]}***")
             return url
         except:

@@ -17,7 +17,7 @@
         },
         "log": {
             "file": "manager.log",
-            "console": true
+            "console": false
         },
         "snapshot": {
             "extensions": [
@@ -134,9 +134,13 @@
                 "/admin/permissions": {
                     "permissions": [
                         "manage_permissions"
-                    ],"roles": [
-                    "admin"
-                  ],"method": ["DELETE"]
+                    ],
+                    "roles": [
+                        "admin"
+                    ],
+                    "method": [
+                        "DELETE"
+                    ]
                 },
                 "/users": {
                     "roles": [

@@ -27,6 +27,36 @@ xcore est un framework avancé pour **FastAPI**, conçu pour gérer dynamiquemen
 
 ---
 
+## Documentation Complémentaire
+
+Pour une analyse détaillée du projet et un guide complet pour les développeurs, veuillez consulter les documents suivants dans le dossier `docs/` :
+
+*   [**GEMINI.md**](docs/GEMINI.md) : Analyse complète du projet générée par l'IA.
+*   [**DEVELOPMENT.md**](docs/DEVELOPMENT.md) : Guide détaillé pour les développeurs.
+
+---
+
+## Documentation des Modules
+
+Chaque module principal du projet est documenté en détail pour faciliter la compréhension et la contribution :
+
+*   [**admin/**](docs/admin.md) : Gestion des rôles, permissions et utilisateurs administrateurs.
+*   [**auth/**](docs/auth.md) : Authentification utilisateur, JWT et gestion des sessions.
+*   [**backgroundtask/**](docs/backgroundtask.md) : Conteneur pour les tâches d'arrière-plan et leur gestion.
+*   [**cache/**](docs/cache.md) : Mécanisme de cache basé sur Redis.
+*   [**configurations/**](docs/configurations.md) : Gestion centralisée de la configuration de l'application.
+*   [**database/**](docs/database.md) : Configuration et gestion de la base de données via SQLAlchemy.
+*   [**loggers/**](docs/loggers.md) : Système de journalisation configurable avec sortie colorée.
+*   [**manager/**](docs/manager.md) : Orchestrateur principal des plugins et des tâches d'arrière-plan.
+*   [**middleware/**](docs/middleware.md) : Implémentation de middlewares FastAPI personnalisés.
+*   [**otpprovider/**](docs/otpprovider.md) : Fourniture de services d'authentification à usage unique (OTP).
+*   [**plugins/**](docs/plugins.md) : Structure et développement des plugins dynamiques.
+*   [**security/**](docs/security.md) : Hachage des mots de passe et gestion des jetons JWT.
+*   [**tools/**](docs/tools.md) : Scripts utilitaires pour la migration et la gestion de la base de données.
+*   [**xcore/**](docs/xcore.md) : Package applicatif principal et gestion du cycle de vie.
+
+---
+
 ## Présentation
 
 xcore est conçu pour les environnements où il faut :

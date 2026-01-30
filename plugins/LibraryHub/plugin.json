@@ -1,9 +1,8 @@
 {
-    "name": "events",
+    "name": "LibraryHub",
     "version": "1.0.0",
     "author": "HuntersX",
     "active": true,
-    "entry_point": "run",
     "async": true,
     "requirements": {
         "isIstalled": true

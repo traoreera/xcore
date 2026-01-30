@@ -36,7 +36,7 @@ class Loader(Repository):
     # ------------------------------------------------------
 
     def _purge_module_cache(self, base_name: str, dry_run: bool = False) -> None:
-        """Nettoie sys.modules pour permettre un rechargement propre"""
+        print("""Nettoie sys.modules pour permettre un rechargement propre""")
         relative_name = f"{self.plugin_dir}.{base_name}"
         to_remove = [
             m
@@ -79,8 +79,23 @@ class Loader(Repository):
     def load_plugins(self) -> List[Any]:
         """Importe et initialise les plugins valides"""
         loaded_plugins = []
+        
+        # 🧹 Purge des plugins qui n'existent plus dans le dossier
+        discovered_names = {p["name"] for p in self._discover_plugins()}
+        active_names = {p["name"] for p in self.active_plugins}
+        
+        plugins_to_remove = active_names - discovered_names
+        for plugin_name in plugins_to_remove:
+            self.logger.info(f"🗑️ Suppression du plugin absent: {plugin_name}")
+            self._purge_module_cache(plugin_name)
+            # Retirer de la base de données
+            self.disable(plugin_name)
+        
+        if plugins_to_remove:
+            self.active_plugins = self.get_all_active()  # Rafraîchir la liste
 
         for plugin in self._discover_plugins():
+            print(plugin)
             self._purge_module_cache(plugin["name"])
             mod = importlib.import_module(plugin["module"])
 
@@ -89,13 +104,9 @@ class Loader(Repository):
                 self.add(
                     plugin=Plugin(
                         name=plugin["name"],
-                        version=getattr(mod, "PLUGIN_INFO", {}).get(
-                            "version", "unknown"
-                        ),
+                        version=getattr(mod, "PLUGIN_INFO", {}).get( "version", "unknown"),
                         author=getattr(mod, "PLUGIN_INFO", {}).get("author", "unknown"),
-                        Api_prefix=getattr(mod, "PLUGIN_INFO", {}).get(
-                            "Api_prefix", f"/app/{plugin['name']}"
-                        ),
+                        Api_prefix=getattr(mod, "PLUGIN_INFO", {}).get("Api_prefix", f"/app/{plugin['name']}"),
                         tag_for_identified=f"{getattr(mod, 'PLUGIN_INFO', {}).get('tag_for_identified', [])}",
                     )
                 )

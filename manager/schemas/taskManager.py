@@ -8,8 +8,7 @@ class TaskResource(BaseModel):
     memory_mb: float = Field(..., description="Mémoire utilisée (Mo)")
     retrying: int = Field(..., description="Nombre de tentatives de redémarrage")
 
-    class Config:
-        orm_mode = True
+
 
 
 class TaskResourcesResponse(RootModel[dict[str, TaskResource]]):
@@ -34,7 +33,6 @@ class TaskListResponse(BaseModel):
 
 
 class RestartService(TaskStatusResponse):
-    class Config:
-        orm_mode = True
+
 
     success: bool = Field(..., description="Etat de la command")
