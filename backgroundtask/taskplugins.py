@@ -5,7 +5,6 @@ metadata = {
     "description": """
         This service is a plugins service to analyse
         all plugins dir modification to update app and plugins
-
     """,
     "version": "1.0.0",
     "author": "Root",

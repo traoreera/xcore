@@ -177,18 +177,14 @@ class Loader(Repository):
     def bind_to_fastapi(self) -> None:
         """Relie dynamiquement le chargeur au cycle de vie FastAPI."""
         if not self.app:
-            self.logger.warning(
-                "⚠️ Aucun app FastAPI détecté, impossible d'attacher le hook."
-            )
+            self.logger.warning("⚠️ Aucun app FastAPI détecté, impossible d'attacher le hook.")
             return
 
         @self.app.on_event("startup")
         async def _on_startup_reload_plugins() -> None:
             """Hook exécuté automatiquement au démarrage de FastAPI."""
             try:
-                self.logger.info(
-                    "🔄 Rechargement automatique des plugins au démarrage..."
-                )
+                self.logger.info("🔄 Rechargement automatique des plugins au démarrage...")
                 loaded_plugins = self.load_plugins()
 
                 # Attache tous les routers FastAPI

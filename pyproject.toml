@@ -33,6 +33,7 @@ uvicorn = "^0.38.0"
 bcrypt = "4.0.1"
 pip = "^25.2"
 user-agents = "^2.2.0"
+jinja2 = "^3.1.6"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.3.0"

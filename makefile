@@ -101,6 +101,7 @@ unlink: ## Supprimer un lien symbolique (usage: make unlink TO=dossier NAME=nom_
 # ============================================================
 
 clean: ## Supprimer __pycache__ et fichiers *.pyc, *.pyo
+	@clear
 	@echo "🧹 Nettoyage des fichiers inutiles..."
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
 	@find . -type f \( -name "*.backup" -o -name "*.backup" \) -exec rm -f {} +
