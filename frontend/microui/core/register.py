@@ -1,4 +1,4 @@
-from microframe.engine.component import ComponentRegistry
+from frontend.engine.component import ComponentRegistry
 
 
 def register(cls):

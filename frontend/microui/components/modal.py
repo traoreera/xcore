@@ -2,8 +2,8 @@ from typing import Optional, Literal
 
 from markupsafe import Markup
 
-from microui.core.extension import Component
-from microui.core.register import register
+from frontend.microui.core.extension import Component
+from frontend.microui.core.register import register
 
 
 @register

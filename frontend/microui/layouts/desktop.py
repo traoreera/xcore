@@ -2,9 +2,9 @@ from typing import Dict, List, Optional
 
 from markupsafe import Markup
 
-from microui.components import Avatar, Drawer, Dropdown, Navbar, Sidebar, ThemeSwitcher
-from microui.core.extension import Component
-from microui.core.register import register
+from frontend. microui.components import Avatar, Drawer, Dropdown, Navbar, Sidebar, ThemeSwitcher
+from frontend.microui.core.extension import Component
+from frontend.microui.core.register import register
 
 
 @register

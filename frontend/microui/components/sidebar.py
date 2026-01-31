@@ -2,9 +2,9 @@ from typing import Dict, List, Optional
 
 from markupsafe import Markup
 
-from microui.core.extension import Component
-from microui.core.register import register
-from microui.utils import build_menu_items
+from frontend.microui.core.extension import Component
+from frontend.microui.core.register import register
+from frontend.microui.utils import build_menu_items
 
 
 @register

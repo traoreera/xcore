@@ -67,7 +67,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         required_perms: List[str] = rule.get("permissions", [])
 
         # Vérification des rôles
-        if required_roles and not any(r in user_roles for r in required_roles):
+        if required_roles and any(r not in user_roles for r in required_roles):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={
@@ -76,7 +76,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             )
 
         # Vérification des permissions
-        if required_perms and not any(p in user_permissions for p in required_perms):
+        if required_perms and  any(p not  in user_permissions for p in required_perms):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={

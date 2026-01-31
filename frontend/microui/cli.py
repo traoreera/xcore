@@ -1,7 +1,7 @@
 import click
 import os
 import importlib
-from microui.core.register import ComponentRegistry
+from frontend.microui.core.register import ComponentRegistry
 
 def load_components():
     """Dynamically loads all components from the components directory."""
@@ -48,8 +48,8 @@ def new_component(name, path):
 
     template = f"""from markupsafe import Markup
 
-from microui.core.extension import Component
-from microui.core.register import register
+from frontend.microui.core.extension import Component
+from frontend.microui.core.register import register
 
 
 @register

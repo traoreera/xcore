@@ -50,8 +50,6 @@ def service_main(service):
 
     while service.running:
         manager.start_watching(service)
-        print("starred plugin manager snapshot" " - Next check in 2 seconds...")
-
         time.sleep(2)
     print("Stopping plugin manager service...")
     return True

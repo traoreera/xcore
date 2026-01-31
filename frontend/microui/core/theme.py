@@ -2,7 +2,7 @@
 Gestionnaire de thèmes DaisyUI avec cookies et middleware (VERSION CORRIGÉE)
 """
 
-from typing import Callable
+from typing import Callable, Optional
 
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -21,14 +21,12 @@ class ThemeManager:
     @staticmethod
     def get_theme(request: Request) -> str:
         """Récupère le thème depuis les cookies"""
-        theme = request.cookies.get(ThemeManager.COOKIE_NAME, ThemeManager.DEFAULT_THEME)
-        print(f"[ThemeManager] Getting theme from cookie: {theme}")
-        return theme
+        return request.cookies.get(ThemeManager.COOKIE_NAME, ThemeManager.DEFAULT_THEME)
+        
 
     @staticmethod
     def set_theme_cookie(response: Response, theme: str):
         """Définit le cookie de thème"""
-        print(f"[ThemeManager] Setting theme cookie: {theme}")
         response.set_cookie(
             key=ThemeManager.COOKIE_NAME,
             value=theme,
@@ -59,26 +57,20 @@ def create_theme_routes(router):
     """Crée les routes pour gérer les thèmes"""
 
     @router.post("/theme/set")
-    async def set_theme(request: Request):
+    async def set_theme(request: Request, theme:Optional[str | None] = "light"):
         """Endpoint pour changer le thème"""
-        try:
-            # Essayer de lire le JSON d'abord
-            data = await request.json()
-            theme = data.get("theme", ThemeManager.DEFAULT_THEME)
-        except:
-            # Sinon lire le form data
-            form_data = await request.form()
-            theme = form_data.get("theme", ThemeManager.DEFAULT_THEME)
-
-        print(f"[Theme Route] Changing theme to: {theme}")
+        if theme:
+            theme = theme
+        else:
+            try:
+                theme = request.form.get("theme")
+            except Exception:
+                theme = ThemeManager.DEFAULT_THEME
 
         # Créer la réponse HTML qui va recharger la page
         html = f"""
         <script>
-            // Mettre à jour l'attribut data-theme immédiatement
             document.documentElement.setAttribute('data-theme', '{theme}');
-            
-            // Recharger la page après un court délai pour que le cookie soit bien défini
             setTimeout(function() {{
                 window.location.reload();
             }}, 100);
@@ -99,6 +91,9 @@ def create_theme_routes(router):
         return {"theme": theme}
 
 
+    return router
+
+
 # Exemple d'utilisation dans une application Starlette
 def setup_daisy_ui(app, router=None):
     """Configure DaisyUI dans l'application"""
@@ -109,6 +104,7 @@ def setup_daisy_ui(app, router=None):
     # Créer les routes
     if router:
         create_theme_routes(router)
+        app.include_router(router)
 
 
 # Helpers pour les templates Jinja2
@@ -125,7 +121,7 @@ def register_theme_helpers(env):
     """Enregistre les helpers de thème dans Jinja2"""
     env.globals.update(
         {
-            "get_theme": lambda request: ThemeManager.get_theme(request),
+            "theme": lambda request: ThemeManager.get_theme(request),
             "theme_context": get_theme_context,
         }
     )

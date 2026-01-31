@@ -36,7 +36,6 @@ class Loader(Repository):
     # ------------------------------------------------------
 
     def _purge_module_cache(self, base_name: str, dry_run: bool = False) -> None:
-        print("""Nettoie sys.modules pour permettre un rechargement propre""")
         relative_name = f"{self.plugin_dir}.{base_name}"
         to_remove = [
             m
@@ -95,7 +94,6 @@ class Loader(Repository):
             self.active_plugins = self.get_all_active()  # Rafraîchir la liste
 
         for plugin in self._discover_plugins():
-            print(plugin)
             self._purge_module_cache(plugin["name"])
             mod = importlib.import_module(plugin["module"])
 
