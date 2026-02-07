@@ -20,11 +20,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 
 # AUTO-GENERATED IMPORTS START
-from admin.models import Permission
-from admin.models import Role
-from auth.models import User
-from manager.models.plugins import PluginsModels
-from manager.models.tasks import TaskModel
+
 # AUTO-GENERATED IMPORTS END
 
 target_metadata = Base.metadata

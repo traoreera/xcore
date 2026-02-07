@@ -1,11 +1,14 @@
-import click
-import os
 import importlib
+import os
+
+import click
+
 from frontend.microui.core.register import ComponentRegistry
+
 
 def load_components():
     """Dynamically loads all components from the components directory."""
-    components_dir = os.path.join(os.path.dirname(__file__), 'components')
+    components_dir = os.path.join(os.path.dirname(__file__), "components")
     for filename in os.listdir(components_dir):
         if filename.endswith(".py") and not filename.startswith("__"):
             module_name = f"microui.components.{filename[:-3]}"
@@ -14,24 +17,25 @@ def load_components():
             except ImportError as e:
                 click.echo(f"Error importing {module_name}: {e}", err=True)
 
+
 @click.group()
 def cli():
     """A CLI for MicroUI."""
     load_components()
-    pass
+
 
 @cli.command()
 def list_components():
     """Lists all available MicroUI components."""
-    
+
     click.echo("Available components:")
     for component_name in sorted(ComponentRegistry._components.keys()):
         click.echo(f"- {component_name}")
 
 
 @cli.command()
-@click.argument('name')
-@click.argument('path')
+@click.argument("name")
+@click.argument("path")
 def new_component(name, path):
     """Creates a new MicroUI component."""
     component_name = name.lower()

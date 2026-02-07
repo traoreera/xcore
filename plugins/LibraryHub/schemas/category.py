@@ -19,5 +19,3 @@ class CategoryUpdate(BaseModel):
 
 class CategoryRead(CategoryBase):
     id: int
-
-

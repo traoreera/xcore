@@ -51,17 +51,18 @@ class Alert(Component):
         """
         )
 
-
     @staticmethod
-    def rendering(        message: str,
+    def rendering(
+        message: str,
         type: Literal["info", "success", "warning", "error"] = "info",
         dismissible: bool = False,
         icon: Optional[str] = None,
-        classes: str = "",)-> Markup:
-            return Alert.__render(
-                message=message,
-                type=type,
-                dismissible=dismissible,
-                icon=icon,
-                classes=classes,
-            )
+        classes: str = "",
+    ) -> Markup:
+        return Alert.__render(
+            message=message,
+            type=type,
+            dismissible=dismissible,
+            icon=icon,
+            classes=classes,
+        )

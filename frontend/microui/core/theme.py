@@ -8,6 +8,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
+
 from .config import ThemeConfigure
 
 
@@ -22,7 +23,6 @@ class ThemeManager:
     def get_theme(request: Request) -> str:
         """Récupère le thème depuis les cookies"""
         return request.cookies.get(ThemeManager.COOKIE_NAME, ThemeManager.DEFAULT_THEME)
-        
 
     @staticmethod
     def set_theme_cookie(response: Response, theme: str):
@@ -57,7 +57,7 @@ def create_theme_routes(router):
     """Crée les routes pour gérer les thèmes"""
 
     @router.post("/theme/set")
-    async def set_theme(request: Request, theme:Optional[str | None] = "light"):
+    async def set_theme(request: Request, theme: Optional[str | None] = "light"):
         """Endpoint pour changer le thème"""
         if theme:
             theme = theme
@@ -89,7 +89,6 @@ def create_theme_routes(router):
         """Endpoint pour récupérer le thème actuel"""
         theme = ThemeManager.get_theme(request)
         return {"theme": theme}
-
 
     return router
 

@@ -34,11 +34,11 @@ class Card(Component):
         classes: str = "",
     ) -> Markup:
         css_classes = ["card", "bg-base-100"]
-        
-        if isinstance(title,(dict)):
-            image = image or title.get("image","")
+
+        if isinstance(title, (dict)):
+            image = image or title.get("image", "")
             title = title.get("name") or title.get("title")
-           
+
         if compact:
             css_classes.append("card-compact")
         if bordered:
@@ -47,10 +47,14 @@ class Card(Component):
             css_classes.append("card-side")
 
         image_html = (
-            f'<figure><img src="{image}" alt="{title or "Card image"}" /></figure>' if image else ""
+            f'<figure><img src="{image}" alt="{title or "Card image"}" /></figure>'
+            if image
+            else ""
         )
         title_html = f"<h2 class='card-title'>{title}</h2>" if title else ""
-        actions_html = f"<div class='card-actions justify-end'>{actions}</div>" if actions else ""
+        actions_html = (
+            f"<div class='card-actions justify-end'>{actions}</div>" if actions else ""
+        )
 
         return Markup(
             f"""

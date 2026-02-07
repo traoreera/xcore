@@ -27,5 +27,3 @@ class MemberUpdate(BaseModel):
 class MemberRead(MemberBase):
     id: int
     created_at: datetime
-
-

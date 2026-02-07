@@ -12,169 +12,37 @@
         .feature-card:hover { transform: translateY(-5px); transition: all 0.3s ease; }
     </style>
 </head>
-<body class="bg-base-100 text-base-content antialiased">
-
+<body class="bg-base-100 text-base-content antialiased ">
     <div class="navbar bg-base-100 border-b border-base-200 px-4 md:px-12 sticky top-0 z-50">
         <div class="flex-1">
             <a class="text-2xl font-black tracking-tighter italic">X<span class="text-primary italic">CORE</span></a>
         </div>
         <div class="flex-none gap-4">
             <ul class="menu menu-horizontal px-1 hidden md:flex font-medium">
-                <li><a href="#arch">Architecture</a></li>
-                <li><a href="#microui">MicroUI</a></li>
-                <li><a href="#plugins">Plugins</a></li>
+                <li><a href="/arch">Architecture</a></li>
+                <li><a href="/microui">MicroUI</a></li>
+                <li><a href="/plugins">Plugins</a></li>
             </ul>
             <a href="https://github.com/traoreera/xcore" class="btn btn-neutral btn-sm">GitHub</a>
         </div>
     </div>
 
-    <header class="hero min-h-[80vh] bg-gradient-to-b from-base-100 to-base-200">
+    <header class="hero min-h-[80vh] bg-gradient-to-b from-base-200 to-base-200">
         <div class="hero-content text-center">
             <div class="max-w-4xl">
-                <div class="badge badge-primary badge-outline mb-6 p-4 font-mono">v1.0.0-rc: Scalable Plugin System</div>
+                <div class="badge badge-primary badge-outline mb-6 p-4 font-mono">v1.0.0-rc: Système de plugins évolutif</div>
                 <h1 class="text-5xl md:text-7xl font-black mb-8 leading-[1.1]">
-                    L'architecture <span class="text-primary">FastAPI</span> <br> pensée pour les Agents IA.
+                    L'architecture <span class="text-primary">FastAPI</span> <br> pensée pour les Micro services.
                 </h1>
                 <p class="text-xl mb-10 opacity-70 leading-relaxed max-w-2xl mx-auto">
-                    Un core robuste (<span class="font-bold">XCore</span>), un gestionnaire de plugins dynamique et un moteur <span class="font-bold">MicroUI</span> pour des interfaces server-driven sans JS.
+                    Un core robuste (<span class="font-bold">XCore</span>), pour une gestion des plugins dynamique et un moteur template <span class="font-bold">MicroUI</span> pour des interfaces server-driven sans JS complex.
                 </p>
                 <div class="flex flex-wrap justify-center gap-4">
-                    <a href="#arch" class="btn btn-primary btn-lg px-8">Voir l'Architecture</a>
-                    <button class="btn btn-outline btn-lg" hx-get="/docs/quickstart" hx-swap="outerHTML">Lire la Doc</button>
+                    <a href="/arch" class="btn btn-primary btn-lg px-8">Voir l'Architecture</a>
+                    <a href="/core-docs" class="btn btn-outline btn-lg px-8">Voir la Documentation</a>
                 </div>
             </div>
         </div>
     </header>
-
-    
-    <section id="arch" class="py-24 container mx-auto px-6">
-        <div class="text-center mb-16">
-            <h2 class="text-4xl font-bold mb-4">Une structure découplée</h2>
-            <p class="opacity-60 font-mono italic">Inspirée de la hiérarchie ./xcore ./manager ./plugins</p>
-        </div>
-
-        <div class="grid lg:grid-cols-3 gap-8">
-            <div class="card bg-base-200 shadow-xl border-t-4 border-primary feature-card">
-                <div class="card-body">
-                    <h3 class="card-title text-primary italic">01. XCORE</h3>
-                    <p class="text-sm italic opacity-70 mb-4 font-mono">./xcore/appcfg.py</p>
-                    <p>Socle de configuration centralisé. Gère les événements, les middlewares de sécurité et l'orchestration globale de l'application FastAPI.</p>
-                    <div class="divider"></div>
-                    <ul class="space-y-2 text-sm opacity-80 font-medium">
-                        <li class="flex items-center gap-2">✓ Event-driven architecture</li>
-                        <li class="flex items-center gap-2">✓ Global Access Control</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="card bg-base-200 shadow-xl border-t-4 border-secondary feature-card">
-                <div class="card-body">
-                    <h3 class="card-title text-secondary italic">02. MANAGER</h3>
-                    <p class="text-sm italic opacity-70 mb-4 font-mono">./manager/plManager/</p>
-                    <p>Système de découverte automatique. Loader, Validator et Reloader permettent d'injecter des fonctionnalités à chaud sans redémarrer.</p>
-                    <div class="divider"></div>
-                    <ul class="space-y-2 text-sm opacity-80 font-medium">
-                        <li class="flex items-center gap-2">✓ Runtime Plugin Injection</li>
-                        <li class="flex items-center gap-2">✓ Database Auto-migrations</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="card bg-base-200 shadow-xl border-t-4 border-accent feature-card">
-                <div class="card-body">
-                    <h3 class="card-title text-accent italic">03. MICROUI</h3>
-                    <p class="text-sm italic opacity-70 mb-4 font-mono">./frontend/microui/</p>
-                    <p>Votre Design System programmable en Python. Génère du HTML Tailwind/DaisyUI côté serveur pour une interactivité maximale via HTMX.</p>
-                    <div class="divider"></div>
-                    <ul class="space-y-2 text-sm opacity-80 font-medium">
-                        <li class="flex items-center gap-2">✓ Server-Driven Components</li>
-                        <li class="flex items-center gap-2">✓ Zéro JS boilerplate</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="plugins" class="py-24 bg-neutral text-neutral-content">
-        <div class="container mx-auto px-6">
-            <div class="flex flex-col md:flex-row gap-12 items-center">
-                <div class="flex-1">
-                    <h2 class="text-4xl font-bold mb-6">Isolation & Autonomie</h2>
-                    <p class="text-lg mb-8 opacity-80">
-                        Chaque plugin (comme votre <span class="text-info font-bold italic">LibraryHub</span>) possède sa propre autonomie : modèles SQLAlchemy, services métiers, et agents IA isolés.
-                    </p>
-                    <div class="mockup-code text-sm">
-                        <pre data-prefix="1"><code># Structure Plugin</code></pre> 
-                        <pre data-prefix="2"><code>plugins/LibraryHub/</code></pre> 
-                        <pre data-prefix="3"><code> ├── api/      # Routes dynamiques</code></pre> 
-                        <pre data-prefix="4"><code> ├── models/   # DB isolée</code></pre> 
-                        <pre data-prefix="5"><code> └── run.py    # Entry point</code></pre>
-                    </div>
-                </div>
-                <div class="flex-1 w-full">
-                    <div class="bg-base-100 text-base-content p-6 rounded-2xl shadow-2xl border border-white/10">
-                        <h4 class="font-bold mb-4 flex items-center justify-between">
-                            Plugin Monitor (HTMX Live)
-                            <div class="badge badge-success badge-xs"></div>
-                        </h4>
-                        <div id="plugin-status" hx-get="/api/plugins" hx-trigger="load" class="space-y-3">
-                            <div class="skeleton h-12 w-full"></div>
-                            <div class="skeleton h-12 w-full"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="microui" class="py-24 container mx-auto px-6">
-        <div class="text-center mb-12">
-            <h2 class="text-4xl font-bold">Composants MicroUI nativement supportés</h2>
-        </div>
-        <div class="flex flex-wrap justify-center gap-4">
-            <div class="badge badge-lg p-4 badge-outline">Button</div>
-            <div class="badge badge-lg p-4 badge-outline">Avatar</div>
-            <div class="badge badge-lg p-4 badge-outline">Card</div>
-            <div class="badge badge-lg p-4 badge-outline">Drawer</div>
-            <div class="badge badge-lg p-4 badge-outline">Modal</div>
-            <div class="badge badge-lg p-4 badge-outline">Toast</div>
-            <div class="badge badge-lg p-4 badge-outline">Stats</div>
-            <div class="badge badge-lg p-4 badge-outline">Timeline</div>
-            <div class="text-primary font-bold">+ 20 autres</div>
-        </div>
-    </section>
-
-    <section class="py-24 bg-base-200">
-        <div class="container mx-auto px-6 max-w-3xl">
-            <h3 class="text-3xl font-bold text-center mb-12 italic">Deep Dive Technique</h3>
-            <div id="faq" class="space-y-4">
-                <button class="btn btn-block btn-ghost border-dashed border-base-300" 
-                        hx-get="/api/faq" 
-                        hx-target="#faq">
-                    Charger les spécifications techniques
-                </button>
-            </div>
-        </div>
-    </section>
-
-    <footer class="footer p-10 bg-neutral text-neutral-content">
-        <aside>
-            <span class="text-3xl font-black italic">XCORE</span>
-            <p>FastAPI Plugin Framework<br/>Construit pour les ingénieurs exigeants.</p>
-        </aside> 
-        <nav>
-            <h6 class="footer-title">Architecture</h6> 
-            <a class="link link-hover">Manager.plManager</a>
-            <a class="link link-hover">XCore.Events</a>
-            <a class="link link-hover">Auto-Migrations</a>
-        </nav> 
-        <nav>
-            <h6 class="footer-title">Frontend</h6> 
-            <a class="link link-hover">MicroUI Components</a>
-            <a class="link link-hover">HTMX Engine</a>
-            <a class="link link-hover">DaisyUI Themes</a>
-        </nav>
-    </footer>
-
 </body>
 </html>

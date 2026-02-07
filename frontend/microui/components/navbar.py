@@ -20,13 +20,15 @@ class Navbar(Component):
 
     @staticmethod
     def __render(
-        brand: str, items: List[dict], end_items: Optional[str] = None, classes: str = ""
+        brand: str,
+        items: List[dict],
+        end_items: Optional[str] = None,
+        classes: str = "",
     ) -> Markup:
-        
+
         # verifier si items est une fonction
         if callable(items):
             items = items()
-
 
         nav_items = "".join(
             [
@@ -66,7 +68,10 @@ class Navbar(Component):
 
     @staticmethod
     def rendering(
-        brand: str, items: List[dict], end_items: Optional[str] = None, classes: str = ""
+        brand: str,
+        items: List[dict],
+        end_items: Optional[str] = None,
+        classes: str = "",
     ):
         """Static method to render Navbar without instantiating the class."""
         return Navbar.__render(brand, items, end_items, classes)

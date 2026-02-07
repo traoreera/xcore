@@ -25,7 +25,11 @@ class Dropdown(Component):
         button_text: str,
         items: List[Dict],
         position: Literal[
-            "dropdown-end", "dropdown-top", "dropdown-bottom", "dropdown-left", "dropdown-right"
+            "dropdown-end",
+            "dropdown-top",
+            "dropdown-bottom",
+            "dropdown-left",
+            "dropdown-right",
         ] = "dropdown-end",
         classes: str = "",
     ) -> Markup:
@@ -70,7 +74,11 @@ class Dropdown(Component):
         button_text: str,
         items: List[Dict],
         position: Literal[
-            "dropdown-end", "dropdown-top", "dropdown-bottom", "dropdown-left", "dropdown-right"
+            "dropdown-end",
+            "dropdown-top",
+            "dropdown-bottom",
+            "dropdown-left",
+            "dropdown-right",
         ] = "dropdown-end",
         classes: str = "",
     ) -> Markup:

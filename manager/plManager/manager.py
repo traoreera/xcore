@@ -44,7 +44,7 @@ class Manager:
 
     def run_plugins(self, reload_app=False):
         """Exécute ou recharge dynamiquement tous les plugins."""
-        #plugins = self.loader.load_plugins()
+        # plugins = self.loader.load_plugins()
         if reload_app:
             logger.info("Rechargement complet demandé")
             self.reloader.reload(base_routes=self.base_routes)
@@ -52,7 +52,7 @@ class Manager:
             self.reloader.exec_plugins(plugins=plugins)
 
         else:
-            plugin =self.loader.load_plugins()
+            plugin = self.loader.load_plugins()
             self.reloader.exec_plugins(plugins=plugin)
 
     # ------------------------------------------------------

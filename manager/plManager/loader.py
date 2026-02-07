@@ -78,18 +78,18 @@ class Loader(Repository):
     def load_plugins(self) -> List[Any]:
         """Importe et initialise les plugins valides"""
         loaded_plugins = []
-        
+
         # 🧹 Purge des plugins qui n'existent plus dans le dossier
         discovered_names = {p["name"] for p in self._discover_plugins()}
         active_names = {p["name"] for p in self.active_plugins}
-        
+
         plugins_to_remove = active_names - discovered_names
         for plugin_name in plugins_to_remove:
             self.logger.info(f"🗑️ Suppression du plugin absent: {plugin_name}")
             self._purge_module_cache(plugin_name)
             # Retirer de la base de données
             self.disable(plugin_name)
-        
+
         if plugins_to_remove:
             self.active_plugins = self.get_all_active()  # Rafraîchir la liste
 
@@ -102,9 +102,13 @@ class Loader(Repository):
                 self.add(
                     plugin=Plugin(
                         name=plugin["name"],
-                        version=getattr(mod, "PLUGIN_INFO", {}).get( "version", "unknown"),
+                        version=getattr(mod, "PLUGIN_INFO", {}).get(
+                            "version", "unknown"
+                        ),
                         author=getattr(mod, "PLUGIN_INFO", {}).get("author", "unknown"),
-                        Api_prefix=getattr(mod, "PLUGIN_INFO", {}).get("Api_prefix", f"/app/{plugin['name']}"),
+                        Api_prefix=getattr(mod, "PLUGIN_INFO", {}).get(
+                            "Api_prefix", f"/app/{plugin['name']}"
+                        ),
                         tag_for_identified=f"{getattr(mod, 'PLUGIN_INFO', {}).get('tag_for_identified', [])}",
                     )
                 )
@@ -148,7 +152,7 @@ class Loader(Repository):
         else:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, instance.concured)
-        self.logger.info(f" Plugin {mod.__name__} exécuté")
+        self.logger.info(f"✅ Plugin {mod.__name__} exécuté")
 
     async def run_async_plugins(self, app: Any = None):
         """Exécute tous les plugins actifs en parallèle"""
@@ -175,14 +179,18 @@ class Loader(Repository):
     def bind_to_fastapi(self) -> None:
         """Relie dynamiquement le chargeur au cycle de vie FastAPI."""
         if not self.app:
-            self.logger.warning("⚠️ Aucun app FastAPI détecté, impossible d'attacher le hook.")
+            self.logger.warning(
+                "⚠️ Aucun app FastAPI détecté, impossible d'attacher le hook."
+            )
             return
 
         @self.app.on_event("startup")
         async def _on_startup_reload_plugins() -> None:
             """Hook exécuté automatiquement au démarrage de FastAPI."""
             try:
-                self.logger.info("🔄 Rechargement automatique des plugins au démarrage...")
+                self.logger.info(
+                    "🔄 Rechargement automatique des plugins au démarrage..."
+                )
                 loaded_plugins = self.load_plugins()
 
                 # Attache tous les routers FastAPI
@@ -220,6 +228,38 @@ class Loader(Repository):
     # ⚡ INTÉGRATION FASTAPI
     # ------------------------------------------------------
 
+    @staticmethod
+    def _get_route_signature(route):
+        """
+        Génère une signature unique pour une route en gérant tous les types.
+
+        Returns:
+            tuple: (path, methods_tuple) où methods_tuple peut être:
+                - tuple des méthodes HTTP pour les APIRoute
+                - ('MOUNT',) pour les Mount
+                - ('WEBSOCKET',) pour les WebSocketRoute
+        """
+        if not hasattr(route, "path"):
+            return None
+
+        path = route.path
+
+        # Gestion des différents types de routes
+        if hasattr(route, "methods"):
+            # APIRoute classique
+            methods = tuple(sorted(route.methods))
+        elif route.__class__.__name__ == "Mount":
+            # Mount pour fichiers statiques
+            methods = ("MOUNT",)
+        elif route.__class__.__name__ == "WebSocketRoute":
+            # WebSocket
+            methods = ("WEBSOCKET",)
+        else:
+            # Type inconnu, signature générique
+            methods = (route.__class__.__name__,)
+
+        return (path, methods)
+
     def _attach_plugins_to_app(self, loaded_plugins: list[Any]) -> None:
         """
         Attache dynamiquement les routers des plugins à l'application FastAPI.
@@ -231,19 +271,15 @@ class Loader(Repository):
         # --- 1️⃣ Sauvegarde des routes natives (FastAPI core) ---
         base_routes = list(self.app.routes)
         base_paths = {
-            (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
+            self._get_route_signature(r)
             for r in base_routes
-            if hasattr(r, "path")
+            if self._get_route_signature(r) is not None
         }
 
         # --- 2️⃣ Purge des anciennes routes plugin ---
         before = len(self.app.routes)
-        base_paths = {
-            (r.path, tuple(sorted(r.methods)) if hasattr(r, "methods") else ("MOUNT",))
-            for r in base_routes
-            if hasattr(r, "path")
-        }
-        self.app.router.routes[:] = self.app.routes
+        # Conserver uniquement les routes de base
+        self.app.router.routes[:] = base_routes
         after = len(self.app.routes)
         if before != after:
             self.logger.debug(
@@ -252,19 +288,29 @@ class Loader(Repository):
 
         # --- 3️⃣ Inclusion sécurisée des nouveaux routers ---
         def _router_already_included(app, router):
-            existing_paths = {(r.path, tuple(sorted(r.methods))) for r in app.routes}
-            router_paths = {(r.path, tuple(sorted(r.methods))) for r in router.routes}
-            return router_paths.issubset(existing_paths)
+            """Vérifie si un router est déjà inclus en comparant les signatures de routes."""
+            existing_sigs = {
+                self._get_route_signature(r)
+                for r in app.routes
+                if self._get_route_signature(r) is not None
+            }
+            router_sigs = {
+                self._get_route_signature(r)
+                for r in router.routes
+                if self._get_route_signature(r) is not None
+            }
+            return router_sigs.issubset(existing_sigs)
 
         for mod in loaded_plugins:
             try:
-                if hasattr(mod, "router") and not _router_already_included(
-                    self.app, mod.router
-                ):
-                    self.app.include_router(mod.router)
-                    self.logger.info(f"🔗 Plugin routes attachées : {mod.__name__}")
+                if hasattr(mod, "router"):
+                    if not _router_already_included(self.app, mod.router):
+                        self.app.include_router(mod.router)
+                        self.logger.info(f"🔗 Plugin routes attachées : {mod.__name__}")
+                    else:
+                        self.logger.debug(f"ℹ️ Router déjà inclus : {mod.__name__}")
             except Exception as e:
-                self.logger.error(f"⚠️ Erreur include_router pour {mod.__name__}: {e}")
+                self.logger.error(f"❌ Erreur include_router pour {mod.__name__}: {e}")
 
         # --- 4️⃣ Régénération du schéma OpenAPI pour Swagger ---
         self.app.openapi_schema = None

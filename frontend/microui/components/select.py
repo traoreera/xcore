@@ -47,10 +47,14 @@ class Select(Component):
             label = option.get("label", "")
             value = option.get("value", "")
             selected_attr = "selected" if value == selected_value else ""
-            options_html.append(f'<option value="{value}" {selected_attr}>{label}</option>')
+            options_html.append(
+                f'<option value="{value}" {selected_attr}>{label}</option>'
+            )
 
         label_html = (
-            f'<label class="label"><span class="label-text">{label}</span></label>' if label else ""
+            f'<label class="label"><span class="label-text">{label}</span></label>'
+            if label
+            else ""
         )
 
         return Markup(

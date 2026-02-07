@@ -1,5 +1,4 @@
-
-#TODO: use redis cache for this options for  CacheManager
+# TODO: use redis cache for this options for  CacheManager
 
 import time
 from abc import ABC, abstractmethod

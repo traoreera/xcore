@@ -11,14 +11,12 @@ class Breadcrumb(Component):
     """Composant Breadcrumb pour navigation"""
 
     def render(self):
-        
-        
+
         return self.__render(
-            items=self.props.get("items", []), 
+            items=self.props.get("items", []),
             classes=self.props.get("class", ""),
-            request= self.props.get("request", "")
-            )
-    
+            request=self.props.get("request", ""),
+        )
 
     @staticmethod
     def __render(items: List[Dict], classes: str = "", request=None) -> Markup:
@@ -42,15 +40,15 @@ class Breadcrumb(Component):
             </div>
             """
             )
-        
+
         if request:
-            #extract url items from request
+            # extract url items from request
             url_items = request.url.path.split("/")
             breadcrumb_items = []
             for i, item in enumerate(url_items):
                 is_last = i == len(url_items) - 1
                 if is_last:
-                    breadcrumb_items.append(f'<li>{item}</li>')
+                    breadcrumb_items.append(f"<li>{item}</li>")
                 else:
                     breadcrumb_items.append(
                         f'<li><a href="/{"/".join(url_items[:i+1])}">{item}</a></li>'

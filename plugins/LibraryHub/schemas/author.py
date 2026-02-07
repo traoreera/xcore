@@ -21,5 +21,3 @@ class AuthorUpdate(BaseModel):
 
 class AuthorRead(AuthorBase):
     pass
-
-

@@ -26,7 +26,5 @@ class PenaltyRead(PenaltyBase):
     created_at: datetime
 
 
-
-
 class PenaltyReadWithMember(PenaltyRead):
     member: dict

@@ -58,7 +58,9 @@ class Input(Component):
             attrs.append(f'hx-target="{hx_target}"')
 
         label_html = (
-            f'<label class="label"><span class="label-text">{label}</span></label>' if label else ""
+            f'<label class="label"><span class="label-text">{label}</span></label>'
+            if label
+            else ""
         )
         error_html = (
             f'<label class="label"><span class="label-text-alt text-error">{error}</span></label>'

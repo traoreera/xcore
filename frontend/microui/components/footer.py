@@ -46,7 +46,9 @@ class Footer(Component):
 
         social_links_html = ""
         for name, link in social_links.items():
-            social_links_html += f'<a href="{link}" class="link link-hover">{name.capitalize()}</a>'
+            social_links_html += (
+                f'<a href="{link}" class="link link-hover">{name.capitalize()}</a>'
+            )
 
         return Markup(
             f"""

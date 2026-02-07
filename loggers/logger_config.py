@@ -72,16 +72,30 @@ def setup_logger(
 
     # Handler fichier (toujours actif si log_file est fourni)
     if log_file:
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(level)
-        file_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
-
+        _extracted_from_setup_logger_25(log_file, level, logger)
     return logger
+
+
+def _extracted_from_setup_logger_25(log_file, level, logger):
+    """
+    Configure un handler de fichier pour un logger.
+
+    - log_file est le chemin du fichier de log
+    - level est le niveau de log minimum pour écrire dans le fichier
+    - logger est le logger pour lequel on configure le handler
+
+    Le handler utilise le format de date "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    Le répertoire du fichier de log est créé s'il n'existe pas
+    """
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(level)
+    file_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
 
 
 def get_logger(

@@ -11,7 +11,9 @@ def get_engine():
     return TemplateEngine.instance()
 
 
-async def render(template_name: str, ctx: Optional[Dict] = None, request: Optional[Request] = None):
+async def render(
+    template_name: str, ctx: Optional[Dict] = None, request: Optional[Request] = None
+):
     return await get_engine().render(template_name, ctx, request)
 
 

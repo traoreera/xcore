@@ -41,5 +41,5 @@ class Badge(Component):
         if outline:
             css_classes.append("badge-outline")
         if isinstance(text, (dict)):
-            text = text.get("in_stock","badge")
+            text = text.get("in_stock", "badge")
         return Markup(f'<div class="{" ".join(css_classes)} {classes}">{text}</div>')

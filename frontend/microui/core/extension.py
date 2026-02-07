@@ -7,4 +7,6 @@ class Component:
         self.children = None
 
     def render(self):
-        raise NotImplementedError("Each component must implement its own render method.")
+        raise NotImplementedError(
+            "Each component must implement its own render method."
+        )

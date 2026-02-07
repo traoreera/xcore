@@ -1,6 +1,6 @@
 import time
-import secrets
-from fastapi import Request, Header, HTTPException, status, Depends
+
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from xcore import app
@@ -17,7 +17,6 @@ async def add_process_time_header(request: Request, call_next):
     print(f"Request to {request.url.path} processed in {process_time:.4f} seconds")
 
     return response
-
 
 
 origins = [

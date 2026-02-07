@@ -2,7 +2,6 @@ from frontend.engine.component import ComponentRegistry
 
 
 def register(cls):
-
     """
     A class decorator that registers the component in the ComponentRegistry.
     It registers an *instance* of the class.

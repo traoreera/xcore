@@ -26,5 +26,3 @@ class LoanRead(BaseModel):
     due_date: datetime
     returned_at: Optional[datetime] = None
     is_late: bool
-
-

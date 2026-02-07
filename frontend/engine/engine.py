@@ -133,8 +133,18 @@ class TemplateEngine:
             protected_blocks.append(match.group(0))
             return f"___PROTECTED_{len(protected_blocks)-1}___"
 
-        html = re.sub(r"<(pre|textarea|script)[\s\S]*?</\1>", save_block, html, flags=re.IGNORECASE)
-        html = re.sub(r"<(pre|textarea|script)[\s\S]*?</\1>", save_block, html, flags=re.IGNORECASE)
+        html = re.sub(
+            r"<(pre|textarea|script)[\s\S]*?</\1>",
+            save_block,
+            html,
+            flags=re.IGNORECASE,
+        )
+        html = re.sub(
+            r"<(pre|textarea|script)[\s\S]*?</\1>",
+            save_block,
+            html,
+            flags=re.IGNORECASE,
+        )
         html = re.sub(r"<!--(?!\[if).*?-->", "", html, flags=re.DOTALL)
 
         # Réduire les espaces multiples (mais garder au moins un espace)

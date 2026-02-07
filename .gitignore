@@ -37,3 +37,6 @@ htmlcov/
 # Other temporary files
 tmp/
 backgroundtask
+node_modules/
+
+.claude

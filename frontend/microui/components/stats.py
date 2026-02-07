@@ -18,7 +18,9 @@ class Stats(Component):
         )
 
     @staticmethod
-    def __render(stats: List[Dict], vertical: bool = False, classes: str = "") -> Markup:
+    def __render(
+        stats: List[Dict], vertical: bool = False, classes: str = ""
+    ) -> Markup:
         orientation = "stats-vertical" if vertical else "stats-horizontal"
 
         stats_html = []

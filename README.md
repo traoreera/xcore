@@ -1,7 +1,3 @@
-Parfait, je te fais un **README complet et professionnel** pour ton projet xcore, structuré pour être prêt à publier ou partager.
-
----
-
 # xcore – Multi-Plugins Framework pour FastAPI
 
 [![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/)

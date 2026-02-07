@@ -30,7 +30,10 @@ try:
 except ImportError as e:
     print(f"❌ Import error: {e}")
     print("📦 Please install required dependencies: pip install alembic sqlalchemy")
-    sys.exit(1)
+    from loggers.logger_config import get_logger
+
+    logger = get_logger("Migration")
+    # sys.exit(1)
 
 
 class MigrationManager:

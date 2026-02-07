@@ -20,7 +20,9 @@ class Loading(Component):
 
     @staticmethod
     def __render(
-        type: Literal["spinner", "dots", "ring", "ball", "bars", "infinity"] = "spinner",
+        type: Literal[
+            "spinner", "dots", "ring", "ball", "bars", "infinity"
+        ] = "spinner",
         size: Literal["xs", "sm", "md", "lg"] = "md",
         color: Optional[str] = None,
         classes: str = "",

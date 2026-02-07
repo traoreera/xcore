@@ -58,9 +58,8 @@ class CacheManager:
         ns = namespace or self.default_namespace
         pattern = f"{ns}:*"
         keys = self.__cache.keys(pattern)
-        if not keys:
-            return 0
-        return self.__cache.delete(*keys)
+
+        return self.__cache.delete(*keys) if keys else 0
 
 
 class Cached:
@@ -68,11 +67,27 @@ class Cached:
         self.cache_manager = cache_manager
 
     def _build_key(self, func, args, kwargs) -> str:
+        """Build a cache key based on the function name and its arguments."""
         return f"{func.__module__}:{func.__name__}:{args}:{kwargs}"
 
     def cached(self, func):
+        """
+        It wraps a function to cache its result based on its arguments.
+        he can verify if the result is already cached; if so, it returns the cached value. Otherwise, it calls the function, caches the result, and returns it.
+        """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
+            """
+            Description:
+                This function checks if the result of the decorated function is already cached. If so, it returns the cached value. Otherwise, it calls the function, caches the result, and returns it.
+            Args:
+                *args: Positional arguments passed to the function.
+                **kwargs: Keyword arguments passed to the function.
+            Returns:
+                _type_: The result of the decorated function
+                she came back either from the cache or by executing the function.
+            """
             key = self._build_key(func, args, kwargs)
             cached_value = self.cache_manager.get(key)
             if cached_value is not None:
@@ -84,8 +99,22 @@ class Cached:
         return wrapper
 
     def remove(self, func):
+        """
+        It wraps a function to remove its cached result based on its arguments.
+        """
+
         @wraps(func)
         def wrapper(*args, **kwargs):
+            """
+            Description:
+                This function removes the cached result of the decorated function based on its arguments.
+            Args:
+                *args: Positional arguments passed to the function.
+                **kwargs: Keyword arguments passed to the function.
+            Returns:
+                _type_: The result of the decorated function after removing its cached value.
+
+            """
             key = self._build_key(func, args, kwargs)
             self.cache_manager.remove(key)
 

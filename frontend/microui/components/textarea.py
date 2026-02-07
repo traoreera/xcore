@@ -41,7 +41,9 @@ class Textarea(Component):
         disabled_attr = "disabled" if disabled else ""
 
         label_html = (
-            f'<label class="label"><span class="label-text">{label}</span></label>' if label else ""
+            f'<label class="label"><span class="label-text">{label}</span></label>'
+            if label
+            else ""
         )
 
         return Markup(

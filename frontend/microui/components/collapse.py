@@ -22,7 +22,11 @@ class Collapse(Component):
     def __render(
         items: List[Dict], arrow: bool = True, plus: bool = False, classes: str = ""
     ) -> Markup:
-        icon_class = "collapse-arrow" if arrow else ("collapse-plus" if plus else "collapse-close")
+        icon_class = (
+            "collapse-arrow"
+            if arrow
+            else ("collapse-plus" if plus else "collapse-close")
+        )
 
         collapses = []
         for i, item in enumerate(items):

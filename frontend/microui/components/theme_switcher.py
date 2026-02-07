@@ -1,4 +1,3 @@
-
 from markupsafe import Markup
 
 from frontend.microui.core.extension import Component
@@ -78,7 +77,9 @@ class ThemeSwitcher(Component):
 
         # Icon selon le thème actuel
         current_icon = (
-            "🌙" if current_theme == "dark" else "☀️" if current_theme == "light" else "🎨"
+            "🌙"
+            if current_theme == "dark"
+            else "☀️" if current_theme == "light" else "🎨"
         )
 
         return Markup(

@@ -11,6 +11,4 @@ class AuthorController:
     @router.get("/authors")
     @staticmethod
     def get_authors(db: Session = Depends(get_db)):
-        # print (authors.get_authors(db))
-
-        return {}
+        return authors.get_authors(db)

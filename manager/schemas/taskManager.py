@@ -9,8 +9,6 @@ class TaskResource(BaseModel):
     retrying: int = Field(..., description="Nombre de tentatives de redémarrage")
 
 
-
-
 class TaskResourcesResponse(RootModel[dict[str, TaskResource]]):
 
     def __iter__(self):
@@ -33,6 +31,5 @@ class TaskListResponse(BaseModel):
 
 
 class RestartService(TaskStatusResponse):
-
 
     success: bool = Field(..., description="Etat de la command")

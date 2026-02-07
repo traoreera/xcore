@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request, status, Depends
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -19,13 +19,12 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         self.access_rules = access_rules or {}
         self.token = Token()
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next, db=Depends(get_db)):
         path = request.url.path
         method = request.method.upper()
 
         # Trouve la règle correspondante à la route + méthode
-        rule = self._match_rule(path, method)
-        if not rule:
+        if not self._match_rule(path, method):
             return await call_next(request)
 
         # Extraction du token JWT
@@ -36,27 +35,23 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Missing or invalid Authorization header"},
             )
 
-        try:
-            payload = self.token.verify(
-                token,
-                HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Unauthorized process",
-                ),
-            )
-        except Exception:
-            return JSONResponse(
+        # Vérification du token JWT
+        rule = self._match_rule(path, method)
+        payload = self.token.verify(
+            token,
+            HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Invalid or expired token"},
-            )
+                detail="Unauthorized process",
+            ),
+        )
 
-        db = next(get_db())
+        # Vérification de l'activité de l'utilisateur
         user = db.query(User).filter(User.email == payload.get("sub")).first()
 
         if not user or not user.is_active:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "Inactive or unknown user"},
+                detail="User is inactive or does not exist",
             )
 
         # Récupération des rôles et permissions
@@ -68,20 +63,17 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
 
         # Vérification des rôles
         if required_roles and any(r not in user_roles for r in required_roles):
-            return JSONResponse(
+            
+            raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={
-                    "detail": f"Access denied. Missing required role(s): {required_roles}"
-                },
+                detail=f"Access denied. Missing required role(s): {required_roles}",
             )
 
         # Vérification des permissions
-        if required_perms and  any(p not  in user_permissions for p in required_perms):
-            return JSONResponse(
+        if required_perms and any(p not in user_permissions for p in required_perms):
+            raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={
-                    "detail": f"Access denied. Missing required permission(s): {required_perms}"
-                },
+                detail=f"Access denied. Missing required permission(s): {required_perms}",
             )
 
         # Si tout est OK → continuer

@@ -42,44 +42,20 @@ class Xcorecfg(BaseCfg):
             "requirements": ["config.json", "config.py"],
             "midleware": {
                 "ACCESS_RULES": {
-                "/admin/roles": {
-                    "roles": [
-                        "admin",
-                        "superadmin"
-                    ]
-                },
-                "/admin/permissions": {
-                    "permissions": [
-                        "manage_permissions"
-                    ],
-                    "roles": [
-                        "admin"
-                    ],
-                    "method": [
-                        "DELETE"
-                    ]
-                },
-                "/users": {
-                    "roles": [
-                        "superadmin"
-                    ],
-                    "method": "DELETE"
-                },
-                "/settings": {
-                    "roles": [
-                        "admin"
-                    ],
-                    "permissions": [
-                        "manage_settings"
-                    ]
-                },
-                "/reports*": {
-                    "permissions": [
-                        "view_reports"
-                    ]
+                    "/admin/roles": {"roles": ["admin", "superadmin"]},
+                    "/admin/permissions": {
+                        "permissions": ["manage_permissions"],
+                        "roles": ["admin"],
+                        "method": ["DELETE"],
+                    },
+                    "/users": {"roles": ["superadmin"], "method": "DELETE"},
+                    "/settings": {
+                        "roles": ["admin"],
+                        "permissions": ["manage_settings"],
+                    },
+                    "/reports*": {"permissions": ["view_reports"]},
                 }
-            }
-            }
+            },
         }
 
         if isinstance(self.conf, Configure) and self.conf is not None:
@@ -87,9 +63,8 @@ class Xcorecfg(BaseCfg):
         else:
             self.custom_config = self.default_migration
 
-    
     def cfgAcessMidlware(self):
-        return self.custom_config['midleware']
+        return self.custom_config["midleware"]
 
     def __getattribute__(self, __name):
         return super().__getattribute__(__name)

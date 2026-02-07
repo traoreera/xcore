@@ -17,5 +17,3 @@ class AdminLogRead(AdminLogBase):
     id: int
     admin_id: int
     timestamp: datetime
-
-

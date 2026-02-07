@@ -108,7 +108,7 @@
         },
         "data": {
             "url": "sqlite:///test.db",
-            "echo": false
+            "echo": true
         },
         "extensions": [
             "auth",
@@ -169,5 +169,12 @@
         "port": 6379,
         "db": 0,
         "TTL": 60
+    },
+    "frontend": {
+        "mdf": {
+            "header": "http://localhost:8000/mdf/header",
+            "product": "http://localhost:8000/mdf/",
+            "footer": "http://localhost:8000/mdf/footer"
+        }
     }
 }

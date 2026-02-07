@@ -135,7 +135,8 @@ class ComponentExtensions(Extension):
 
             # Block components - innermost first
             inner_pattern = re.compile(
-                r"<component\.(\w+)([^>]*)>((?:(?!<component\.).)*?)</component\.\1>", re.DOTALL
+                r"<component\.(\w+)([^>]*)>((?:(?!<component\.).)*?)</component\.\1>",
+                re.DOTALL,
             )
 
             previous = None

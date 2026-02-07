@@ -77,4 +77,6 @@ class Avatar(Component):
         classes: str = "",
     ) -> Markup:
         """Static method to render Avatar without instantiating the class."""
-        return Avatar.__render(src, alt, size, shape, online, offline, placeholder, classes)
+        return Avatar.__render(
+            src, alt, size, shape, online, offline, placeholder, classes
+        )

@@ -88,7 +88,7 @@ class ModelDiscovery:
 
     def discover_all_models(self) -> Dict[str, List[Dict[str, Any]]]:
         """Découvre tous les modèles dans l'application"""
-        all_models = {"core_models": [], "plugin_models": {}}
+        all_models = {"core_models": [], "plugin_models": []}
 
         # Découvrir les modèles core
 
@@ -97,7 +97,7 @@ class ModelDiscovery:
                 core_files = self.find_python_files(core_path)
                 for file_path in core_files:
                     models = self.analyze_python_file(file_path)
-                    all_models["plugin_models"].update(models)
+                    all_models["plugin_models"].extend(models)
                     logger.info(f"📋 Trouvé {len(models)} modèles dans {file_path}")
 
         for core_path in cfg.custom_config["automigration"]["models"]:
@@ -192,11 +192,13 @@ class ModelDiscovery:
             imports.append(f"from {module_path} import {class_name}")
 
         # Imports des modèles plugins
-        for plugin_name, plugin_models in models_data["plugin_models"].items():
-            for model in plugin_models:
-                module_path = model["module_path"]
-                class_name = model["class_name"]
-                imports.append(f"from {module_path} import {class_name}")
+        for model in models_data["plugin_models"]:
+            for _, value in model.items():
+                if isinstance(value, list):
+                    for plugin_model in value:
+                        module_path = plugin_model["module_path"]
+                        class_name = plugin_model["class_name"]
+                        imports.append(f"from {module_path} import {class_name}")
 
         return list(set(imports))
 
@@ -214,16 +216,12 @@ class ModelDiscovery:
             summary.append(f"   - {model['class_name']} -> {table_name}")
 
         # Modèles plugins
-        plugin_count = sum(
-            len(models) for models in models_data["plugin_models"].values()
-        )
+        plugin_count = len(models_data["plugin_models"])
         summary.append(f"\n🔌 Modèles Plugins: {plugin_count}")
 
-        for plugin_name, plugin_models in models_data["plugin_models"].items():
-            summary.append(f"   Plugin '{plugin_name}': {len(plugin_models)} modèles")
-            for model in plugin_models:
-                table_name = model["table_name"] or "N/A"
-                summary.append(f"     - {model['class_name']} -> {table_name}")
+        for model in models_data["plugin_models"]:
+            table_name = model["table_name"] or "N/A"
+            summary.append(f"   - {model['class_name']} -> {table_name}")
 
         summary.append(f"\n📊 Total: {core_count + plugin_count} modèles découverts")
 

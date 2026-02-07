@@ -29,8 +29,12 @@ class Table(Component):
         zebra: bool = False,
         compact: bool = False,
         hoverable: bool = True,
-        width: Literal['w-1/4', 'w-1/3', 'w-1/2', 'w-2/3', 'w-3/4', 'w-full', 'w-auto'] = 'w-full',
-        height: Literal['h-32', 'h-48', 'h-64', 'h-80', 'h-96', 'h-full', 'h-auto'] = 'h-auto',
+        width: Literal[
+            "w-1/4", "w-1/3", "w-1/2", "w-2/3", "w-3/4", "w-full", "w-auto"
+        ] = "w-full",
+        height: Literal[
+            "h-32", "h-48", "h-64", "h-80", "h-96", "h-full", "h-auto"
+        ] = "h-auto",
         classes: str = "",
     ) -> Markup:
         css_classes = ["table"]

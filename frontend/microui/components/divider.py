@@ -37,5 +37,7 @@ class Divider(Component):
         )
 
     @staticmethod
-    def rendering(text, vertical: bool = False, color: Optional[str] = None, classes: str = ""):
+    def rendering(
+        text, vertical: bool = False, color: Optional[str] = None, classes: str = ""
+    ):
         return Divider.__render(text, vertical, color, classes)

@@ -1,4 +1,3 @@
-
 from markupsafe import Markup
 
 from frontend.microui.core.extension import Component
@@ -20,7 +19,11 @@ class Swap(Component):
 
     @staticmethod
     def __render(
-        on_icon: str, off_icon: str, rotate: bool = False, flip: bool = False, classes: str = ""
+        on_icon: str,
+        off_icon: str,
+        rotate: bool = False,
+        flip: bool = False,
+        classes: str = "",
     ) -> Markup:
         effect = "swap-rotate" if rotate else ("swap-flip" if flip else "")
 

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+import cache
+from cache import CacheManager
 from database.db import get_db
 
 from . import dependencies, schemas, service
@@ -76,9 +78,9 @@ def create_permission(
     db: Session = Depends(get_db),
     user=Depends(dependencies.require_admin),
 ):
-    rols = [r for r in user.roles]
-    if permission.role_id == "string" or None:
-        if len(rols) > 0:
+    rols = list(user.roles)
+    if rols := list(user.roles):
+        if permission.role_id == "string":
             permission.role_id = rols[0]
             raise HTTPException(
                 status_code=400,

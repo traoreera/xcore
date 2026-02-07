@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Literal, Optional
 
 from markupsafe import Markup
 
@@ -25,12 +25,18 @@ class Modal(Component):
         id: str,
         title: str,
         content: str,
-        width: Literal['w-1/4', 'w-1/3', 'w-1/2', 'w-2/3', 'w-3/4', 'w-full', 'w-auto'] = 'w-1/2',
-        height: Literal['h-32', 'h-48', 'h-64', 'h-80', 'h-96', 'h-full', 'h-auto'] = 'h-auto',
+        width: Literal[
+            "w-1/4", "w-1/3", "w-1/2", "w-2/3", "w-3/4", "w-full", "w-auto"
+        ] = "w-1/2",
+        height: Literal[
+            "h-32", "h-48", "h-64", "h-80", "h-96", "h-full", "h-auto"
+        ] = "h-auto",
         actions: Optional[str] = None,
-        classes: str = ""
+        classes: str = "",
     ) -> Markup:
-        actions_html = actions or f'<button class="btn" onclick="{id}.close()">Fermer</button>'
+        actions_html = (
+            actions or f'<button class="btn" onclick="{id}.close()">Fermer</button>'
+        )
 
         return Markup(
             f"""

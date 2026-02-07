@@ -30,5 +30,3 @@ class BookUpdate(BaseModel):
 class BookRead(BookBase):
     id: int
     created_at: datetime
-
-
