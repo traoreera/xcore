@@ -40,3 +40,4 @@ backgroundtask
 node_modules/
 
 .claude
+plugins/

@@ -1,8 +1,10 @@
+from calendar import c
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-import cache
-from cache import CacheManager
+#import cache
+from cache import Cached
 from database.db import get_db
 
 from . import dependencies, schemas, service

@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import declarative_base, registry, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from . import Base, xcfg
 
