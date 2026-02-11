@@ -83,7 +83,6 @@ html_theme_options = {
     "titles_only": False,
     "style_nav_header_background": "#2980B9",
     "logo_only": True,
-    "theme": "xcore",
 }
 
 # -- Intersphinx -------------------------------------------------------------

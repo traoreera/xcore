@@ -509,4 +509,4 @@ Note: This migration may take time on large databases.
 
 - [database.md](database.md) - Database module
 - [configurations.md](configurations.md) - Migration configuration
-- [alembic/README.md](../alembic/README.md) - Alembic documentation
+- Documentation Alembic: `alembic/README` (racine du projet)
