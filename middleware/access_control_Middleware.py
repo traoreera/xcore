@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException, Request, status, Depends
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -63,7 +63,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
 
         # Vérification des rôles
         if required_roles and any(r not in user_roles for r in required_roles):
-            
+
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Missing required role(s): {required_roles}",

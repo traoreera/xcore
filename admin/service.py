@@ -67,7 +67,7 @@ def init_root_admin(db: Session):
     # 1. Vérifie si le rôle superadmin existe
     role = db.query(models.Role).filter(models.Role.name == ROOT_ROLE).first()
     if not role:
-        
+
         role = models.Role(
             name=ROOT_ROLE, description="Root administrator with full privileges"
         )

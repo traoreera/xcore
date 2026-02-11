@@ -1,6 +1,7 @@
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
+import plugins
 from manager.models.plugins import PluginsModels
 from manager.schemas.plugins import Delete, Plugin, Update
 from manager.tools.trasactional import Transactions
@@ -62,28 +63,28 @@ class PluginsCrud:
             }
 
     @Transactions.transactional
-    def update(self, plugin: Update):
-        try:
-            updated_count = (
-                self.db.query(PluginsModels)
-                .filter(PluginsModels.name == plugin.name)
-                .update(plugin.dict(), synchronize_session=False)
-            )
-            if updated_count:
-                return {
-                    "type": "info",
-                    "msg": f"Success to update plugin '{plugin.name}'",
-                }
-            return {
-                "type": "warning",
-                "msg": f"No plugin found to update: '{plugin.name}'",
-            }
-        except Exception as e:
-            return {
-                "type": "warning",
-                "msg": f"Error updating plugin '{plugin.name}'",
-                "exception": str(e),
-            }
+    def update(self, plug: Delete, data: Update):
+        # Récupérer l'instance existante
+        plugin_instance = self._get(plug.name, plug.id)
+
+        if not plugin_instance:
+            return {"type": "warning", "msg": f"Plugin introuvable : {plug.name}"}
+
+        # CORRECT : On génère le dictionnaire des données envoyées
+        # Utilisez .model_dump si vous êtes sur Pydantic v2+
+        update_data = data.model_dump(exclude_unset=True)
+
+        # Mise à jour des attributs
+        for key, value in update_data.items():
+            if hasattr(plugin_instance, key):
+                setattr(plugin_instance, key, value)
+
+        self.db.flush()
+        return {
+            "type": "info",
+            "msg": f"Succès de la mise à jour du plugin '{plugin_instance.name}'",
+            "plugin": plugin_instance,
+        }
 
     def get(self, name: str):
         plugin = self.db.query(PluginsModels).filter(PluginsModels.name == name).first()
@@ -113,3 +114,13 @@ class PluginsCrud:
 
     def close_db(self):
         self.db.close()
+
+    def get_alls(self):
+        return [plugs for plugs in self.db.query(PluginsModels).all()]
+
+    def _get(self, name: str, id: str):
+        return (
+            self.db.query(PluginsModels)
+            .filter(and_(PluginsModels.name == name, PluginsModels.id == id))
+            .first()
+        )

@@ -18,15 +18,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    NamedTuple,
-    Optional,
-    Tuple,
-)
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +27,12 @@ class HookError(Exception):
     """Base exception for hook-related errors."""
 
 
-
 class HookTimeoutError(HookError):
     """Raised when a hook execution exceeds its timeout."""
 
 
-
 class HookCancelledError(HookError):
     """Raised when a hook is cancelled (e.g., by middleware)."""
-
 
 
 @dataclass

@@ -28,11 +28,10 @@ class Manager:
             app=app,
             logger=logger,
         )
-        self.loader.bind_to_fastapi()
         self.snapshot = Snapshot()
         self.interval = interval
         self.running = False
-        self.base_routes = base_routes
+        self.base_routes = list(base_routes)
         self.reloader = Reloader(app=app)
 
         if not os.path.exists(self.plugins_dir):
@@ -62,7 +61,6 @@ class Manager:
 
     def start_watching(self, service):
         last_snapshot = self.snapshot.create(self.plugins_dir)
-
         while service.running:
             try:
                 current_snapshot = self.snapshot.create(self.plugins_dir)
@@ -73,7 +71,7 @@ class Manager:
                 time.sleep(self.interval)
 
             except Exception as e:
-                logger.error(f"Erreur watcher")
+                logger.error("Erreur watcher")
                 logger.exception(e)
                 time.sleep(self.interval)
 

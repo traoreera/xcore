@@ -27,8 +27,11 @@ async def root():
         "index.html", use_cache=False, request=None, ctx={"title": "Home"}
     )
 
+
 @app.get("/core-docs")
 async def redoc():
     return await engine.render(
-        "docs/index.html", use_cache=False, request=None,
+        "docs/index.html",
+        use_cache=False,
+        request=None,
     )

@@ -5,6 +5,8 @@ from user_agents import parse
 
 from admin.routes import adminrouter
 from auth.routes import authRouter
+from manager.routes.manager_admin import manager_admin
+from manager.routes.plugins import plugin
 from manager.routes.task import task
 from otpprovider.routes import optProvider
 from xcore import app
@@ -14,6 +16,8 @@ app.include_router(authRouter)
 app.include_router(adminrouter)
 app.include_router(task)
 app.include_router(optProvider)
+app.include_router(plugin)
+app.include_router(manager_admin)
 
 
 @app.get("/device-info")

@@ -19,7 +19,7 @@ from manager.schemas.taskManager import (
     TaskStatusResponse,
 )
 
-task = APIRouter(prefix="/tasks", tags=["Tasks"])
+task = APIRouter(prefix="/system", tags=["system"])
 
 try:
     import psutil
@@ -60,8 +60,7 @@ def start_task(
     """
     Démarre une tâche en arrière-plan si elle n’est pas déjà en cours.
     """
-    service = backgroundtask.start_module(name)
-    if service:
+    if service := backgroundtask.start_module(name):
         backgroundtask_manager.add_service(name=name, target=service)
         return TaskStatusResponse(name=name, status="pending")
 

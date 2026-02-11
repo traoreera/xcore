@@ -18,12 +18,12 @@ class Delete(BaseModel):
 
 
 class Update(BaseModel):
-    name: str
-    version: str
-    author: str
-    Api_prefix: str
-    tag_for_identified: str
-    trigger: int
+    name: Optional[str] = None
+    version: Optional[str] = None
+    author: Optional[str] = None
+    Api_prefix: Optional[str] = None
+    tag_for_identified: Optional[str] = None
+    trigger: Optional[int] = None
 
 
 class TaskManager(BaseModel):
@@ -36,3 +36,7 @@ class TaskManager(BaseModel):
     version: Optional[str] = "1.0.0"
     author: Optional[str] = "Anonyme"
     metaFile: Optional[Dict] = None
+
+
+class PluginResponse(Delete, Plugin):
+    pass

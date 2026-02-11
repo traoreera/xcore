@@ -7,11 +7,13 @@ import pkgutil
 import sys
 from typing import Any, Dict, List
 
+from hooks.hooks import Event
 from manager.plManager.installer import Installer
 from manager.plManager.repository import Repository
 from manager.plManager.validator import Validator
 from manager.schemas.plugins import Plugin
 from manager.tools.error import Error
+from xcore.appcfg import xhooks
 
 
 class Loader(Repository):
@@ -24,6 +26,9 @@ class Loader(Repository):
         logger: logging.Logger | None = None,
         app: Any = None,
     ) -> None:
+        """
+        Initialize the plugin loader.
+        """
         super().__init__(logger=logger or logger)
         self.plugin_dir = pathlib.Path(directory)
         self.entry_point = entry_point
@@ -32,9 +37,9 @@ class Loader(Repository):
         self.app = app
 
     # ------------------------------------------------------
-    # 🔄 PURGE CACHE
+    # PURGE CACHE
     # ------------------------------------------------------
-
+    @Error.exception_handler
     def _purge_module_cache(self, base_name: str, dry_run: bool = False) -> None:
         relative_name = f"{self.plugin_dir}.{base_name}"
         to_remove = [
@@ -54,32 +59,32 @@ class Loader(Repository):
             self.logger.debug(f"🧹 {len(to_remove)} modules purgés pour {base_name}")
 
     # ------------------------------------------------------
-    # 🔍 DISCOVERY
+    # DISCOVERY
     # ------------------------------------------------------
     def _discover_plugins(self) -> List[Dict[str, str]]:
         if not self.plugin_dir.exists():
             self.logger.warning(f"⚠️ Dossier introuvable: {self.plugin_dir}")
             return []
-
         discovered = []
-        for _, name, _ in pkgutil.iter_modules([str(self.plugin_dir)]):
-            discovered.append(
-                {
-                    "name": name,
-                    "module": f"{self.plugin_dir.name}.{name}.{self.entry_point}",
-                    "path": str(self.plugin_dir / name),
-                }
-            )
+        discovered.extend(
+            {
+                "name": name,
+                "module": f"{self.plugin_dir.name}.{name}.{self.entry_point}",
+                "path": str(self.plugin_dir / name),
+            }
+            for _, name, _ in pkgutil.iter_modules([str(self.plugin_dir)])
+        )
         return discovered
 
     # ------------------------------------------------------
-    # 🔌 CHARGEMENT
+    # CHARGEMENT
     # ------------------------------------------------------
+    @Error.exception_handler
     def load_plugins(self) -> List[Any]:
         """Importe et initialise les plugins valides"""
         loaded_plugins = []
 
-        # 🧹 Purge des plugins qui n'existent plus dans le dossier
+        # Purge des plugins qui n'existent plus dans le dossier
         discovered_names = {p["name"] for p in self._discover_plugins()}
         active_names = {p["name"] for p in self.active_plugins}
 
@@ -97,8 +102,11 @@ class Loader(Repository):
             self._purge_module_cache(plugin["name"])
             mod = importlib.import_module(plugin["module"])
 
+            if not Validator()(mod):
+                continue
+
             # Validation / installation plugin
-            if not any(p["name"] == plugin["name"] for p in self.active_plugins):
+            if all(p["name"] != plugin["name"] for p in self.active_plugins):
                 self.add(
                     plugin=Plugin(
                         name=plugin["name"],
@@ -112,29 +120,31 @@ class Loader(Repository):
                         tag_for_identified=f"{getattr(mod, 'PLUGIN_INFO', {}).get('tag_for_identified', [])}",
                     )
                 )
-                loaded_plugins.append(mod)
-                continue
-
-            if not Validator()(mod):
-                continue
 
             with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "r") as f:
                 plugin_data = f.read()
                 data = json.loads(plugin_data)
             if rp := data.get("requirements", None):
-                if not rp["isIstalled"]:
+                if not rp.get("isIstalled", False):
                     response = Installer()(
                         path=pathlib.Path(plugin["path"])
                     )  # TODO: threading this part
-                    rp["isIstalled"] = True
-                    with open(f"{pathlib.Path(plugin['path'])}/plugin.json", "w") as f:
-                        f.write(json.dumps(data))
+                    if response.get("installed"):
+                        rp["isIstalled"] = True
+                        self.logger.info(
+                            f"✅ Requirements installés pour {plugin['name']}"
+                        )
+                        with open(
+                            f"{pathlib.Path(plugin['path'])}/plugin.json", "w"
+                        ) as f:
+                            f.write(json.dumps(data))
+                    else:
+                        self.logger.error(
+                            f"❌ Installation requirements échouée pour {plugin['name']} "
+                            f"(reason={response.get('reason', 'unknown')})"
+                        )
 
             loaded_plugins.append(mod)
-
-        # 🔁 Intégration FastAPI
-        if self.app:
-            self._attach_plugins_to_app(loaded_plugins)
 
         return loaded_plugins
 
@@ -184,8 +194,9 @@ class Loader(Repository):
             )
             return
 
-        @self.app.on_event("startup")
-        async def _on_startup_reload_plugins() -> None:
+        # Priorité élevée pour s'exécuter avant les autres
+        @xhooks.on("xcore.startup", 51)
+        async def _on_startup_reload_plugins(event: Event) -> None:
             """Hook exécuté automatiquement au démarrage de FastAPI."""
             try:
                 self.logger.info(
@@ -223,6 +234,8 @@ class Loader(Repository):
                 self.logger.error(
                     f"❌ Échec du rechargement des plugins au startup: {e}"
                 )
+
+        return
 
     # ------------------------------------------------------
     # ⚡ INTÉGRATION FASTAPI
@@ -268,7 +281,7 @@ class Loader(Repository):
         if not self.app:
             return
 
-        # --- 1️⃣ Sauvegarde des routes natives (FastAPI core) ---
+        # --- Sauvegarde des routes natives (FastAPI core) ---
         base_routes = list(self.app.routes)
         base_paths = {
             self._get_route_signature(r)
@@ -276,7 +289,7 @@ class Loader(Repository):
             if self._get_route_signature(r) is not None
         }
 
-        # --- 2️⃣ Purge des anciennes routes plugin ---
+        # --- Purge des anciennes routes plugin ---
         before = len(self.app.routes)
         # Conserver uniquement les routes de base
         self.app.router.routes[:] = base_routes
@@ -286,7 +299,7 @@ class Loader(Repository):
                 f"🧹 {before - after} anciennes routes plugin supprimées."
             )
 
-        # --- 3️⃣ Inclusion sécurisée des nouveaux routers ---
+        # --- Inclusion sécurisée des nouveaux routers ---
         def _router_already_included(app, router):
             """Vérifie si un router est déjà inclus en comparant les signatures de routes."""
             existing_sigs = {

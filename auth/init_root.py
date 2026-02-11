@@ -39,8 +39,7 @@ def init_root():
             print("🔧 Rôle root créé.")
 
         # Création du compte root
-        password = "Root@123"  # 🔐 à changer après premier login
-        hashed_pw = Hash.hash(password)
+        hashed_pw = Hash.hash("Root@123")
         root_user = auth_models.User(
             email="root@system.local",
             password_hash=hashed_pw,
