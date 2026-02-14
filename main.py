@@ -1,37 +1,15 @@
-from fastapi import APIRouter, Form, Response
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from xcore.manager import Manager
+from app import app, manager
 
-# dasyUI
-from frontend.config import engine
-from frontend.microui.core.theme import setup_daisy_ui
-from middleware.access_control_Middleware import AccessControlMiddleware
-from xcore import app, events, manage, middleware, view
-from xcore.appcfg import xcfg
-from xcore.manage import manager
-
-app.mount("/static", StaticFiles(directory="templates"), name="static")
+from xcore.sandbox.sandbox.worker import _main
 
 
-# optinal middleware validation token for xcore
-app.add_middleware(AccessControlMiddleware, access_rules=xcfg.cfgAcessMidlware())
+@app.on_event("startup")
+async def startup_event():
+    await manager.start()
+    await _main()
 
 
-router = APIRouter(tags=["dasyUI"])
-setup_daisy_ui(app, router=router)
-
-
-@app.get("/")
-async def root():
-    return await engine.render(
-        "index.html", use_cache=False, request=None, ctx={"title": "Home"}
-    )
-
-
-@app.get("/core-docs")
-async def redoc():
-    return await engine.render(
-        "docs/index.html",
-        use_cache=False,
-        request=None,
-    )
+@app.on_event("shutdown")
+async def shutdown_event():
+    await manager.stop()
