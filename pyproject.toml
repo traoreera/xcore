@@ -18,7 +18,7 @@ apscheduler = ">=3.11.0,<4.0.0"
 pyotp = ">=2.9.0,<3.0.0"
 pydantic = { extras = ["email"], version = ">=2.11.7,<3.0.0" }
 python-jose = ">=3.4.0,<4.0.0"
-pillow = ">=11.2.1,<12.0.0"
+pillow = ">=11.2.1,<13.0.0"
 qrcode = { extras = ["pil"], version = ">=8.2,<9.0" }
 paho-mqtt = ">=2.1.0,<3.0.0"
 psutil = ">=7.0.0,<8.0.0"
