@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carte Mentale – Gestionnaire de Plugin</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+        :root {
+            --bg: #080a0f;
+            --surface: #10131a;
+            --surface2: #14182080;
+            --border: #1c2030;
+            --core: #00e5ff;
+            --xcore: #ff4d6d;
+            --integrations: #ffd166;
+            --hooks: #06d6a0;
+            --sandbox: #a78bfa;
+            --fastapi: #f77f00;
+            --text: #dde3f0;
+            --muted: #4a5268;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ── Header ─────────────────────────────── */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 28px;
+            background: rgba(8, 10, 15, 0.92);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--core);
+            box-shadow: 0 0 10px var(--core);
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.3
+            }
+        }
+
+        .header-title {
+            font-size: 12px;
+            font-family: 'Space Mono', monospace;
+            color: var(--core);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .header-sub {
+            font-size: 11px;
+            font-family: 'Space Mono', monospace;
+            color: var(--muted);
+        }
+
+        .header-badge {
+            background: rgba(0, 229, 255, 0.07);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            color: var(--core);
+            font-size: 10px;
+            font-family: 'Space Mono', monospace;
+            padding: 3px 10px;
+            border-radius: 3px;
+            letter-spacing: 0.1em;
+        }
+
+        /* ── Canvas ─────────────────────────────── */
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* ── Map Wrapper ────────────────────────── */
+        #map {
+            position: fixed;
+            top: 52px;
+            bottom: 48px;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Core Node ──────────────────────────── */
+        .core-node {
+            position: absolute;
+            width: 138px;
+            height: 138px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 38% 38%, #0c1e2e, #040d16);
+            border: 2px solid var(--core);
+            box-shadow: 0 0 50px rgba(0, 229, 255, 0.12), inset 0 0 24px rgba(0, 229, 255, 0.04);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 10;
+            animation: pulse-core 3.5s ease-in-out infinite;
+        }
+
+        .core-node .emoji {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+
+        .core-node .label {
+            font-size: 10px;
+            font-family: 'Space Mono', monospace;
+            color: var(--core);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            line-height: 1.5;
+        }
+
+        .core-node .sub {
+            font-size: 8.5px;
+            font-family: 'Space Mono', monospace;
+            color: rgba(0, 229, 255, 0.38);
+            margin-top: 3px;
+        }
+
+        @keyframes pulse-core {
+
+            0%,
+            100% {
+                box-shadow: 0 0 50px rgba(0, 229, 255, 0.12), inset 0 0 24px rgba(0, 229, 255, 0.04);
+            }
+
+            50% {
+                box-shadow: 0 0 80px rgba(0, 229, 255, 0.22), inset 0 0 24px rgba(0, 229, 255, 0.08);
+            }
+        }
+
+        /* ── Branch Card ────────────────────────── */
+        .branch {
+            position: absolute;
+            z-index: 9;
+            cursor: default;
+            transition: transform 0.22s ease, filter 0.22s ease;
+        }
+
+        .branch:hover {
+            transform: scale(1.035) !important;
+            filter: brightness(1.1);
+        }
+
+        .card {
+            width: 172px;
+            border-radius: 10px;
+            background: var(--surface);
+            overflow: hidden;
+            box-shadow: 0 4px 22px rgba(0, 0, 0, 0.55);
+            transition: box-shadow 0.22s;
+        }
+
+        .branch:hover .card {
+            box-shadow: 0 8px 38px rgba(0, 0, 0, 0.75);
+        }
+
+        .card-head {
+            padding: 9px 12px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-icon {
+            font-size: 15px;
+        }
+
+        .card-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            line-height: 1.3;
+        }
+
+        .card-body {
+            padding: 7px 12px 9px;
+            border-top: 1px solid var(--border);
+        }
+
+        .item {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-bottom: 5px;
+            font-size: 9.5px;
+            line-height: 1.4;
+            color: #8a95aa;
+            font-family: 'Space Mono', monospace;
+        }
+
+        .item:last-child {
+            margin-bottom: 0;
+        }
+
+        .dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        /* Tag badge inside cards */
+        .tag {
+            display: inline-block;
+            font-size: 8px;
+            font-family: 'Space Mono', monospace;
+            padding: 1px 5px;
+            border-radius: 2px;
+            margin-left: 4px;
+            vertical-align: middle;
+            letter-spacing: 0.05em;
+        }
+
+        /* Accent colors per branch */
+        .c-xcore .card {
+            border: 1px solid rgba(255, 77, 109, 0.28);
+        }
+
+        .c-xcore .card-head {
+            background: rgba(255, 77, 109, 0.09);
+        }
+
+        .c-xcore .card-title,
+        .c-xcore .card-icon {
+            color: var(--xcore);
+        }
+
+        .c-xcore .dot {
+            background: var(--xcore);
+        }
+
+        .c-xcore .tag {
+            background: rgba(255, 77, 109, 0.15);
+            color: var(--xcore);
+        }
+
+        .c-int .card {
+            border: 1px solid rgba(255, 209, 102, 0.25);
+        }
+
+        .c-int .card-head {
+            background: rgba(255, 209, 102, 0.07);
+        }
+
+        .c-int .card-title,
+        .c-int .card-icon {
+            color: var(--integrations);
+        }
+
+        .c-int .dot {
+            background: var(--integrations);
+        }
+
+        .c-int .tag {
+            background: rgba(255, 209, 102, 0.13);
+            color: var(--integrations);
+        }
+
+        .c-hooks .card {
+            border: 1px solid rgba(6, 214, 160, 0.22);
+        }
+
+        .c-hooks .card-head {
+            background: rgba(6, 214, 160, 0.07);
+        }
+
+        .c-hooks .card-title,
+        .c-hooks .card-icon {
+            color: var(--hooks);
+        }
+
+        .c-hooks .dot {
+            background: var(--hooks);
+        }
+
+        .c-hooks .tag {
+            background: rgba(6, 214, 160, 0.12);
+            color: var(--hooks);
+        }
+
+        .c-sandbox .card {
+            border: 1px solid rgba(167, 139, 250, 0.22);
+        }
+
+        .c-sandbox .card-head {
+            background: rgba(167, 139, 250, 0.07);
+        }
+
+        .c-sandbox .card-title,
+        .c-sandbox .card-icon {
+            color: var(--sandbox);
+        }
+
+        .c-sandbox .dot {
+            background: var(--sandbox);
+        }
+
+        .c-sandbox .tag {
+            background: rgba(167, 139, 250, 0.12);
+            color: var(--sandbox);
+        }
+
+        .c-fastapi .card {
+            border: 1px solid rgba(247, 127, 0, 0.22);
+        }
+
+        .c-fastapi .card-head {
+            background: rgba(247, 127, 0, 0.07);
+        }
+
+        .c-fastapi .card-title,
+        .c-fastapi .card-icon {
+            color: var(--fastapi);
+        }
+
+        .c-fastapi .dot {
+            background: var(--fastapi);
+        }
+
+        .c-fastapi .tag {
+            background: rgba(247, 127, 0, 0.12);
+            color: var(--fastapi);
+        }
+
+        /* ── Connector label ────────────────────── */
+        .conn-label {
+            position: absolute;
+            font-size: 8.5px;
+            font-family: 'Space Mono', monospace;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            pointer-events: none;
+            z-index: 20;
+            background: var(--bg);
+            padding: 1px 5px;
+            border-radius: 2px;
+        }
+
+        /* ── Stats bar ──────────────────────────── */
+        .stats-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 46px;
+            background: rgba(8, 10, 15, 0.93);
+            backdrop-filter: blur(14px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 32px;
+            z-index: 100;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .stat-n {
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .stat-l {
+            font-size: 9.5px;
+            color: var(--muted);
+            font-family: 'Space Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .sep {
+            width: 1px;
+            height: 18px;
+            background: var(--border);
+        }
+
+        /* ── Scanlines ──────────────────────────── */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.035) 2px, rgba(0, 0, 0, 0.035) 4px);
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* ── Entrance animation ─────────────────── */
+        .branch {
+            animation: fadeIn 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        #n1 {
+            animation-delay: 0.15s;
+        }
+
+        #n2 {
+            animation-delay: 0.28s;
+        }
+
+        #n3 {
+            animation-delay: 0.41s;
+        }
+
+        #n4 {
+            animation-delay: 0.54s;
+        }
+
+        #n5 {
+            animation-delay: 0.67s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.88);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <div class="header-dot"></div>
+            <div class="header-title">Gestionnaire de Plugin — Architecture Hybride</div>
+        </div>
+        <div class="header-sub">Analyse complète · Semaine du 10–14 Fév 2025</div>
+        <div class="header-badge">✓ RÉSUMÉ VALIDÉ</div>
+    </div>
+
+    <!-- SVG connections -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Map -->
+    <div id="map">
+
+        <!-- ── Core ── -->
+        <div class="core-node" id="core">
+            <div class="emoji">🧩</div>
+            <div class="label">Plugin<br>Manager</div>
+            <div class="sub">Architecture Hybride</div>
+        </div>
+
+        <!-- ── TOP : xcore/ ── -->
+        <div class="branch c-xcore" id="n1" style="top:18px;left:50%;transform:translateX(-50%)">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-icon">⚡</span>
+                    <span class="card-title">xcore/ — Moteur Moderne</span>
+                </div>
+                <div class="card-body">
+                    <div class="item"><span class="dot"></span>Chargement dynamique de plugins <span
+                            class="tag">core</span></div>
+                    <div class="item"><span class="dot"></span>Isolation via Sandbox (processus séparés)</div>
+                    <div class="item"><span class="dot"></span>Mode Trusted (accès direct, ultra-rapide)</div>
+                    <div class="item"><span class="dot"></span>Redémarrage auto si crash sandbox</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── RIGHT : integrations/ ── -->
+        <div class="branch c-int" id="n2" style="top:120px;right:20px;">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-icon">🗂️</span>
+                    <span class="card-title">integrations/ — Couche Applicative</span>
+                </div>
+                <div class="card-body">
+                    <div class="item"><span class="dot"></span>Gestion base de données SQL</div>
+                    <div class="item"><span class="dot"></span>Routes API d'administration</div>
+                    <div class="item"><span class="dot"></span>Tâches de fond (background tasks)</div>
+                    <div class="item"><span class="dot"></span>Gestion code legacy <span class="tag">historique</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── BOTTOM-RIGHT : FastAPI + integrate.py ── -->
+        <div class="branch c-fastapi" id="n3" style="bottom:90px;right:20px;">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-icon">🚪</span>
+                    <span class="card-title">FastAPI + integrate.py</span>
+                </div>
+                <div class="card-body">
+                    <div class="item"><span class="dot"></span>Porte d'entrée des requêtes HTTP</div>
+                    <div class="item"><span class="dot"></span><code
+                            style="font-size:8.5px">/app/mon-plugin/action</code></div>
+                    <div class="item"><span class="dot"></span>Le pont qui connecte xcore ↔ integrations</div>
+                    <div class="item"><span class="dot"></span>Réponses JSON au Manager</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── BOTTOM : Sandbox Security ── -->
+        <div class="branch c-sandbox" id="n4" style="bottom:18px;left:50%;transform:translateX(-50%)">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-icon">🛡️</span>
+                    <span class="card-title">Zones de Sécurité</span>
+                </div>
+                <div class="card-body">
+                    <div class="item"><span class="dot"></span>Trusted : rapide, accès direct, risque app</div>
+                    <div class="item"><span class="dot"></span>Sandboxed : processus isolé, sécurisé</div>
+                    <div class="item"><span class="dot"></span>Tri par niveau de confiance</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── LEFT : xhooks — Communication ── -->
+        <div class="branch c-hooks" id="n5" style="top:50%;left:20px;transform:translateY(-50%)">
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-icon">🔗</span>
+                    <span class="card-title">xhooks — Découplage</span>
+                </div>
+                <div class="card-body">
+                    <div class="item"><span class="dot"></span>Système nerveux : signaux émis par xcore</div>
+                    <div class="item"><span class="dot"></span>integrations écoute → lance DB & tasks</div>
+                    <div class="item"><span class="dot"></span>xcore reste 100% indépendant</div>
+                    <div class="item"><span class="dot"></span>Arrêt propre des services au shutdown</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+        <div class="stat"><span class="stat-n" style="color:var(--xcore)">xcore/</span><span
+                class="stat-l">Puissance</span></div>
+        <div class="sep"></div>
+        <div class="stat"><span class="stat-n" style="color:var(--integrations)">integrations/</span><span
+                class="stat-l">Contrôle</span></div>
+        <div class="sep"></div>
+        <div class="stat"><span class="stat-n" style="color:var(--hooks)">xhooks</span><span
+                class="stat-l">Découplage</span></div>
+        <div class="sep"></div>
+        <div class="stat"><span class="stat-n" style="color:var(--sandbox)">2 zones</span><span
+                class="stat-l">Sécurité</span></div>
+        <div class="sep"></div>
+        <div class="stat"><span class="stat-n" style="color:var(--fastapi)">FastAPI</span><span class="stat-l">Porte
+                d'entrée</span></div>
+        <div class="sep"></div>
+        <div class="stat"><span class="stat-n" style="color:var(--core)">Micro-kernel</span><span
+                class="stat-l">Pattern</span></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const colors = {
+            n1: '#ff4d6d',
+            n2: '#ffd166',
+            n3: '#f77f00',
+            n4: '#a78bfa',
+            n5: '#06d6a0',
+        };
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawLines();
+        }
+
+        function center(id) {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+
+        function drawCurve(a, b, color) {
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const cx1 = a.x + dx * 0.45, cy1 = a.y;
+            const cx2 = b.x - dx * 0.45, cy2 = b.y;
+
+            // Glow
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, b.x, b.y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 7;
+            ctx.globalAlpha = 0.06;
+            ctx.stroke();
+
+            // Main
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.bezierCurveTo(cx1, cy1, cx2, cy2, b.x, b.y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.6;
+            ctx.globalAlpha = 0.42;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            // Terminal dot
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.65;
+            ctx.fill();
+
+            ctx.globalAlpha = 1;
+        }
+
+        function drawLines() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const c = center('core');
+            if (!c) return;
+            Object.entries(colors).forEach(([id, col]) => {
+                const pt = center(id);
+                if (pt) drawCurve(c, pt, col);
+            });
+        }
+
+        window.addEventListener('resize', resize);
+        setTimeout(resize, 130);
+        setTimeout(drawLines, 850);
+        setInterval(drawLines, 3500);
+    </script>
+</body>
+
+</html>

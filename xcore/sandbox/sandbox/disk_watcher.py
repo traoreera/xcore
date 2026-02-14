@@ -19,10 +19,10 @@ class DiskQuotaExceeded(Exception):
 
 class DiskWatcher:
     """
-    Surveille la taille du répertoire data/ d'un plugin.
-    Utilisé dans deux contextes :
-        1. Appelé avant une écriture (check préventif)
-        2. Vérifié périodiquement par le supervisor
+    Monitors the size of a plugin's data/ directory.
+    Used in two contexts:
+        1. Called before a write (preventive check)
+        2. Periodically checked by the supervisor
     """
 
     def __init__(self, data_dir: Path, max_disk_mb: int) -> None:

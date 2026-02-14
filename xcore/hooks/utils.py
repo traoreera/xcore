@@ -225,11 +225,14 @@ class ConditionalHook:
     """
     Decorator for conditionally executing hooks based on event data.
 
-    Example:
-        @ConditionalHook(lambda e: e.data.get("environment") == "production")
-        @hooks.on("app.startup")
-        async def production_only_task(event: Event):
-            await setup_production_services()
+    Example::
+
+        .. code-block:: python
+
+            @ConditionalHook(lambda e: e.data.get("environment") == "production")
+            @hooks.on("app.startup")
+            async def production_only_task(event: Event):
+                await setup_production_services()
     """
 
     def __init__(self, condition: Callable[[Event], bool]):
@@ -255,11 +258,14 @@ def retry_hook(max_retries: int = 3, delay_seconds: float = 1.0) -> Callable:
         max_retries: Maximum number of retry attempts
         delay_seconds: Delay between retries
 
-    Example:
-        @retry_hook(max_retries=3, delay_seconds=2.0)
-        @hooks.on("api.call")
-        async def unreliable_api_call(event: Event):
-            return await call_external_api()
+    Example::
+
+        .. code-block:: python
+
+            @retry_hook(max_retries=3, delay_seconds=2.0)
+            @hooks.on("api.call")
+            async def unreliable_api_call(event: Event):
+                return await call_external_api()
     """
 
     def decorator(func: Callable) -> Callable:
@@ -290,11 +296,14 @@ def memoized_hook(ttl_seconds: float = 300.0) -> Callable:
     Args:
         ttl_seconds: Time-to-live for cached results
 
-    Example:
-        @memoized_hook(ttl_seconds=60.0)
-        @hooks.on("data.fetch")
-        async def expensive_data_fetch(event: Event):
-            return await fetch_from_slow_source()
+    Example::
+
+        .. code-block:: python
+
+            @memoized_hook(ttl_seconds=60.0)
+            @hooks.on("data.fetch")
+            async def expensive_data_fetch(event: Event):
+                return await fetch_from_slow_source()
     """
     cache = {}
 

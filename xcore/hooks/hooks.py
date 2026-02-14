@@ -92,19 +92,21 @@ class InterceptorResult(Enum):
 
 class HookManager:
     """
-        Professional event hook manager for xcore.
+    Professional event hook manager for xcore.
 
-        Features:
-        - Priority-based async/sync hook execution
-        - Wildcard pattern matching (e.g., "plugin.*", "*.update")
-        - One-time hooks with auto-cleanup
-        - Pre/post middleware (interceptors)
-        - Execution timeouts
-        - Performance metrics
-        - Result filtering pipelines
+    Features:
+    - Priority-based async/sync hook execution
+    - Wildcard pattern matching (e.g., "plugin.\\*", "\\*.update")
+    - One-time hooks with auto-cleanup
+    - Pre/post middleware (interceptors)
+    - Execution timeouts
+    - Performance metrics
+    - Result filtering pipelines
 
-        Example:
-    ```python
+    Example::
+
+        .. code-block:: python
+
             hooks = HookManager()
 
             # Basic usage
@@ -128,7 +130,7 @@ class HookManager:
                 logger.info(f"Plugin loaded: {event.name}")
 
             # Emit event
-            await hooks.emit("user.created", Event("user.created", data={"user": user}))```
+            await hooks.emit("user.created", Event("user.created", data={"user": user}))
     """
 
     def __init__(self):
@@ -201,13 +203,17 @@ class HookManager:
         """
         Decorator to register a hook.
 
-        Args:
-            event_name: Event name or wildcard pattern
-            priority: Execution priority (0-100, lower = earlier)
-            once: Auto-unregister after first execution
-            timeout: Maximum execution time in seconds
+        :param event_name: Event name or wildcard pattern
+        :type event_name: str
+        :param priority: Execution priority (0-100, lower = earlier)
+        :type priority: int
+        :param once: Auto-unregister after first execution
+        :type once: bool
+        :param timeout: Maximum execution time in seconds
+        :type timeout: Optional[float]
 
-        Example:
+        Example::
+
             @hooks.on("user.created", priority=10)
             async def notify_user(event: Event):
                 await send_notification(event.data["user"])
@@ -227,7 +233,15 @@ class HookManager:
 
         The hook automatically unregisters after its first execution.
 
-        Example:
+        :param event_name: Event name or wildcard pattern
+        :type event_name: str
+        :param priority: Execution priority (0-100, lower = earlier)
+        :type priority: int
+        :param timeout: Maximum execution time in seconds
+        :type timeout: Optional[float]
+
+        Example::
+
             @hooks.once("server.startup")
             async def initialize(event: Event):
                 await setup_service()
@@ -473,13 +487,14 @@ class HookManager:
         """
         Emit an event and execute all matching hooks.
 
-        Args:
-            event_name: Name of the event to emit
-            data: Event data dictionary
-            **kwargs: Additional data (merged with data dict)
-
-        Returns:
-            List of HookResult objects
+        :param event_name: Name of the event to emit
+        :type event_name: str
+        :param data: Event data dictionary
+        :type data: Optional[Dict[str, Any]]
+        :param kwargs: Additional data (merged with data dict)
+        :type kwargs: Any
+        :returns: List of HookResult objects
+        :rtype: List[HookResult]
         """
         # Merge data and kwargs
         event_data = {**(data or {}), **kwargs}
@@ -550,13 +565,14 @@ class HookManager:
         """
         Emit event and return the first non-None result.
 
-        Args:
-            event_name: Name of the event
-            data: Event data
-            **kwargs: Additional data
-
-        Returns:
-            First non-None result from hooks, or None
+        :param event_name: Name of the event
+        :type event_name: str
+        :param data: Event data
+        :type data: Optional[Dict[str, Any]]
+        :param kwargs: Additional data
+        :type kwargs: Any
+        :returns: First non-None result from hooks, or None
+        :rtype: Optional[Any]
         """
         results = await self.emit(event_name, data, **kwargs)
         for result in results:
@@ -570,13 +586,14 @@ class HookManager:
         """
         Emit event and return the first successful result.
 
-        Args:
-            event_name: Name of the event
-            data: Event data
-            **kwargs: Additional data
-
-        Returns:
-            First successful HookResult, or None
+        :param event_name: Name of the event
+        :type event_name: str
+        :param data: Event data
+        :type data: Optional[Dict[str, Any]]
+        :param kwargs: Additional data
+        :type kwargs: Any
+        :returns: First successful HookResult, or None
+        :rtype: Optional[HookResult]
         """
         results = await self.emit(event_name, data, **kwargs)
         for result in results:

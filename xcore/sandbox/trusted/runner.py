@@ -1,8 +1,8 @@
 """
-trusted/runner.py
-──────────────────
-Chargement in-process des plugins Trusted.
-Applique : timeout par appel, filesystem check, injection de services.
+Trusted Runner Module
+=====================
+In-process loading of Trusted plugins.
+Applies: call timeout, filesystem checks, service injection.
 """
 
 from __future__ import annotations
@@ -189,8 +189,8 @@ class TrustedRunner:
 
     def check_path(self, path: str | Path) -> None:
         """
-        Expose la vérification filesystem aux plugins Trusted via services.
-        Usage dans un plugin Trusted :
+        Exposes filesystem verification to Trusted plugins via services.
+        Usage in a Trusted plugin:
             self.get_service("check_path")("/some/path")
         """
         check_filesystem_access(
