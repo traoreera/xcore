@@ -1,27 +1,41 @@
 """
 sandbox/worker.py
 ──────────────────
-Script exécuté DANS le subprocess isolé du plugin Sandboxed.
-Ce fichier est le point d'entrée universel — il charge le plugin,
-écoute stdin, appelle handle() et répond sur stdout.
-
-NE PAS IMPORTER CE FICHIER DANS LE CORE.
-Il est copié / référencé comme entry point du subprocess.
+Boucle stdin/stdout sans connect_read_pipe.
+Utilise asyncio.StreamReader branché sur sys.stdin.buffer directement
+via loop.run_in_executor pour éviter le blocage.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import traceback
-import contextlib
 from pathlib import Path
 
 
+def _apply_memory_limit() -> None:
+    max_mb = int(os.environ.get("_SANDBOX_MAX_MEM_MB", "0"))
+    if max_mb <= 0 or sys.platform == "win32":
+        return
+    try:
+        import resource
+        limit = max_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_DATA, (limit, limit))
+    except Exception:
+        pass
+
+
+def _read_line_blocking() -> bytes:
+    """Lit une ligne sur stdin.buffer — appelé dans un executor thread."""
+    return sys.stdin.buffer.readline()
+
+
 async def _main() -> None:
-    # ── Résolution du répertoire plugin ────────────────────────
-    # argv[1] = chemin absolu du plugin passé par supervisor._spawn()
+    _apply_memory_limit()
+
     if len(sys.argv) < 2:
         _write_error("worker.py requiert le chemin du plugin en argv[1]")
         return
@@ -33,10 +47,8 @@ async def _main() -> None:
         _write_error(f"Répertoire src/ introuvable dans {plugin_dir}")
         return
 
-    # Ajoute src/ au path pour que `import main` fonctionne
     sys.path.insert(0, str(src_dir))
 
-    # ── Chargement du plugin ───────────────────────────────────
     try:
         import main as plugin_module
         plugin = plugin_module.Plugin()
@@ -44,27 +56,20 @@ async def _main() -> None:
         _write_error(f"Impossible de charger le plugin : {e}\n{traceback.format_exc()}")
         return
 
-    # ── Boucle stdin/stdout async ──────────────────────────────
-    loop     = asyncio.get_running_loop()
-    reader   = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
+    loop = asyncio.get_running_loop()
 
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin.buffer)
-
+    # Boucle readline via executor — évite le blocage de l'event loop
+    # et contourne les problèmes de connect_read_pipe sur certains OS
     while True:
-        try:
-            raw = await reader.readline()
-        except Exception:
-            break
+        raw = await loop.run_in_executor(None, _read_line_blocking)
 
         if not raw:
-            break  # EOF — Core a fermé stdin proprement
+            break  # EOF propre
 
         line = raw.decode("utf-8", errors="replace").strip()
         if not line:
             continue
 
-        # ── Parsing de la requête ──────────────────────────────
         try:
             request = json.loads(line)
         except json.JSONDecodeError as e:
@@ -78,16 +83,12 @@ async def _main() -> None:
             _write_error("'payload' doit être un dict")
             continue
 
-        # ── Appel handle() ─────────────────────────────────────
         try:
             result = await plugin.handle(action, payload)
             if not isinstance(result, dict):
                 result = {"status": "ok", "result": result}
         except Exception:
-            result = {
-                "status": "error",
-                "msg":    traceback.format_exc(),
-            }
+            result = {"status": "error", "msg": traceback.format_exc()}
 
         _write(result)
 
@@ -101,10 +102,4 @@ def _write_error(msg: str) -> None:
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(_main())
-    except KeyboardInterrupt as e :
-        pass
-    except Exception as e:
-        _write_error(f"Crash : {e}\n{traceback.format_exc()}")
-        sys.exit(1)
+    asyncio.run(_main())

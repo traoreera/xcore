@@ -47,7 +47,7 @@ async def get_plugin_manager(request: Request) -> PluginManager:
 # Router
 # ──────────────────────────────────────────────
 
-router = APIRouter(prefix="/plugin", tags=["plugins"])
+router = APIRouter(prefix="/app", tags=["plugins"])
 
 
 @router.post(
@@ -104,13 +104,13 @@ async def reload_plugin(
     try:
         await manager.reload(plugin_name)
         return {"status": "ok", "msg": f"Plugin '{plugin_name}' rechargé"}
-    except PluginNotFound:
+    except PluginNotFound as e :
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Plugin '{plugin_name}' non chargé",
-        )
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
-        )
+        ) from e 

@@ -8,10 +8,13 @@ from contextlib import asynccontextmanager
 from urllib import response
 
 from fastapi import FastAPI
+from xcore.sandbox.sandbox.worker import _main
 
 from xcore.manager import Manager
+from xcore.appcfg import xhooks
 
-
+from integrations.routes import plugins
+from integrations.routes import task
 # ──────────────────────────────────────────────
 # 1. Lifespan — startup / shutdown propres
 # ──────────────────────────────────────────────
@@ -45,6 +48,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+app.include_router(plugins.plugin)
+app.include_router(task.task)
 # Routes natives de ton Core (exemples)
 @app.get("/health")
 async def health():
@@ -82,31 +88,14 @@ app.state.manager = manager
 
 
 
+@app.on_event("startup")
+async def startup_event() -> None:
+    await xhooks.emit("xcore.startup")
+    await _main()
+    return
+
 @app.on_event("shutdown")
 async def startup_event():
-
-    response = await manager.stop()
-
-    print(response)
-
-
-
-# ──────────────────────────────────────────────
-# 4. Appel direct depuis le Core (sans HTTP)
-# ──────────────────────────────────────────────
-
-# Depuis n'importe quel service du Core :
-#
-# result = await app.state.manager.call(
-#     "notes_manager",     # nom du plugin
-#     "create",            # action
-#     {                    # payload
-#         "title": "Réunion",
-#         "content": "Préparer la démo",
-#         "tags": ["travail"]
-#     }
-# )
-#
-# Équivalent HTTP :
-# POST /plugin/notes_manager/create
-# {"payload": {"title": "Réunion", ...}}
+    await manager.stop()
+    await xhooks.emit("xcore.shutdown")
+    return

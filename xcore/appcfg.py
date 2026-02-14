@@ -1,5 +1,5 @@
-from configurations import core
-from hooks import HookManager
+from xcore.configurations import core
+from xcore.hooks import HookManager
 
 xcfg = core.Xcorecfg(conf=core.Configure())
 
