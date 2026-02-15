@@ -2,13 +2,21 @@ import hashlib
 import os
 from pathlib import Path
 from typing import Dict, Set
-from xcore.configurations.manager import ManagerCfg,Configure
-
+from xcore.configurations.manager import ManagerCfg, Configure
 
 import logging
 
 logger = logging.getLogger(__name__)
-cfg = ManagerCfg(Configure())
+
+# ── Config instanciée en lazy (pas au niveau module) ──────────────
+# Évite le couplage fort à l'import et facilite les tests unitaires.
+_cfg: "ManagerCfg | None" = None
+
+def _get_cfg() -> "ManagerCfg":
+    global _cfg
+    if _cfg is None:
+        _cfg = ManagerCfg(Configure())
+    return _cfg
 
 
 class Snapshot:
@@ -24,9 +32,12 @@ class Snapshot:
         ignore_ext: Set[str] | None = None,
         ignore_file: Set[str] | None = None,
     ):
-        self.ignore_hidden = ignore_hidden or cfg.custom_config["snapshot"]["hidden"]
-        self.ignore_ext = ignore_ext or cfg.custom_config["snapshot"]["extensions"]
-        self.ignore_file = ignore_file or cfg.custom_config["snapshot"]["filenames"]
+        cfg = _get_cfg()
+        self.ignore_hidden = ignore_hidden if ignore_hidden is not None else cfg.custom_config["snapshot"]["hidden"]
+        self.ignore_ext    = ignore_ext    if ignore_ext    is not None else cfg.custom_config["snapshot"]["extensions"]
+        self.ignore_file   = ignore_file   if ignore_file   is not None else cfg.custom_config["snapshot"]["filenames"]
+        # Snapshot précédent gardé en mémoire pour __call__
+        self._last_snapshot: Dict[str, str] = {}
 
     # ------------------------------------------------------------
     def _hash_file(self, path: Path) -> str:
@@ -100,4 +111,15 @@ class Snapshot:
         return bool(d["added"] or d["removed"] or d["modified"])
 
     def __call__(self, directory: str | Path) -> Dict[str, Set[str]]:
-        return self.diff(self.create(directory), self.create(directory))
+        """
+        Compare l'état actuel du dossier avec le dernier snapshot mémorisé.
+        Met à jour le snapshot interne après chaque appel.
+
+        ❌ Ancien comportement : diff(create(dir), create(dir))
+        ✅ Ancien :→ deux snapshots pris au même instant = diff toujours vide.
+        ✅ Nouveau : on garde le snapshot précédent en mémoire.
+        """
+        new_snapshot = self.create(directory)
+        result = self.diff(self._last_snapshot, new_snapshot)
+        self._last_snapshot = new_snapshot
+        return result

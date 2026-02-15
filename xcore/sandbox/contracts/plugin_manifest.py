@@ -286,26 +286,36 @@ def _load_raw(plugin_dir: Path) -> dict[str, Any]:
             import yaml
             with open(yaml_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
-        except ImportError:
+        except ImportError as e :
             raise ManifestError(
                 "plugin.yaml trouvé mais pyyaml non installé. "
                 "pip install pyyaml"
-            )
+            ) from e 
         except Exception as e:
-            raise ManifestError(f"Impossible de lire plugin.yaml : {e}")
+            raise ManifestError(f"Impossible de lire plugin.yaml : {e}") from e
 
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            raise ManifestError(f"Impossible de lire plugin.json : {e}")
+            raise ManifestError(f"Impossible de lire plugin.json : {e}") from e
 
     raise ManifestError(
         f"Aucun manifeste trouvé dans {plugin_dir} "
         "(plugin.yaml ou plugin.json requis)"
     )
 
+
+def _inject_envfile(raw: dict, plugin_dir: Path):
+    envfile_path = plugin_dir / raw.get("envfile", ".env")
+    # import dotenv
+    if raw.get("inject", False):
+        from dotenv import load_dotenv, find_dotenv
+        load_dotenv(
+            dotenv_path=find_dotenv(
+                filename=envfile_path,raise_error_if_not_found=False)
+        )
 
 def load_manifest(plugin_dir: Path) -> PluginManifest:
     """
@@ -316,19 +326,18 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
     raw = _load_raw(plugin_dir)
 
     # Champs obligatoires
-    missing = [f for f in ("name", "version") if not raw.get(f)]
-    if missing:
+    if missing := [f for f in ("name", "version") if not raw.get(f)]:
         raise ManifestError(f"Champs obligatoires manquants : {missing}")
 
     # Mode d'exécution
     raw_mode = raw.get("execution_mode", "legacy").lower()
     try:
         mode = ExecutionMode(raw_mode)
-    except ValueError:
+    except ValueError as e :
         raise ManifestError(
             f"execution_mode invalide : {raw_mode!r}. "
             f"Valeurs acceptées : {[m.value for m in ExecutionMode]}"
-        )
+        ) from e 
 
     # Defaults selon le mode — appliqués AVANT de lire le YAML
     # → le YAML surcharge uniquement les valeurs explicitement déclarées
@@ -336,6 +345,7 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
 
     # Résolution des variables d'environnement
     try:
+        _inject_envfile(raw.get("envconfiguration", {}), plugin_dir)
         resolved_env = _resolve_env_dict(raw.get("env", {}))
     except ManifestError:
         raise

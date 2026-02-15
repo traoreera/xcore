@@ -3,6 +3,8 @@ from integrations.crud.taskcurd import ModuleRuntimeManager, core_task_threads
 from integrations.plManager import logger
 from integrations.task.corethread import ServiceManager
 from integrations.task.taskmanager import TaskManager
+from integrations.tools.error import Error
+
 
 # Configuration du logger pour ce module
 
@@ -10,56 +12,31 @@ logger.info("⚡ Initialisation du TaskRuntimer")
 crontab = TaskManager()
 
 
-try:
-    backgroundtask = ModuleRuntimeManager(
-        module_dir=cfg.custom_config["tasks"]["directory"]
-    )
-    logger.info("ModuleRuntimeManager initialisé avec succès")
-except Exception as e:
-    logger.error("Une exception s'est produite lors de l'initialisation du ModuleRuntimeManager")
-    raise e from e
 
-try:
-    backgroundtask_modules = backgroundtask.get_enabled_modules()
-    module_count = len(backgroundtask_modules) if backgroundtask_modules else 0
-    logger.info(f"{module_count} modules de tâches en arrière-plan chargés")
-except Exception as e:
-    logger.error(f"Erreur lors du chargement des modules: {e}")
-    backgroundtask_modules = []
+backgroundtask = ModuleRuntimeManager(module_dir=cfg.custom_config["tasks"]["directory"])
+logger.info("🔧 ModuleRuntimeManager de tâches en arrière-plan initialisé")
 
-try:
-    backgroundtask_manager = ServiceManager()
-    logger.info("🔧 ServiceManager de tâches en arrière-plan initialisé")
-except Exception as e:
-    logger.error(f"Erreur lors de l'initialisation du ServiceManager: {e}")
-    raise
+backgroundtask_modules = backgroundtask.get_enabled_modules()
+module_count = len(backgroundtask_modules) if backgroundtask_modules else 0
+logger.info(f"{module_count} modules de tâches en arrière-plan chargés")
 
 
-logger.info("⚡ Module TaskRuntimer chargé avec succès")
+backgroundtask_manager = ServiceManager()
+logger.info("🔧 ServiceManager de tâches en arrière-plan initialisé")
 
 
+
+
+
+@Error.exception_handler
 def on_startup():
-    logger.info("Module taskRuntimer importé avec succès")
-
-    # Chargement des modules de tâches en arrière-plan
-    loaded_modules = 0
-    for module in backgroundtask_modules:
-        try:
-            if target := (backgroundtask.load_module_target(module.module)):
-                backgroundtask_manager.add_service(name=module.module, target=target)
-                loaded_modules += 1
-                logger.info(f"Module '{module.module}' chargé avec succès")
-            else:
-                logger.warning(
-                    f"Module '{module.module}' n'a pas pu être chargé - target est None"
-                )
-        except Exception as e:
-            logger.error(f"Erreur lors du chargement du module '{module.module}': {e}")
-        logger.info(f"{loaded_modules}/{len(backgroundtask_modules)} modules chargés")
+    for mod in backgroundtask_modules:
+        backgroundtask_manager.add_service(name=mod.module, target=backgroundtask.load_module_target(mod.module))
 
     crontab.add_job(core_task_threads)
 
 
+@Error.exception_handler
 def on_shutdown():
     logger.info("Module taskRuntimer fermé avec succès")
     backgroundtask_manager.stop_all()

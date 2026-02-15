@@ -6,7 +6,7 @@ Intègre : mémoire (via worker), health check, env injection, disk watcher.
 """
 
 from __future__ import annotations
-
+import contextlib
 import asyncio
 import logging
 import os
@@ -116,7 +116,7 @@ class SandboxSupervisor:
             "PYTHONUNBUFFERED":        "1",
             "_SANDBOX_MAX_MEM_MB":     str(self.manifest.resources.max_memory_mb),
         }
-        env.update(self.manifest.env)
+        env |= self.manifest.env
 
         self._process = await asyncio.create_subprocess_exec(
             python_exe,
@@ -145,12 +145,12 @@ class SandboxSupervisor:
                 self._channel.call("ping", {}), timeout=timeout
             )
             if not resp.success:
-                raise RuntimeError(f"Ping échoué : {resp.data}")
-        except asyncio.TimeoutError:
+                raise RuntimeError(f"Ping échoué : {resp.data}") 
+        except asyncio.TimeoutError as e :
             await self._kill()
             raise RuntimeError(
                 f"[{self.manifest.name}] Pas de réponse au ping dans {timeout}s"
-            )
+            ) from e
 
     async def call(self, action: str, payload: dict) -> IPCResponse:
         if not self.is_available:
@@ -200,7 +200,7 @@ class SandboxSupervisor:
             return
         logger.warning(f"[{self.manifest.name}] Subprocess terminé (code={returncode})")
         if self._process.stderr:
-            try:
+            with contextlib.suppress(Exception):
                 err = await asyncio.wait_for(
                     self._process.stderr.read(2048), timeout=1.0
                 )
@@ -209,8 +209,6 @@ class SandboxSupervisor:
                         f"[{self.manifest.name}] stderr: "
                         f"{err.decode('utf-8', errors='replace').strip()}"
                     )
-            except Exception:
-                pass
         await self._handle_crash()
 
     async def _handle_crash(self) -> None:

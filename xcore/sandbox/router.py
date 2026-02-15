@@ -7,7 +7,8 @@ Le Core expose /plugin/{name}/{action} — les plugins n'exposent jamais leurs p
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Security, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import Any
 
@@ -27,6 +28,35 @@ class PluginCallResponse(BaseModel):
     plugin:  str
     action:  str
     result:  dict[str, Any]
+
+
+# ──────────────────────────────────────────────
+# Auth — API Key via header X-Plugin-Key
+# ✅ Nouveau : les routes d'administration (reload, load, unload)
+# nécessitent une clé API passée dans le header X-Plugin-Key.
+# La clé est lue depuis app.state.plugin_api_key au démarrage.
+# ──────────────────────────────────────────────
+
+_api_key_header = APIKeyHeader(name="X-Plugin-Key", auto_error=False)
+
+
+async def verify_admin_key(
+    request: Request,
+    api_key: str | None = Security(_api_key_header),
+) -> None:
+    """
+    Vérifie la clé d'administration.
+    Si aucune clé n'est configurée dans app.state, la vérification est ignorée
+    (pratique pour le développement local).
+    """
+    expected: str | None = getattr(request.app.state, "plugin_api_key", None)
+    if expected is None:
+        return  # Pas de clé configurée → mode dev, pas de restriction
+    if api_key != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Clé API invalide ou manquante (header X-Plugin-Key requis)",
+        )
 
 
 # ──────────────────────────────────────────────
@@ -84,6 +114,7 @@ async def call_plugin(
 @router.get(
     "/status",
     summary="Status de tous les plugins chargés",
+    dependencies=[Depends(verify_admin_key)],  # ✅ protégé
 )
 async def plugins_status(
     manager: PluginManager = Depends(get_plugin_manager),
@@ -95,6 +126,7 @@ async def plugins_status(
 @router.post(
     "/{plugin_name}/reload",
     summary="Recharge un plugin à chaud",
+    dependencies=[Depends(verify_admin_key)],  # ✅ protégé
 )
 async def reload_plugin(
     plugin_name: str,
@@ -104,13 +136,63 @@ async def reload_plugin(
     try:
         await manager.reload(plugin_name)
         return {"status": "ok", "msg": f"Plugin '{plugin_name}' rechargé"}
-    except PluginNotFound as e :
+    except PluginNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Plugin '{plugin_name}' non chargé",
-        ) from e
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
-        ) from e 
+        )
+
+
+@router.post(
+    "/{plugin_name}/load",
+    summary="Charge un plugin par son nom de dossier",
+    dependencies=[Depends(verify_admin_key)],  # ✅ protégé
+)
+async def load_plugin(
+    plugin_name: str,
+    manager:     PluginManager = Depends(get_plugin_manager),
+) -> dict:
+    """✅ Nouveau : charge un plugin unique sans redémarrer l'application."""
+    try:
+        await manager.load(plugin_name)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' chargé"}
+    except PluginNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dossier plugin '{plugin_name}' introuvable",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.delete(
+    "/{plugin_name}/unload",
+    summary="Décharge un plugin sans arrêter l'application",
+    dependencies=[Depends(verify_admin_key)],  # ✅ protégé
+)
+async def unload_plugin(
+    plugin_name: str,
+    manager:     PluginManager = Depends(get_plugin_manager),
+) -> dict:
+    """✅ Nouveau : décharge un plugin unique proprement."""
+    try:
+        await manager.unload(plugin_name)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' déchargé"}
+    except PluginNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Plugin '{plugin_name}' non chargé",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )

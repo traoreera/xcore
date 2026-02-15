@@ -25,7 +25,10 @@ async def lifespan(app: FastAPI):
     Remplace les anciens @app.on_event("startup").
     Le Manager démarre ici, s'arrête proprement à la fin.
     """
+    from integrations.integrate import taskRuntimer
     manager: Manager = app.state.manager
+    #taskRuntimer.on_startup()
+    await xhooks.emit("xcore.startup")
 
     # Startup : charge tous les plugins + attache /plugin/*
     report = await manager.start()
@@ -33,10 +36,14 @@ async def lifespan(app: FastAPI):
     if report["failed"]:
         print(f"❌ Échecs : {report['failed']}")
 
+
+
     yield  # ← l'app tourne ici
 
     # Shutdown : arrête proprement tous les subprocesses
     await manager.stop()
+    #taskRuntimer.on_shutdown()
+    await xhooks.emit("xcore.shutdown")
 
 
 # ──────────────────────────────────────────────
@@ -85,17 +92,3 @@ manager = Manager(
 
 # Injecte le manager dans app.state pour qu'il soit accessible partout
 app.state.manager = manager
-
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    await xhooks.emit("xcore.startup")
-    await _main()
-    return
-
-@app.on_event("shutdown")
-async def startup_event():
-    await manager.stop()
-    await xhooks.emit("xcore.shutdown")
-    return

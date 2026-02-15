@@ -20,17 +20,16 @@ manager.snapshot.ignore_file = cfg.custom_config["snapshot"]["filenames"]
 manager.snapshot.ignore_hidden = cfg.custom_config["snapshot"]["hidden"]
 
 
-@xhooks.on("xcore.startup")
+@xhooks.on("xcore.startup", 50)
 async def startup_event(event: Event) -> None:
-    """Handle application startup."""
+    print("""Handle application startup.""")
     manager.run_plugins()
     taskRuntimer.on_startup()
-    # manager.base_routes = app.routes  # Capture les routes de base après le chargement des plugins
 
     return  # Explicit return for clarity
 
 
-@xhooks.on("xcore.shutdown")
+@xhooks.on("xcore.shutdown", 50)
 async def shutdown_event(event: Event) -> None:
     """Handle application shutdown."""
     manager.stop_watching()

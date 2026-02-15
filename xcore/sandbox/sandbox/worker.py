@@ -23,7 +23,11 @@ def _apply_memory_limit() -> None:
     try:
         import resource
         limit = max_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_DATA, (limit, limit))
+        # ✅ Fix : RLIMIT_DATA ne limite que le segment BSS/heap — il ne couvre pas
+        # les allocations mmap() que Python utilise massivement (>= 128 KB par défaut).
+        # RLIMIT_AS limite l'espace d'adressage virtuel total du process,
+        # ce qui constitue un vrai plafond mémoire pour les subprocesses sandbox.
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     except Exception:
         pass
 

@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from venv import logger
+import logging
+logger = logging.getLogger("plManager.ipc")
 
 
 # ──────────────────────────────────────────────
@@ -86,7 +87,7 @@ class IPCChannel:
             self._process.stdin.write(request_line.encode())
             await self._process.stdin.drain()
         except (BrokenPipeError, ConnectionResetError) as e:
-            raise IPCProcessDead(f"Impossible d'écrire dans stdin : {e}")
+            raise IPCProcessDead(f"Impossible d'écrire dans stdin : {e}") from e
 
         try:
             raw = await asyncio.wait_for(
@@ -96,9 +97,9 @@ class IPCChannel:
         except asyncio.TimeoutError:
             raise IPCTimeoutError(
                 f"Pas de réponse du plugin dans {self._timeout}s"
-            )
+            ) from e
         except Exception as e:
-            raise IPCError(f"Erreur lecture stdout : {e}")
+            raise IPCError(f"Erreur lecture stdout : {e}") from e 
 
         if not raw:
             raise IPCProcessDead("EOF inattendu sur stdout du subprocess")
@@ -114,7 +115,7 @@ class IPCChannel:
         try:
             data = json.loads(raw_str)
         except json.JSONDecodeError as e:
-            raise IPCError(f"Réponse JSON invalide : {e} — reçu : {raw_str!r}")
+            raise IPCError(f"Réponse JSON invalide : {e} — reçu : {raw_str!r}") from e 
 
         return IPCResponse(
             success=data.get("status") == "ok",
