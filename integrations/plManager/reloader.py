@@ -1,7 +1,7 @@
 from typing import Any, List
 
-from ..plManager import logger
-from ..tools.error import Error
+from integrations.plManager import logger
+from integrations.tools.error import Error
 
 
 class Reloader:

@@ -1,6 +1,6 @@
 import os
 
-from dotenv import find_dotenv, load_dotenv
+from dotenv import find_dotenv, load_dotenv  # type:ignore
 
 from xcore.configurations import manager
 

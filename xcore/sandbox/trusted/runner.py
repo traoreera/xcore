@@ -15,8 +15,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..contracts.plugin_manifest import PluginManifest, FilesystemConfig
 from ..contracts.base_plugin import BasePlugin, TrustedBase
+from ..contracts.plugin_manifest import FilesystemConfig, PluginManifest
 
 logger = logging.getLogger("plManager.trusted")
 
@@ -32,6 +32,7 @@ class FilesystemViolation(Exception):
 # ══════════════════════════════════════════════
 # Vérification filesystem
 # ══════════════════════════════════════════════
+
 
 def check_filesystem_access(
     path: str | Path,
@@ -86,18 +87,18 @@ def check_filesystem_access(
 # Runner
 # ══════════════════════════════════════════════
 
-class TrustedRunner:
 
+class TrustedRunner:
     def __init__(
         self,
         manifest: PluginManifest,
         services: dict[str, Any] | None = None,
     ) -> None:
-        self.manifest    = manifest
-        self.services    = services or {}
-        self._instance:  BasePlugin | None = None
-        self._module:    Any               = None
-        self._loaded_at: float | None      = None
+        self.manifest = manifest
+        self.services = services or {}
+        self._instance: BasePlugin | None = None
+        self._module: Any = None
+        self._loaded_at: float | None = None
 
     # ──────────────────────────────────────────
     # Chargement
@@ -110,7 +111,16 @@ class TrustedRunner:
         if not entry.exists():
             raise TrustedLoadError(f"Entry point introuvable : {entry}")
 
-        module_name  = f"trusted_plugins.{self.manifest.name}"
+        # ✅ Fix "No module named trusted_plugins" :
+        # On ajoute src/ au sys.path AVANT l'import pour que les imports
+        # absolus (import models, import services…) fonctionnent.
+        # On utilise le nom du plugin comme namespace unique (pas trusted_plugins.X)
+        # pour éviter de créer un faux package parent qui n'existe pas sur disque.
+        src_dir = str(self.manifest.plugin_dir / "src")
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+
+        module_name = f"plugin_{self.manifest.name}"  # ex: plugin_erp_core
         self._module = self._import_from_path(module_name, entry)
 
         if not hasattr(self._module, "Plugin"):
@@ -120,7 +130,19 @@ class TrustedRunner:
 
         plugin_class = self._module.Plugin
 
-        if isinstance(plugin_class, type) and issubclass(plugin_class, TrustedBase):
+        # ✅ Fix : on ne vérifie plus l'héritage TrustedBase pour décider
+        # de passer les services. Un plugin peut respecter le contrat par
+        # duck typing sans hériter de TrustedBase (pour éviter d'importer xcore).
+        # On inspecte la signature du __init__ : si "services" est accepté, on passe.
+        import inspect
+
+        try:
+            sig = inspect.signature(plugin_class.__init__)
+            accepts_services = "services" in sig.parameters
+        except (ValueError, TypeError):
+            accepts_services = False
+
+        if accepts_services:
             self._instance = plugin_class(services=self.services)
         else:
             self._instance = plugin_class()
@@ -158,9 +180,7 @@ class TrustedRunner:
 
     async def call(self, action: str, payload: dict) -> dict:
         if self._instance is None:
-            raise TrustedLoadError(
-                f"Plugin {self.manifest.name} non chargé"
-            )
+            raise TrustedLoadError(f"Plugin {self.manifest.name} non chargé")
 
         timeout = self.manifest.resources.timeout_seconds
 
@@ -175,8 +195,8 @@ class TrustedRunner:
             )
             return {
                 "status": "error",
-                "msg":    f"Timeout après {timeout}s",
-                "code":   "timeout",
+                "msg": f"Timeout après {timeout}s",
+                "code": "timeout",
             }
 
         if not isinstance(result, dict):
@@ -214,10 +234,14 @@ class TrustedRunner:
     async def unload(self) -> None:
         if self._instance and hasattr(self._instance, "on_unload"):
             await self._instance.on_unload()
-        module_name = f"trusted_plugins.{self.manifest.name}"
+        module_name = f"plugin_{self.manifest.name}"
         sys.modules.pop(module_name, None)
+        # Nettoie aussi src/ du sys.path pour éviter les collisions entre plugins
+        src_dir = str(self.manifest.plugin_dir / "src")
+        if src_dir in sys.path:
+            sys.path.remove(src_dir)
         self._instance = None
-        self._module   = None
+        self._module = None
         logger.info(f"[{self.manifest.name}] Trusted déchargé")
 
     # ──────────────────────────────────────────
@@ -230,21 +254,21 @@ class TrustedRunner:
 
     def status(self) -> dict:
         return {
-            "name":   self.manifest.name,
-            "mode":   "trusted",
+            "name": self.manifest.name,
+            "mode": "trusted",
             "loaded": self._instance is not None,
             "uptime": round(self.uptime, 1) if self.uptime else None,
             "limits": {
-                "timeout_s":     self.manifest.resources.timeout_seconds,
+                "timeout_s": self.manifest.resources.timeout_seconds,
                 "max_memory_mb": self.manifest.resources.max_memory_mb,
-                "max_disk_mb":   self.manifest.resources.max_disk_mb,
+                "max_disk_mb": self.manifest.resources.max_disk_mb,
                 "rate_limit": {
-                    "calls":          self.manifest.resources.rate_limit.calls,
+                    "calls": self.manifest.resources.rate_limit.calls,
                     "period_seconds": self.manifest.resources.rate_limit.period_seconds,
                 },
                 "filesystem": {
                     "allowed": self.manifest.filesystem.allowed_paths,
-                    "denied":  self.manifest.filesystem.denied_paths,
+                    "denied": self.manifest.filesystem.denied_paths,
                 },
             },
         }

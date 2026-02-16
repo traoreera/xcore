@@ -1,11 +1,10 @@
+from loggers import get_logger
+
 from ..conf import cfg
 
 try:
-    from loggers.logger_config import get_logger, logging
-
-    get_logger("Manager").info("Starting plManager")
     logger = get_logger(
-        "Manager",
+        module_name="Manager",
         log_file=cfg.custom_config["log"]["file"],
         console=cfg.custom_config["log"]["console"],
     )
@@ -13,7 +12,9 @@ try:
 except ImportError:
     import logging
 
-    logger = logging.getLogger()
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
 
 
-__all__ = ["get_logger", "logger"]
+if __name__ == "__main__":
+    logger.info("Manager started")

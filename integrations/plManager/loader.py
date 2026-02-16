@@ -1,3 +1,18 @@
+"""
+Loader system for xcore
+@author: traoreera
+```python
+    from integrations import Loader
+    from xcore.appcfg import logger
+    load = Loader(
+    directory = "plugins",
+    entry_point = "run",
+    logger = logger
+    app = app,
+    )
+```
+"""
+
 import asyncio
 import importlib
 import json
@@ -7,17 +22,18 @@ import pkgutil
 import sys
 from typing import Any, Dict, List
 
+from xcore.appcfg import xhooks
 from xcore.hooks.hooks import Event
+
 from ..plManager.installer import Installer
 from ..plManager.repository import Repository
 from ..plManager.validator import Validator
 from ..schemas.plugins import Plugin
 from ..tools.error import Error
-from xcore.appcfg import xhooks
 
 
 class Loader(Repository):
-    """Chargeur et exécuteur asynchrone des plugins (compatible FastAPI)"""
+    """Load xcore_module for xcore core"""
 
     def __init__(
         self,
@@ -283,12 +299,6 @@ class Loader(Repository):
 
         # --- Sauvegarde des routes natives (FastAPI core) ---
         base_routes = list(self.app.routes)
-        base_paths = {
-            self._get_route_signature(r)
-            for r in base_routes
-            if self._get_route_signature(r) is not None
-        }
-
         # --- Purge des anciennes routes plugin ---
         before = len(self.app.routes)
         # Conserver uniquement les routes de base

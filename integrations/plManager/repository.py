@@ -1,13 +1,10 @@
+import logging
 from typing import Any
 
-from sqlalchemy.orm import session
-
-from ..crud.plugin import PluginsCrud
-from ..db import get_db
-from ..plManager import logger
-from ..schemas.plugins import Plugin
-
-from . import logging
+from integrations.crud.plugin import PluginsCrud
+from integrations.db import get_db
+from integrations.plManager import logger
+from integrations.schemas.plugins import Plugin
 
 
 class Repository:

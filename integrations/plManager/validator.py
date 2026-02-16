@@ -4,7 +4,7 @@ from . import logger
 
 
 class Validator:
-    """Valide la structure et les métadonnées d’un plugin."""
+    """xcore_mds validations for app."""
 
     def __init__(self) -> None:
 

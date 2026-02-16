@@ -212,15 +212,18 @@ class ServiceManager:
         logger.info(
             f"[ServiceManager] Auto-restart activé (max {max_retries} tentatives/service)"
         )
+        printing = True
         while serviced.running:
             for name, service in list(self.services.items()):
                 alive = service.thread and service.thread.is_alive()
                 if not service.running or not alive:
                     count = self.restart_attempts.get(name, 0)
                     if count >= max_retries:
-                        logger.error(
-                            f"[AutoRestart] ✖ '{name}' a dépassé {max_retries} tentatives, arrêt du suivi."
-                        )
+                        if printing:
+                            logger.error(
+                                f"[AutoRestart] ✖ '{name}' a dépassé {max_retries} tentatives, arrêt du suivi."
+                            )
+                        printing = False
                         continue
                     logger.warning(
                         f"[AutoRestart] ⚠ '{name}' inactif → tentative {count + 1}/{max_retries}"

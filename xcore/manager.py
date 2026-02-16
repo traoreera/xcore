@@ -9,15 +9,16 @@ import asyncio
 import os
 import pkgutil
 import time
-from pathlib import Path
-
 from logging import Logger
+from pathlib import Path
 from venv import logger
-from xcore.sandbox.manager import PluginManager
-from xcore.sandbox.sandbox.supervisor import SupervisorConfig
-from xcore.sandbox.sandbox.snapshot import Snapshot
 
-logger =Logger("xcore.manager")
+from xcore.sandbox.manager import PluginManager
+from xcore.sandbox.sandbox.snapshot import Snapshot
+from xcore.sandbox.sandbox.supervisor import SupervisorConfig
+
+logger = Logger("xcore.manager")
+
 
 class Manager:
     """
@@ -31,31 +32,32 @@ class Manager:
         self,
         app,
         base_routes,
-        plugins_dir:    str   = "plugins",
-        secret_key:     bytes = b"change-me-in-production",
-        services:       dict  = None,
-        interval:       int   = 2,
-        strict_trusted: bool  = True,
+        plugins_dir: str = "plugins",
+        secret_key: bytes = b"change-me-in-production",
+        services: dict = None,
+        interval: int = 2,
+        strict_trusted: bool = True,
     ):
-        self.app         = app
+        self.app = app
         self.plugins_dir = plugins_dir
         self.base_routes = list(base_routes)
-        self.interval    = interval
-        self.running     = False
+        self.interval = interval
+        self.running = False
 
         # ── Nouveau PluginManager ──────────────────
         self.plugin_manager = PluginManager(
-            plugins_dir    = plugins_dir,
-            secret_key     = secret_key,
-            services       = services or {},
-            sandbox_config = SupervisorConfig(
-                timeout       = 10.0,
-                max_restarts  = 3,
-                restart_delay = 1.0,
+            plugins_dir=plugins_dir,
+            secret_key=secret_key,
+            services=services or {},
+            sandbox_config=SupervisorConfig(
+                timeout=10.0,
+                max_restarts=3,
+                restart_delay=1.0,
             ),
-            strict_trusted = strict_trusted,
+            strict_trusted=strict_trusted,
+            app=app,
         )
-
+        print(self.plugin_manager._services)
         self.snapshot = Snapshot()
 
         # Crée le dossier plugins s'il n'existe pas
@@ -95,9 +97,7 @@ class Manager:
         from xcore.sandbox.router import router as plugin_router
 
         # Vérifie qu'il n'est pas déjà attaché
-        existing_prefixes = [
-            r.path for r in self.app.routes if hasattr(r, "path")
-        ]
+        existing_prefixes = [r.path for r in self.app.routes if hasattr(r, "path")]
         if "/plugin/{plugin_name}/{action}" not in existing_prefixes:
             self.app.include_router(plugin_router)
             self.app.openapi_schema = None

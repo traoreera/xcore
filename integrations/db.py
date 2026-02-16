@@ -8,11 +8,14 @@ from .plManager import logger
 Base: registry = declarative_base()
 
 
+try:
+    engine = create_engine(Database.URL, echo=False, pool_timeout=10)
+except ProgrammingError:
+    engine = None
+
+
 def get_db():
-    try:
-        engine = create_engine(Database.URL, echo=False, pool_timeout=10)
-    except ProgrammingError:
-        engine = None
+    """this database is for only admin db user and plugin"""
 
     if engine:
         Base.metadata.create_all(engine)
@@ -23,8 +26,7 @@ def get_db():
             yield session
         finally:
             session.close()
-    else:
-        return None
+    return None
 
 
 logger.info("🗃️  Module de session de base de données chargé avec succès")

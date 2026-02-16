@@ -15,22 +15,22 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-
 # ══════════════════════════════════════════════
 # Enums
 # ══════════════════════════════════════════════
 
+
 class ExecutionMode(str, Enum):
-    TRUSTED   = "trusted"
+    TRUSTED = "trusted"
     SANDBOXED = "sandboxed"
-    LEGACY    = "legacy"
+    LEGACY = "legacy"
 
 
 class LogLevel(str, Enum):
-    DEBUG   = "DEBUG"
-    INFO    = "INFO"
+    DEBUG = "DEBUG"
+    INFO = "INFO"
     WARNING = "WARNING"
-    ERROR   = "ERROR"
+    ERROR = "ERROR"
 
 
 # ══════════════════════════════════════════════
@@ -40,56 +40,56 @@ class LogLevel(str, Enum):
 _TRUSTED_DEFAULTS = {
     "resources": {
         "timeout_seconds": 30,
-        "max_memory_mb":   0,       # illimité
-        "max_disk_mb":     0,       # illimité
+        "max_memory_mb": 0,  # illimité
+        "max_disk_mb": 0,  # illimité
         "rate_limit": {
-            "calls":          1000,
+            "calls": 1000,
             "period_seconds": 60,
         },
     },
     "runtime": {
         "log_level": "INFO",
         "health_check": {
-            "enabled":          False,  # pas de subprocess à surveiller
+            "enabled": False,  # pas de subprocess à surveiller
             "interval_seconds": 60,
-            "timeout_seconds":  5,
+            "timeout_seconds": 5,
         },
         "retry": {
-            "max_attempts":    1,     # crash trusted = crash contrôlé, pas de retry
+            "max_attempts": 1,  # crash trusted = crash contrôlé, pas de retry
             "backoff_seconds": 0.0,
         },
     },
     "filesystem": {
-        "allowed_paths": ["*"],     # accès complet
-        "denied_paths":  [],
+        "allowed_paths": ["*"],  # accès complet
+        "denied_paths": [],
     },
 }
 
 _SANDBOXED_DEFAULTS = {
     "resources": {
         "timeout_seconds": 10,
-        "max_memory_mb":   128,
-        "max_disk_mb":     50,
+        "max_memory_mb": 128,
+        "max_disk_mb": 50,
         "rate_limit": {
-            "calls":          100,
+            "calls": 100,
             "period_seconds": 60,
         },
     },
     "runtime": {
         "log_level": "INFO",
         "health_check": {
-            "enabled":          True,
+            "enabled": True,
             "interval_seconds": 30,
-            "timeout_seconds":  3,
+            "timeout_seconds": 3,
         },
         "retry": {
-            "max_attempts":    3,
+            "max_attempts": 3,
             "backoff_seconds": 0.5,
         },
     },
     "filesystem": {
         "allowed_paths": ["data/"],
-        "denied_paths":  ["src/"],
+        "denied_paths": ["src/"],
     },
 }
 
@@ -105,9 +105,10 @@ def _defaults_for(mode: ExecutionMode) -> dict:
 # Sous-sections
 # ══════════════════════════════════════════════
 
+
 @dataclass
 class RateLimitConfig:
-    calls:          int   = 100
+    calls: int = 100
     period_seconds: float = 60.0
 
     @classmethod
@@ -120,15 +121,17 @@ class RateLimitConfig:
 
 @dataclass
 class ResourceConfig:
-    timeout_seconds: float        = 10.0
-    max_memory_mb:   int          = 128
-    max_disk_mb:     int          = 50
-    rate_limit:      RateLimitConfig = field(default_factory=RateLimitConfig)
+    timeout_seconds: float = 10.0
+    max_memory_mb: int = 128
+    max_disk_mb: int = 50
+    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
 
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "ResourceConfig":
         return cls(
-            timeout_seconds=float(d.get("timeout_seconds", defaults["timeout_seconds"])),
+            timeout_seconds=float(
+                d.get("timeout_seconds", defaults["timeout_seconds"])
+            ),
             max_memory_mb=int(d.get("max_memory_mb", defaults["max_memory_mb"])),
             max_disk_mb=int(d.get("max_disk_mb", defaults["max_disk_mb"])),
             rate_limit=RateLimitConfig.from_dict(
@@ -140,37 +143,43 @@ class ResourceConfig:
 
 @dataclass
 class HealthCheckConfig:
-    enabled:          bool  = True
+    enabled: bool = True
     interval_seconds: float = 30.0
-    timeout_seconds:  float = 3.0
+    timeout_seconds: float = 3.0
 
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "HealthCheckConfig":
         return cls(
             enabled=bool(d.get("enabled", defaults["enabled"])),
-            interval_seconds=float(d.get("interval_seconds", defaults["interval_seconds"])),
-            timeout_seconds=float(d.get("timeout_seconds", defaults["timeout_seconds"])),
+            interval_seconds=float(
+                d.get("interval_seconds", defaults["interval_seconds"])
+            ),
+            timeout_seconds=float(
+                d.get("timeout_seconds", defaults["timeout_seconds"])
+            ),
         )
 
 
 @dataclass
 class RetryConfig:
-    max_attempts:    int   = 3
+    max_attempts: int = 3
     backoff_seconds: float = 0.5
 
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "RetryConfig":
         return cls(
             max_attempts=int(d.get("max_attempts", defaults["max_attempts"])),
-            backoff_seconds=float(d.get("backoff_seconds", defaults["backoff_seconds"])),
+            backoff_seconds=float(
+                d.get("backoff_seconds", defaults["backoff_seconds"])
+            ),
         )
 
 
 @dataclass
 class RuntimeConfig:
-    log_level:    LogLevel          = LogLevel.INFO
+    log_level: LogLevel = LogLevel.INFO
     health_check: HealthCheckConfig = field(default_factory=HealthCheckConfig)
-    retry:        RetryConfig       = field(default_factory=RetryConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
 
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "RuntimeConfig":
@@ -184,22 +193,20 @@ class RuntimeConfig:
             health_check=HealthCheckConfig.from_dict(
                 d.get("health_check", {}), defaults["health_check"]
             ),
-            retry=RetryConfig.from_dict(
-                d.get("retry", {}), defaults["retry"]
-            ),
+            retry=RetryConfig.from_dict(d.get("retry", {}), defaults["retry"]),
         )
 
 
 @dataclass
 class FilesystemConfig:
     allowed_paths: list[str] = field(default_factory=lambda: ["data/"])
-    denied_paths:  list[str] = field(default_factory=lambda: ["src/"])
+    denied_paths: list[str] = field(default_factory=lambda: ["src/"])
 
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "FilesystemConfig":
         return cls(
             allowed_paths=d.get("allowed_paths", defaults["allowed_paths"]),
-            denied_paths=d.get("denied_paths",   defaults["denied_paths"]),
+            denied_paths=d.get("denied_paths", defaults["denied_paths"]),
         )
 
 
@@ -207,27 +214,30 @@ class FilesystemConfig:
 # Manifeste complet
 # ══════════════════════════════════════════════
 
+
 @dataclass
 class PluginManifest:
     # ── Identité ──────────────────────────────
-    name:              str
-    version:           str
-    execution_mode:    ExecutionMode
-    author:            str       = "unknown"
-    description:       str       = ""
-    framework_version: str       = ">=1.0"
-    entry_point:       str       = "src/main.py"
-    allowed_imports:   list[str] = field(default_factory=list)
+    name: str
+    version: str
+    execution_mode: ExecutionMode
+    author: str = "unknown"
+    description: str = ""
+    framework_version: str = ">=1.0"
+    entry_point: str = "src/main.py"
+    allowed_imports: list[str] = field(default_factory=list)
 
     # ── Config prod (defaults selon mode) ─────
-    resources:  ResourceConfig   = field(default_factory=ResourceConfig)
-    runtime:    RuntimeConfig    = field(default_factory=RuntimeConfig)
-    env:        dict[str, str]   = field(default_factory=dict)
+    resources: ResourceConfig = field(default_factory=ResourceConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    env: dict[str, str] = field(default_factory=dict)
     filesystem: FilesystemConfig = field(default_factory=FilesystemConfig)
 
     # ── Divers ────────────────────────────────
-    extra:      dict[str, Any] = field(default_factory=dict)
-    plugin_dir: Path           = field(default_factory=Path, repr=False)
+    extra: dict[str, Any] = field(default_factory=dict)
+    plugin_dir: Path = field(default_factory=Path, repr=False)
+
+    requires: list[str] = field(default_factory=list)
 
     def is_trusted(self) -> bool:
         return self.execution_mode in (ExecutionMode.TRUSTED, ExecutionMode.LEGACY)
@@ -243,6 +253,7 @@ class PluginManifest:
 # ══════════════════════════════════════════════
 # Erreurs
 # ══════════════════════════════════════════════
+
 
 class ManifestError(Exception):
     pass
@@ -277,6 +288,7 @@ def _resolve_env_dict(raw: dict) -> dict[str, str]:
 # Chargement
 # ══════════════════════════════════════════════
 
+
 def _load_raw(plugin_dir: Path) -> dict[str, Any]:
     yaml_path = plugin_dir / "plugin.yaml"
     json_path = plugin_dir / "plugin.json"
@@ -284,13 +296,13 @@ def _load_raw(plugin_dir: Path) -> dict[str, Any]:
     if yaml_path.exists():
         try:
             import yaml
+
             with open(yaml_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
-        except ImportError as e :
+        except ImportError as e:
             raise ManifestError(
-                "plugin.yaml trouvé mais pyyaml non installé. "
-                "pip install pyyaml"
-            ) from e 
+                "plugin.yaml trouvé mais pyyaml non installé. pip install pyyaml"
+            ) from e
         except Exception as e:
             raise ManifestError(f"Impossible de lire plugin.yaml : {e}") from e
 
@@ -302,8 +314,7 @@ def _load_raw(plugin_dir: Path) -> dict[str, Any]:
             raise ManifestError(f"Impossible de lire plugin.json : {e}") from e
 
     raise ManifestError(
-        f"Aucun manifeste trouvé dans {plugin_dir} "
-        "(plugin.yaml ou plugin.json requis)"
+        f"Aucun manifeste trouvé dans {plugin_dir} (plugin.yaml ou plugin.json requis)"
     )
 
 
@@ -315,8 +326,10 @@ def _inject_envfile(raw: dict, plugin_dir: Path):
 
         load_dotenv(
             dotenv_path=find_dotenv(
-                filename=envfile_path,raise_error_if_not_found=False)
+                filename=envfile_path, raise_error_if_not_found=False
+            )
         )
+
 
 def load_manifest(plugin_dir: Path) -> PluginManifest:
     """
@@ -334,11 +347,11 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
     raw_mode = raw.get("execution_mode", "legacy").lower()
     try:
         mode = ExecutionMode(raw_mode)
-    except ValueError as e :
+    except ValueError as e:
         raise ManifestError(
             f"execution_mode invalide : {raw_mode!r}. "
             f"Valeurs acceptées : {[m.value for m in ExecutionMode]}"
-        ) from e 
+        ) from e
 
     # Defaults selon le mode — appliqués AVANT de lire le YAML
     # → le YAML surcharge uniquement les valeurs explicitement déclarées
@@ -352,9 +365,18 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         raise
 
     known_keys = {
-        "name", "version", "execution_mode", "author", "description",
-        "framework_version", "entry_point", "allowed_imports",
-        "resources", "runtime", "env", "filesystem",
+        "name",
+        "version",
+        "execution_mode",
+        "author",
+        "description",
+        "framework_version",
+        "entry_point",
+        "allowed_imports",
+        "resources",
+        "runtime",
+        "env",
+        "filesystem",
     }
 
     return PluginManifest(
@@ -369,9 +391,7 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         resources=ResourceConfig.from_dict(
             raw.get("resources", {}), defaults["resources"]
         ),
-        runtime=RuntimeConfig.from_dict(
-            raw.get("runtime", {}), defaults["runtime"]
-        ),
+        runtime=RuntimeConfig.from_dict(raw.get("runtime", {}), defaults["runtime"]),
         env=resolved_env,
         filesystem=FilesystemConfig.from_dict(
             raw.get("filesystem", {}), defaults["filesystem"]
@@ -401,10 +421,12 @@ def check_framework_compatibility(manifest: PluginManifest, core_version: str) -
         part = part.strip()
         for op in (">=", "<=", ">", "<", "=="):
             if part.startswith(op):
-                target = _parse_version(part[len(op):])
+                target = _parse_version(part[len(op) :])
                 ok = {
-                    ">=": core >= target, "<=": core <= target,
-                    ">":  core >  target, "<":  core <  target,
+                    ">=": core >= target,
+                    "<=": core <= target,
+                    ">": core > target,
+                    "<": core < target,
                     "==": core == target,
                 }[op]
                 if not ok:

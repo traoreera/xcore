@@ -1,19 +1,23 @@
+""" """
+
 import pathlib
 import subprocess
 import sys
 
-from ..tools.error import Error
+from integrations.tools import Error
 
 from . import logger
 
 
 class Installer:
-    """Gère l'installation et la configuration des environnements plugins."""
+    """Manager des environnements plugins."""
 
     def __call__(self, path: pathlib.Path) -> dict:
+        """install virtualenv for all plugins plugins"""
         logger.info("Installation des plugins")
         return Installer.__install_plugin_env(path)
 
+    @Error.exception_handler
     @staticmethod
     def __find_site_packages(env_path: pathlib.Path) -> pathlib.Path | None:
         # Linux/macOS (venv classique)

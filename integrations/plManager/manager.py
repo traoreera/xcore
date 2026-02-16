@@ -2,14 +2,15 @@ import os
 import pkgutil
 import time
 
+from integrations.plManager.loader import Loader
+from integrations.plManager.reloader import Reloader
+from integrations.plManager.snapshot import Snapshot
+
 from . import logger
-from .loader import Loader
-from .reloader import Reloader
-from .snapshot import Snapshot
 
 
 class Manager:
-    """Orchestrateur principal du système de plugins."""
+    """Main orchestrator of the plugin system."""
 
     def __init__(
         self,
