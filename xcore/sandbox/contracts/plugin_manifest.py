@@ -311,7 +311,8 @@ def _inject_envfile(raw: dict, plugin_dir: Path):
     envfile_path = plugin_dir / raw.get("envfile", ".env")
     # import dotenv
     if raw.get("inject", False):
-        from dotenv import load_dotenv, find_dotenv
+        from dotenv import find_dotenv, load_dotenv
+
         load_dotenv(
             dotenv_path=find_dotenv(
                 filename=envfile_path,raise_error_if_not_found=False)
