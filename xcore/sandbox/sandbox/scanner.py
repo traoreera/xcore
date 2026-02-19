@@ -12,7 +12,6 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 # ──────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────
@@ -20,32 +19,64 @@ from pathlib import Path
 # Modules interdits par défaut pour les plugins Sandboxed
 DEFAULT_FORBIDDEN_MODULES: set[str] = {
     # Accès système dangereux
-    "os",           "sys",          "subprocess",   "shutil",
-    "signal",       "ctypes",       "cffi",         "mmap",
-
+    "os",
+    "path",
+    "sys",
+    "subprocess",
+    "shutil",
+    "signal",
+    "ctypes",
+    "cffi",
+    "mmap",
     # Réseau non contrôlé
-    "socket",       "ssl",          "http",         "urllib",
-    "httpx",        "requests",     "aiohttp",       "websockets",
-
+    "socket",
+    "ssl",
+    "http",
+    "urllib",
+    "httpx",
+    "requests",
+    "aiohttp",
+    "websockets",
     # Introspection / code dynamique
-    "importlib",    "imp",          "builtins",      "inspect",
-    "gc",           "tracemalloc",  "dis",
-
+    "importlib",
+    "imp",
+    "builtins",
+    "inspect",
+    "gc",
+    "tracemalloc",
+    "dis",
     # Accès fichiers hors data/
-    "tempfile",     "glob",
-
+    "tempfile",
+    "glob",
     # Exécution de code
-    "exec",         "eval",         "compile",
-    "pickle",       "shelve",       "marshal",
+    "exec",
+    "eval",
+    "compile",
+    "pickle",
+    "shelve",
+    "marshal",
 }
 
 # Modules toujours autorisés même pour Sandboxed
 DEFAULT_ALLOWED_MODULES: set[str] = {
-    "json",     "re",           "math",         "random",
-    "datetime", "time",         "pathlib",      "typing",
-    "dataclasses", "enum",      "functools",    "itertools",
-    "collections", "string",    "hashlib",      "base64",
-    "asyncio",  "logging",
+    "json",
+    "re",
+    "math",
+    "random",
+    "datetime",
+    "time",
+    "pathlib",
+    "typing",
+    "dataclasses",
+    "enum",
+    "functools",
+    "itertools",
+    "collections",
+    "string",
+    "hashlib",
+    "base64",
+    "asyncio",
+    "logging",
 }
 
 # Patterns de code dangereux (nom de fonction/attribut)
@@ -54,7 +85,7 @@ DANGEROUS_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bexec\s*\("),
     re.compile(r"\beval\s*\("),
     re.compile(r"\bcompile\s*\("),
-    re.compile(r"\bopen\s*\("),          # accès fichier direct sans pathlib
+    re.compile(r"\bopen\s*\("),  # accès fichier direct sans pathlib
     re.compile(r"\bgetattr\s*\(.+,\s*['\"]__"),  # accès dunder via getattr
 ]
 
@@ -63,12 +94,13 @@ DANGEROUS_PATTERNS: list[re.Pattern] = [
 # Résultats
 # ──────────────────────────────────────────────
 
+
 @dataclass
 class ScanResult:
-    passed:   bool              = True
-    errors:   list[str]         = field(default_factory=list)
-    warnings: list[str]         = field(default_factory=list)
-    scanned:  list[str]         = field(default_factory=list)  # fichiers analysés
+    passed: bool = True
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    scanned: list[str] = field(default_factory=list)  # fichiers analysés
 
     def add_error(self, msg: str) -> None:
         self.errors.append(msg)
@@ -88,6 +120,7 @@ class ScanResult:
 # Scanner
 # ──────────────────────────────────────────────
 
+
 class ASTScanner:
     """
     Analyse statique des fichiers Python d'un plugin Sandboxed.
@@ -96,10 +129,10 @@ class ASTScanner:
     def __init__(
         self,
         extra_forbidden: set[str] | None = None,
-        extra_allowed:   set[str] | None = None,
+        extra_allowed: set[str] | None = None,
     ) -> None:
         self.forbidden = DEFAULT_FORBIDDEN_MODULES | (extra_forbidden or set())
-        self.allowed   = DEFAULT_ALLOWED_MODULES   | (extra_allowed   or set())
+        self.allowed = DEFAULT_ALLOWED_MODULES | (extra_allowed or set())
 
     # ──────────────────────────────────────────
     # Point d'entrée public
@@ -114,8 +147,8 @@ class ASTScanner:
         Scanne tous les fichiers .py dans plugin_dir/src/.
         whitelist : modules supplémentaires autorisés déclarés dans plugin.yaml
         """
-        result   = ScanResult()
-        src_dir  = plugin_dir / "src"
+        result = ScanResult()
+        src_dir = plugin_dir / "src"
         extra_ok = set(whitelist or [])
 
         if not src_dir.exists():
@@ -145,7 +178,7 @@ class ASTScanner:
     ) -> None:
         try:
             source = path.read_text(encoding="utf-8")
-            tree   = ast.parse(source, filename=str(path))
+            tree = ast.parse(source, filename=str(path))
         except SyntaxError as e:
             result.add_error(f"{path.name}: erreur de syntaxe : {e}")
             return
@@ -154,9 +187,9 @@ class ASTScanner:
             return
 
         visitor = _ImportVisitor(
-            forbidden     = self.forbidden,
-            allowed       = self.allowed | extra_allowed,
-            filename      = path.name,
+            forbidden=self.forbidden,
+            allowed=self.allowed | extra_allowed,
+            filename=path.name,
         )
         visitor.visit(tree)
         result.errors.extend(visitor.errors)
@@ -179,18 +212,18 @@ class ASTScanner:
 # Visitor AST interne
 # ──────────────────────────────────────────────
 
-class _ImportVisitor(ast.NodeVisitor):
 
+class _ImportVisitor(ast.NodeVisitor):
     def __init__(
         self,
         forbidden: set[str],
-        allowed:   set[str],
-        filename:  str,
+        allowed: set[str],
+        filename: str,
     ) -> None:
         self.forbidden = forbidden
-        self.allowed   = allowed
-        self.filename  = filename
-        self.errors:   list[str] = []
+        self.allowed = allowed
+        self.filename = filename
+        self.errors: list[str] = []
         self.warnings: list[str] = []
 
     def _check_module(self, module: str, lineno: int) -> None:

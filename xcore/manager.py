@@ -1,8 +1,5 @@
 """
-manager.py
-───────────
-Orchestrateur principal — point d'entrée unique du système de plugins.
-Connecte le PluginManager (Trusted + Sandbox) au cycle de vie FastAPI.
+manager.py — Orchestrateur principal du système de plugins.
 """
 
 import asyncio
@@ -11,7 +8,6 @@ import pkgutil
 import time
 from logging import Logger
 from pathlib import Path
-from venv import logger
 
 from xcore.sandbox.manager import PluginManager
 from xcore.sandbox.sandbox.snapshot import Snapshot
@@ -23,9 +19,6 @@ logger = Logger("xcore.manager")
 class Manager:
     """
     Orchestrateur principal du système de plugins.
-
-    Remplace l'ancien Loader/Reloader par le nouveau PluginManager
-    qui gère nativement les modes Trusted et Sandboxed.
     """
 
     def __init__(
@@ -44,11 +37,14 @@ class Manager:
         self.interval = interval
         self.running = False
 
-        # ── Nouveau PluginManager ──────────────────
+        # Le dict services est stocké ici — update_services() le met à jour
+        # ET le pousse dans plugin_manager avant load_all()
+        self._services = services or {}
+
         self.plugin_manager = PluginManager(
             plugins_dir=plugins_dir,
             secret_key=secret_key,
-            services=services or {},
+            services=self._services,  # référence partagée
             sandbox_config=SupervisorConfig(
                 timeout=10.0,
                 max_restarts=3,
@@ -57,103 +53,90 @@ class Manager:
             strict_trusted=strict_trusted,
             app=app,
         )
-        print(self.plugin_manager._services)
+
         self.snapshot = Snapshot()
 
-        # Crée le dossier plugins s'il n'existe pas
         if not os.path.exists(self.plugins_dir):
             os.makedirs(self.plugins_dir, exist_ok=True)
             with open(os.path.join(self.plugins_dir, "__init__.py"), "w") as f:
                 f.write("# created automatically\n")
 
-    # ──────────────────────────────────────────────
-    # Démarrage
-    # ──────────────────────────────────────────────
+    # ── Services ──────────────────────────────────────────────
+
+    def update_services(self, services: dict) -> None:
+        """
+        Injecte les services dans le PluginManager.
+        À appeler dans le lifespan APRÈS integration.init()
+        et AVANT manager.start().
+
+        Met à jour à la fois self._services et plugin_manager._services
+        pour que les plugins y aient accès dès leur chargement.
+        """
+        self._services.update(services)
+        # Mise à jour directe du dict interne du PluginManager
+        self.plugin_manager._services.update(services)
+        logger.info(f"Services injectés dans PluginManager : {list(services.keys())}")
+
+    # ── Démarrage ─────────────────────────────────────────────
 
     async def start(self) -> dict:
         """
         Charge tous les plugins et attache la route unique à FastAPI.
-        À appeler dans le lifespan/startup de FastAPI.
+        Les services doivent être injectés via update_services() avant cet appel.
         """
-        # 1. Charge tous les plugins (Trusted + Sandboxed)
         report = await self.plugin_manager.load_all()
         logger.info(
             f"Plugins chargés: {len(report['loaded'])} | "
             f"échecs: {len(report['failed'])} | "
             f"ignorés: {len(report['skipped'])}"
         )
-
-        # 2. Attache la route unique /plugin/{name}/{action}
         self._attach_router()
-
-        # 3. Expose le plugin_manager dans app.state
-        #    (nécessaire pour la dépendance FastAPI dans router.py)
         self.app.state.plugin_manager = self.plugin_manager
-
         return report
 
     def _attach_router(self) -> None:
-        """Attache le router /plugin/* à l'application FastAPI."""
         from xcore.sandbox.router import router as plugin_router
 
-        # Vérifie qu'il n'est pas déjà attaché
-        existing_prefixes = [r.path for r in self.app.routes if hasattr(r, "path")]
-        if "/plugin/{plugin_name}/{action}" not in existing_prefixes:
+        existing = [r.path for r in self.app.routes if hasattr(r, "path")]
+        if "/plugin/{plugin_name}/{action}" not in existing:
             self.app.include_router(plugin_router)
             self.app.openapi_schema = None
             logger.info("Route /plugin/{name}/{action} attachée")
 
-    # ──────────────────────────────────────────────
-    # Appel direct (sans passer par HTTP)
-    # ──────────────────────────────────────────────
+    # ── Appel direct ──────────────────────────────────────────
 
     async def call(self, plugin_name: str, action: str, payload: dict) -> dict:
-        """
-        Appelle un plugin directement depuis le code Python du Core.
-        Même interface que la route HTTP, sans overhead réseau.
-        """
         return await self.plugin_manager.call(plugin_name, action, payload)
 
-    # ──────────────────────────────────────────────
-    # Watcher (surveillance des changements)
-    # ──────────────────────────────────────────────
+    # ── Watcher ───────────────────────────────────────────────
 
-    def start_watching(self, service) -> None:
-        """Surveille le dossier et recharge en cas de changement."""
+    def start_watching(self) -> None:
         last_snapshot = self.snapshot.create(self.plugins_dir)
-        while service.running:
-            try:
-                current_snapshot = self.snapshot.create(self.plugins_dir)
-                if current_snapshot != last_snapshot:
-                    logger.info("Changement détecté → rechargement des plugins")
-                    asyncio.run(self.plugin_manager.shutdown())
-                    asyncio.run(self.plugin_manager.load_all())
-                    last_snapshot = current_snapshot
-                time.sleep(self.interval)
-            except Exception as e:
-                logger.error(f"Erreur watcher : {e}")
-                time.sleep(self.interval)
+        try:
+            current_snapshot = self.snapshot.create(self.plugins_dir)
+            if current_snapshot != last_snapshot:
+                logger.info("Changement détecté → rechargement des plugins")
+                asyncio.run(self.plugin_manager.shutdown())
+                asyncio.run(self.plugin_manager.load_all())
+                last_snapshot = current_snapshot
+            time.sleep(self.interval)
+        except Exception as e:
+            logger.error(f"Erreur watcher : {e}")
+            time.sleep(self.interval)
 
-    # ──────────────────────────────────────────────
-    # Arrêt
-    # ──────────────────────────────────────────────
+    # ── Arrêt ─────────────────────────────────────────────────
 
     async def stop(self) -> None:
-        """Arrête proprement tous les plugins."""
         self.running = False
         await self.plugin_manager.shutdown()
         logger.info("Manager arrêté")
 
-    # ──────────────────────────────────────────────
-    # Utilitaires
-    # ──────────────────────────────────────────────
+    # ── Utilitaires ───────────────────────────────────────────
 
     def status(self) -> dict:
-        """Retourne le status de tous les plugins."""
         return self.plugin_manager.status()
 
     def return_name(self) -> list[str]:
-        """Retourne la liste des plugins détectés sur le disque."""
         if not os.path.exists(self.plugins_dir):
             return []
         return [name for _, name, _ in pkgutil.iter_modules([self.plugins_dir])]

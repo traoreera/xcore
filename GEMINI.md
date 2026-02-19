@@ -1,77 +1,105 @@
-# GEMINI.md: Project Overview
+# GEMINI Project Analysis: xcore
 
-## Project Overview
+This document provides a comprehensive overview of the `xcore` project, its architecture, and development workflows, intended to be used as a quick-start guide and context for development.
 
-This project, named "xcore," is a sophisticated Python-based framework for FastAPI designed to dynamically manage plugins, execute scheduled tasks, and provide a comprehensive administration and monitoring interface. The framework is built to allow for hot-reloading of plugins, isolation of plugins in a sandboxed environment, and detailed monitoring of their performance.
+## 1. Project Overview
 
-The core of the project is a `Manager` class that orchestrates the entire plugin lifecycle, from loading and unloading to execution and resource management. The framework is designed to be highly modular, with a clear separation of concerns between the core application and the plugins.
+**xcore** is a sophisticated, plugin-driven framework built on top of **FastAPI**. Its primary purpose is to provide a stable core system that can be dynamically extended with sandboxed plugins.
 
-### Key Technologies
+Key features include:
+*   **Dynamic Plugin Management**: Plugins can be loaded, reloaded, and managed at runtime without server restarts.
+*   **Service Integration**: A centralized `Integration` layer manages access to external services like databases (using SQLAlchemy), caches (Redis), and more, based on a declarative YAML configuration (`integration.yaml`).
+*   **Sandboxing**: Plugins are executed in isolated environments to control resource usage (CPU, memory) and prevent crashes from affecting the main application.
+*   **Task Scheduling**: An integrated scheduler (`apscheduler`) allows plugins to define and run background tasks.
+*   **Administration & Monitoring**: The framework exposes API endpoints for monitoring the status of the core application, services, and loaded plugins.
 
-*   **Backend Framework:** FastAPI
-*   **Plugin Management:** Custom-built plugin management system with support for "Trusted" and "Sandboxed" plugins.
-*   **Database:** SQLAlchemy with Alembic for migrations.
-*   **Task Scheduling:** APScheduler for running background tasks.
-*   **Dependency Management:** Poetry
-*   **Configuration:** Pydantic and `.env` files.
-*   **Security:** Passlib for password hashing, JWT for authentication.
+### Core Technologies
+*   **Backend**: Python 3.11+ with FastAPI
+*   **Dependency Management**: Poetry
+*   **Database**: SQLAlchemy with Alembic for migrations
+*   **Web Server**: Uvicorn
+*   **Containerization**: Docker and Docker Compose
+*   **Task Scheduling**: APScheduler
+*   **Tooling**: A comprehensive `Makefile` orchestrates most development tasks.
 
-### Architecture
+## 2. Building and Running
 
-The project follows a modular architecture with a central `Manager` that handles the plugin lifecycle. The application is structured as follows:
+The project uses a `Makefile` that simplifies most common operations.
 
-*   **`main.py` & `app.py`:** The entry points of the FastAPI application. `app.py` initializes the `Manager` and integrates it into the FastAPI application's lifecycle.
-*   **`xcore/`:** This directory contains the core framework components, including the `Manager`, the plugin sandbox, and other essential utilities.
-*   **`integrations/`:** This directory contains the integration logic, including the routes for managing plugins and tasks, and the database models.
-*   **`plugins/`:** This directory is where the custom plugins are located. The framework dynamically loads and manages the plugins from this directory.
-*   **`pyproject.toml`:** Defines the project dependencies and other metadata.
-*   **`README.md`:** Provides a detailed overview of the project, its features, and how to get started.
-
-## Building and Running
-
-### Prerequisites
-
-*   Python >= 3.11
-*   Poetry
-
-### Installation
-
-1.  Clone the repository:
+### Initial Setup
+1.  **Prerequisites**: Ensure you have [Poetry](https://python-poetry.org/docs/#installation) installed.
+2.  **Install Dependencies**: This command installs all required Python packages defined in `pyproject.toml`.
     ```bash
-    git clone https://github.com/traoreera/xcore.git
-    ```
-2.  Navigate to the project directory:
-    ```bash
-    cd xcore
-    ```
-3.  Install the dependencies using Poetry:
-    ```bash
-    poetry install
+    make install
     ```
 
 ### Running the Application
+*   **Development Mode**: To run the server with live auto-reloading for code changes. The application will be available at `http://0.0.0.0:8082`.
+    ```bash
+    make run-dev
+    ```
 
-To run the FastAPI application, use the following command:
+*   **Production-like Mode**: To run the server in a static mode, similar to a production environment.
+    ```bash
+    make run-st
+    ```
 
-```bash
-uvicorn main:app --reload
-```
+### Running with Docker
+*   **Development Container**: Build and run the application within a Docker container that supports auto-reload.
+    ```bash
+    make docker-dev
+    ```
 
-This will start the server, and you can access the API documentation at `http://127.0.0.1:8000/docs`.
+*   **Production Container**: Build and run the application using a production-ready setup with Gunicorn.
+    ```bash
+    make docker-prod
+    ```
 
-### Running Tests
+### Database Migrations
+The project uses `alembic` for database migrations. The migration scripts are defined in `pyproject.toml` and can be run with `poetry run`.
 
-To run the tests, you will need to install the development dependencies and then run `pytest`:
+*   **To run the main migration script**:
+    ```bash
+    poetry run migrate
+    ```
+*   **To auto-generate a migration (if available)**:
+    ```bash
+    poetry run auto_migrate
+    ```
 
-```bash
-poetry install --with dev
-pytest
-```
+## 3. Development Conventions
 
-## Development Conventions
+### Code Style and Formatting
+The project enforces a consistent code style using a suite of tools.
+*   **Tools**: `black`, `isort`, `flake8`, `autopep8`.
+*   **Automatic Formatting**: To automatically format all project files according to the defined style, run:
+    ```bash
+    make lint-fix
+    ```
+    This command should be run before committing changes.
 
-*   **Code Style:** The project uses `black` for code formatting and `flake8` for linting. The maximum line length is 88 characters.
-*   **Plugin Development:** Plugins are developed as separate modules within the `plugins/` directory. Each plugin must have a specific structure, including a `run.py` file that contains the plugin's metadata and a `Plugin` class.
-*   **Commits:** The project does not have a strict commit message format, but the commit history suggests using descriptive messages that explain the changes made.
-*   **Branching:** The `README.md` suggests using a `feature/xyz` branching model for new features.
-*   **Database Migrations:** Database migrations are managed using Alembic. The `pyproject.toml` file defines several scripts for managing migrations.
+### Testing
+Tests are written using `pytest`.
+*   **To run the test suite**:
+    ```bash
+    make test
+    ```
+
+### Plugin Management
+The framework is built around plugins, which are located in the `plugins/` directory. The `Makefile` provides helpers to manage them.
+
+*   **Adding a Plugin**: To clone a plugin from a git repository into the `plugins/` directory:
+    ```bash
+    make add-plugin PLUGIN_NAME=my-plugin-name PLUGIN_REPO=https://github.com/user/repo.git
+    ```
+
+*   **Removing a Plugin**: To delete a plugin from the `plugins/` directory:
+    ```bash
+    make rm-plugin PLUGIN_NAME=my-plugin-name
+    ```
+
+### Core Architecture
+The main application logic is initialized in `app.py`. The architecture is composed of three main parts:
+1.  **`Integration` (`integration.yaml`)**: This component is responsible for initializing and managing all external services (e.g., database connections, cache clients). It provides a service registry that other parts of the application can consume.
+2.  **`Manager` (`xcore/manager.py`)**: This is the engine of the plugin system. It discovers plugins in the `plugins/` directory, loads them, injects the services from the `Integration` layer, and manages their lifecycle.
+3.  **`FastAPI App` (`app.py`)**: This is the web layer that ties everything together. It uses a `lifespan` context manager to orchestrate the startup (initializing services, starting the plugin manager) and shutdown sequences.

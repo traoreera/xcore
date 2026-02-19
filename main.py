@@ -1,2 +1,3 @@
 from app import app, manager
-# from integrations import integrate
+
+app.description = "new feature for my project."

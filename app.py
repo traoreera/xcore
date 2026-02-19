@@ -1,96 +1,92 @@
 """
-app.py — Exemple d'intégration complète dans FastAPI
-──────────────────────────────────────────────────────
-Montre comment brancher le Manager dans ton application existante.
+app.py — Intégration FastAPI + Integration + Manager
+─────────────────────────────────────────────────────
+Ordre correct :
+  1. integration.init()              → services prêts (db, email, otp...)
+  2. core_services rempli            → db, engine, base disponibles
+  3. manager.update_services(...)    → injecté dans PluginManager avant start()
+  4. manager.start()                 → plugins chargés avec les vrais services
 """
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy.orm import declarative_base
 
-from integrations.db import Base, engine, get_db
-from integrations.routes import plugins, task
 from xcore.appcfg import xhooks
+from xcore.hooks.hooks import Event, HookManager
+from xcore.integration import Integration
+from xcore.integration.services.database import SQLAdapter
 from xcore.manager import Manager
 
-# ──────────────────────────────────────────────
-# 1. Lifespan — startup / shutdown propres
-# ──────────────────────────────────────────────
-
-CORE_SERVICES = {
-    "db": get_db,  # callable () → Generator[Session]
-    "base": Base,  # DeclarativeBase partagé pour créer les tables
-    "engine": engine,  # Engine SQLAlchemy pour create_all()
-}
+Base = declarative_base()
+_plugin_hooks = HookManager()
+integration = Integration("./integration.yaml")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Remplace les anciCORE_SERVICESens @app.on_event("startup").
-    Le Manager démarre ici, s'arrête proprement à la fin.
-    """
-    from integrations.integrate import taskRuntimer
 
+    # 1. Init des services (db, email, otp...)
+    await integration.init()
+
+    # 2. Récupération de la DB après init
+    ddb: SQLAdapter = integration.db.get("default")
+
+    core_services = {
+        "db": ddb.session,
+        "base": Base,
+        "engine": ddb.engine,
+        "Hooks": _plugin_hooks,
+        "Event": Event,
+    }
+
+    # 3. Injection dans PluginManager AVANT start()
     manager: Manager = app.state.manager
+    manager.update_services(core_services)
+
+    # 4. Hook startup
     await xhooks.emit("xcore.startup")
 
-    # Startup : charge tous les plugins + attache /plugin/*
+    # 5. Démarrage des plugins
     report = await manager.start()
     print(f"✅ Plugins chargés : {report['loaded']}")
     if report["failed"]:
-        print(f"❌ Échecs : {report['failed']}")
+        print(f"❌ Échecs          : {report['failed']}")
 
-    yield  # ← l'app tourne ici
+    yield
 
-    # Shutdown : arrête proprement tous les subprocesses
     await manager.stop()
-    # taskRuntimer.on_shutdown()
+    await integration.shutdown()
     await xhooks.emit("xcore.shutdown")
 
 
-# ──────────────────────────────────────────────
-# 2. Création de l'app
-# ──────────────────────────────────────────────
+app = FastAPI(title="Mon API", lifespan=lifespan)
 
-app = FastAPI(
-    title="Mon API",
-    lifespan=lifespan,
+manager = Manager(
+    app=app,
+    base_routes=list(app.routes),
+    plugins_dir="plugins",
+    secret_key=b"ejkfnwefnkejw",
+    services={},  # vide ici — rempli dans lifespan via update_services()
+    interval=2,
+    strict_trusted=True,
 )
 
+app.state.manager = manager
+app.state.integration = integration
 
-app.include_router(plugins.plugin)
-app.include_router(task.task)
 
-
-# Routes natives de ton Core (exemples)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
+@app.get("/services/status")
+async def services_status():
+    return integration.status()
+
+
 @app.get("/plugins/status")
 async def plugins_status():
-    """Status de tous les plugins via le Manager."""
     return app.state.manager.status()
-
-
-# ──────────────────────────────────────────────
-# 3. Initialisation du Manager
-#    (avant de créer l'app ou dans un fichier de config)
-# ──────────────────────────────────────────────
-
-# Sauvegarde des routes natives AVANT d'attacher les plugins
-# (nécessaire pour le reload — on repart toujours de ces routes)
-manager = Manager(
-    app=app,
-    base_routes=list(app.routes),
-    plugins_dir="plugins",
-    secret_key=b"ejkfnwefnkejw",  # <- mettre dans .env
-    services=CORE_SERVICES,
-    interval=2,  # secondes entre chaque check du watcher
-    strict_trusted=True,  # False pour autoriser LEGACY sans signature
-)
-
-# Injecte le manager dans app.state pour qu'il soit accessible partout
-app.state.manager = manager

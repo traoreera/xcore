@@ -10,12 +10,13 @@ Contrat interface commun à tous les plugins (Trusted et Sandboxed).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from multiprocessing import Manager
 from typing import Any, Protocol, runtime_checkable
-
 
 # ──────────────────────────────────────────────
 # Contrat universel (Protocol — duck typing)
 # ──────────────────────────────────────────────
+
 
 @runtime_checkable
 class BasePlugin(Protocol):
@@ -41,6 +42,7 @@ class BasePlugin(Protocol):
 # ──────────────────────────────────────────────
 # ABC pour plugins Trusted (injection de services)
 # ──────────────────────────────────────────────
+
 
 class TrustedBase(ABC):
     """
@@ -81,10 +83,14 @@ class TrustedBase(ABC):
     async def on_reload(self) -> None:
         """Appelé lors d'un rechargement à chaud."""
 
+    async def env_variable(self, manifest: dict) -> dict:
+        """enviromment set on app"""
+
 
 # ──────────────────────────────────────────────
 # Réponses standardisées
 # ──────────────────────────────────────────────
+
 
 def ok(data: dict | None = None, **kwargs) -> dict:
     """Construit une réponse succès standardisée."""
@@ -96,5 +102,5 @@ def error(msg: str, code: str | None = None, **kwargs) -> dict:
     result = {"status": "error", "msg": msg}
     if code:
         result["code"] = code
-    result|=kwargs
+    result |= kwargs
     return result

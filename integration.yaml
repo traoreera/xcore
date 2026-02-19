@@ -1,0 +1,60 @@
+# app env config
+env_variable:
+  inject: true
+  env_file: "extensions/.env"
+
+# app configuration
+app:
+  name: "xcore-services-extension"
+  env: "production"
+  debug: false
+
+extensions:
+  webhook:
+    enabled: true
+    service: "extensions.services.service:WebhookService"
+    env:
+      secret: "${WEBHOOK_SECRET}"
+    config:
+      timeout: 10
+      retries: 3
+      retry_delay: 2
+      secret_header: "X-Signature-256"
+      secret: "${WEBHOOK_SECRET}"
+
+databases:
+  default:
+    type: "sqlite"
+    url: "${DATABASE_URL}"
+    pool_size: 20
+    max_overflow: 40
+    echo: false
+
+  cache:
+    type: "redis"
+    url: "${REDIS_URL}"
+    max_connections: 50
+
+scheduler:
+  enabled: true
+  backend: "redis"
+  timezone: "Europe/Paris"
+  jobs:
+    - id: sandbox_runtimer
+      func: "backgroundtask.sandbox:service_main"
+      trigger: "interval"
+      minutes: 0.5
+      enabled: true
+
+logging:
+  level: "WARNING"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  handlers:
+    console:
+      enabled: true
+      level: "WARNING"
+    file:
+      enabled: true
+      path: "logs/app.log"
+      max_bytes: 52428800
+      backup_count: 10

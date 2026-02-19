@@ -151,6 +151,8 @@ class TrustedRunner:
             raise TrustedLoadError(
                 f"[{self.manifest.name}] Plugin ne respecte pas le contrat BasePlugin"
             )
+        if hasattr(self._instance, "env_variable"):
+            await self._instance.env_variable(self.manifest.env)
 
         if hasattr(self._instance, "on_load"):
             await self._instance.on_load()
