@@ -60,7 +60,7 @@ Chaque plugin doit résider dans le dossier `plugins/` et suivre cette structure
 
 ```
 plugins/mon_plugin/
-├── plugin.yaml      # Manifeste du plugin (nom, version, entrées)
+├── plugin.yaml      # Manifeste du plugihttps://github.com/traoreera/xcore/tree/featuresn (nom, version, entrées)
 ├── plugin.sig       # Signature de sécurité (si strict_trusted=True)
 └── src/
     └── main.py      # Code source principal
