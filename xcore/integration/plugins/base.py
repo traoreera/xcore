@@ -35,13 +35,12 @@ Exemple dans le service :
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class ServiceNotReadyError(Exception):
     """Levée si on accède à un service non initialisé."""
 
-    pass
 
 
 class BaseService:
@@ -63,11 +62,9 @@ class BaseService:
 
     async def setup(self) -> None:
         """Initialisation — surcharger pour connecter des clients, etc."""
-        pass
 
     async def teardown(self) -> None:
         """Nettoyage — surcharger pour fermer des connexions, etc."""
-        pass
 
     def _mark_ready(self):
         self._ready = True

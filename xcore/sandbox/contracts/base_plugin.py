@@ -10,7 +10,6 @@ Contrat interface commun à tous les plugins (Trusted et Sandboxed).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from multiprocessing import Manager
 from typing import Any, Protocol, runtime_checkable
 
 # ──────────────────────────────────────────────

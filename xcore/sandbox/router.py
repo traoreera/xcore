@@ -7,27 +7,28 @@ Le Core expose /plugin/{name}/{action} — les plugins n'exposent jamais leurs p
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-from typing import Any
 
 from .manager import PluginManager, PluginNotFound
-
 
 # ──────────────────────────────────────────────
 # Schémas
 # ──────────────────────────────────────────────
+
 
 class PluginCallRequest(BaseModel):
     payload: dict[str, Any] = {}
 
 
 class PluginCallResponse(BaseModel):
-    status:  str
-    plugin:  str
-    action:  str
-    result:  dict[str, Any]
+    status: str
+    plugin: str
+    action: str
+    result: dict[str, Any]
 
 
 # ──────────────────────────────────────────────
@@ -63,6 +64,7 @@ async def verify_admin_key(
 # Dépendance — injecte le PluginManager depuis app.state
 # ──────────────────────────────────────────────
 
+
 async def get_plugin_manager(request: Request) -> PluginManager:
     manager: PluginManager | None = getattr(request.app.state, "plugin_manager", None)
     if manager is None:
@@ -87,9 +89,9 @@ router = APIRouter(prefix="/app", tags=["plugins"])
 )
 async def call_plugin(
     plugin_name: str,
-    action:      str,
-    body:        PluginCallRequest,
-    manager:     PluginManager = Depends(get_plugin_manager),
+    action: str,
+    body: PluginCallRequest,
+    manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginCallResponse:
     """
     Point d'entrée unique pour tous les appels aux plugins.
@@ -130,7 +132,7 @@ async def plugins_status(
 )
 async def reload_plugin(
     plugin_name: str,
-    manager:     PluginManager = Depends(get_plugin_manager),
+    manager: PluginManager = Depends(get_plugin_manager),
 ) -> dict:
     """Recharge un plugin Trusted (hot reload) ou redémarre son subprocess (Sandbox)."""
     try:
@@ -155,7 +157,7 @@ async def reload_plugin(
 )
 async def load_plugin(
     plugin_name: str,
-    manager:     PluginManager = Depends(get_plugin_manager),
+    manager: PluginManager = Depends(get_plugin_manager),
 ) -> dict:
     """✅ Nouveau : charge un plugin unique sans redémarrer l'application."""
     try:
@@ -180,7 +182,7 @@ async def load_plugin(
 )
 async def unload_plugin(
     plugin_name: str,
-    manager:     PluginManager = Depends(get_plugin_manager),
+    manager: PluginManager = Depends(get_plugin_manager),
 ) -> dict:
     """✅ Nouveau : décharge un plugin unique proprement."""
     try:

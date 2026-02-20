@@ -26,19 +26,15 @@ class DiskWatcher:
     """
 
     def __init__(self, data_dir: Path, max_disk_mb: int) -> None:
-        self._data_dir    = data_dir
-        self._max_bytes   = max_disk_mb * 1024 * 1024
+        self._data_dir = data_dir
+        self._max_bytes = max_disk_mb * 1024 * 1024
         self._max_disk_mb = max_disk_mb
 
     def current_size_bytes(self) -> int:
         """Calcule la taille totale de data/ en octets."""
         if not self._data_dir.exists():
             return 0
-        return sum(
-            f.stat().st_size
-            for f in self._data_dir.rglob("*")
-            if f.is_file()
-        )
+        return sum(f.stat().st_size for f in self._data_dir.rglob("*") if f.is_file())
 
     def current_size_mb(self) -> float:
         return round(self.current_size_bytes() / (1024 * 1024), 3)
@@ -78,8 +74,10 @@ class DiskWatcher:
     def stats(self) -> dict:
         used = self.current_size_bytes()
         return {
-            "used_mb":  self.current_size_mb(),
-            "max_mb":   self._max_disk_mb,
-            "used_pct": round(used / self._max_bytes * 100, 1) if self._max_bytes else 0,
-            "ok":       used <= self._max_bytes if self._max_bytes else True,
+            "used_mb": self.current_size_mb(),
+            "max_mb": self._max_disk_mb,
+            "used_pct": (
+                round(used / self._max_bytes * 100, 1) if self._max_bytes else 0
+            ),
+            "ok": used <= self._max_bytes if self._max_bytes else True,
         }

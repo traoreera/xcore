@@ -2,20 +2,31 @@
 Configuration loader — lit integration.yaml et expose une config typée.
 
 Fonctionnalités :
-  - Chargement du .env via env_variable.env_file
-  - Substitution ${VAR} dans tout le YAML après chargement du .env
-  - Surcharge par variables d'environnement INTEGRATION__SECTION__KEY=value
-  - Chaque ExtensionConfig expose un dict `env` avec ses variables résolues
+    - Chargement du .env via env_variable.env_file
+    - Substitution ${VAR} dans tout le YAML après chargement du .env
+    - Surcharge par variables d'environnement INTEGRATION__SECTION__KEY=value
+    - Chaque ExtensionConfig expose un dict `env` avec ses variables résolues
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+
+from .schemas import (
+    AppConfig,
+    CacheConfig,
+    DatabaseConfig,
+    ExtensionConfig,
+    IntegrationConfig,
+    LoggingConfig,
+    SchedulerConfig,
+    SchedulerJobConfig,
+)
 
 logger = logging.getLogger("integrations.config")
 
@@ -38,14 +49,12 @@ def _load_dotenv(env_file: str) -> None:
         logger.warning(f".env introuvable : {env_file}")
         return
 
-    try:
-        from dotenv import load_dotenv
+    with contextlib.suppress(ImportError):
+        from dotenv import find_dotenv, load_dotenv
 
-        load_dotenv(path, override=False)
+        load_dotenv(find_dotenv(filename=path, raise_error_if_not_found=False))
         logger.info(f".env chargé via python-dotenv : {env_file}")
         return
-    except ImportError:
-        pass
 
     # Parser minimal sans dépendance
     with open(path, encoding="utf-8") as f:
@@ -76,113 +85,12 @@ def _resolve_env(value: Any) -> Any:
         return _ENV_PATTERN.sub(_replace, value)
     if isinstance(value, dict):
         return {k: _resolve_env(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_resolve_env(v) for v in value]
-    return value
-
-
-# ─────────────────────────────────────────────────────────────
-# Dataclasses
-# ─────────────────────────────────────────────────────────────
-
-
-@dataclass
-class AppConfig:
-    name: str = "App"
-    env: str = "development"
-    debug: bool = False
-
-
-@dataclass
-class ExtensionConfig:
-    """
-    Configuration d'une extension de service.
-
-    Champs injectés automatiquement par le framework :
-      - config : bloc `config` du YAML (variables déjà résolues)
-      - env    : variables déclarées dans `env:` du bloc extension (résolues)
-
-    Dans le service, accès via :
-        self.config["host"]
-        self.env["APP_TOKEN"]
-    """
-
-    name: str
-    service: str  # "module.path:ClassName"
-    enabled: bool = True
-    background: bool = False
-    background_mode: str = "async"  # async | thread | both
-    background_restart: bool = True
-    background_jobs: List[Dict] = field(default_factory=list)
-    config: Dict[str, Any] = field(default_factory=dict)
-    env: Dict[str, str] = field(default_factory=dict)  # ← variables d'env résolues
-
-
-@dataclass
-class DatabaseConfig:
-    name: str
-    type: str = "sqlite"
-    url: str = "sqlite:///./app.db"
-    pool_size: int = 5
-    max_overflow: int = 10
-    echo: bool = False
-    database: Optional[str] = None  # MongoDB
-    max_connections: Optional[int] = None  # Redis
-
-
-@dataclass
-class CacheConfig:
-    backend: str = "memory"  # memory | redis
-    ttl: int = 300
-    max_size: int = 1000
-    url: Optional[str] = None
-
-
-@dataclass
-class SchedulerJobConfig:
-    id: str
-    func: str
-    trigger: str = "interval"
-    enabled: bool = True
-    seconds: Optional[int] = None
-    minutes: Optional[int] = None
-    hour: Optional[int] = None
-    minute: Optional[int] = None
-    day_of_week: Optional[str] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class SchedulerConfig:
-    enabled: bool = True
-    backend: str = "memory"  # memory | redis | database
-    timezone: str = "UTC"
-    jobs: List[SchedulerJobConfig] = field(default_factory=list)
-
-
-@dataclass
-class LoggingConfig:
-    level: str = "INFO"
-    format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    handlers: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class IntegrationConfig:
-    app: AppConfig = field(default_factory=AppConfig)
-    extensions: Dict[str, ExtensionConfig] = field(default_factory=dict)
-    databases: Dict[str, DatabaseConfig] = field(default_factory=dict)
-    cache: CacheConfig = field(default_factory=CacheConfig)
-    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
-    logging: LoggingConfig = field(default_factory=LoggingConfig)
-    raw: Dict[str, Any] = field(default_factory=dict)
+    return [_resolve_env(v) for v in value] if isinstance(value, list) else value
 
 
 # ─────────────────────────────────────────────────────────────
 # Loader
 # ─────────────────────────────────────────────────────────────
-
-
 class ConfigLoader:
     """
     Charge integration.yaml et expose une IntegrationConfig typée.

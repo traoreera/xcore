@@ -7,7 +7,6 @@ import os
 import pkgutil
 import time
 from logging import Logger
-from pathlib import Path
 
 from xcore.sandbox.manager import PluginManager
 from xcore.sandbox.sandbox.snapshot import Snapshot

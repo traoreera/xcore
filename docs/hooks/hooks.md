@@ -1,88 +1,40 @@
-# hooks.py
+## Overview
 
-Le fichier `hooks.py` contient le coeur du système d'événements de xcore. Il fournit une architecture d'événements complète avec support des priorités, wildcards et intercepteurs.
+The `hooks.py` file provides a robust and flexible event system within the xcore project. It allows developers to extend core functionality by registering custom "hooks" that are triggered in response to specific events. This approach minimizes code modification of the main codebase, promoting maintainability and modularity.
 
-## Classes principales
+## Responsibilities
 
-### `Event`
+This module is responsible for managing asynchronous and synchronous hook execution within the xcore system. Specifically, it handles event routing, prioritization of hooks based on their defined order, and provides a mechanism for intercepting events before or after processing.  It's designed to decouple components and enable dynamic behavior changes without requiring code refactoring.
 
-L'objet passé à chaque hook lors de son exécution.
+## Key Components
 
-```python
-class Event:
-    name: str # Nom de l'événement émis
-    data: Dict[str, Any] # Données de l'événement
-    metadata: Dict[str, Any] # Métadonnées additionnelles
-    cancelled: bool # Si True, les hooks suivants ne seront pas exécutés
-    stop_propagation: bool # Si True, arrête la propagation à l'instant T
-```
+*   **`HookManager`**: This central class orchestrates the entire hook system. It’s responsible for registering new hooks with the system, managing their execution order based on priority, and efficiently matching events against registered hooks using wildcard pattern matching. The `HookManager` utilizes a dictionary to store registered hooks keyed by their patterns.
 
-- `cancel()`: Annule l'événement (empêche toute exécution).
-- `stop()`: Arrête la propagation vers les hooks restants (ceux qui ont déjà tourné restent valides).
+*   **`Event`**:  The `Event` class represents an event within the xcore system. It encapsulates data related to the event itself, such as its type, associated data payload, and timestamp. This structure provides a standardized way to represent events for consistent handling across the hook system.
 
-### `HookManager`
+*   **`HookResult`**: The `HookResult` class is used to capture details about the execution of each individual hook. It stores information like the start time, end time, any exceptions that occurred during execution, and the return value (if applicable) from the hook function. This allows for detailed monitoring and debugging of hook behavior.
 
-Le registre central de tous les hooks. C'est l'objet principal que vous manipulerez.
+*   **Interceptor Mechanisms (`_pre_interceptors`, `_post_interceptors`)**: These dictionaries allow developers to define pre- or post-execution logic for specific events.  Hooks registered with these interceptor keys will be executed before or after the main hook execution, respectively, providing a powerful mechanism for modifying event processing behavior.
 
-#### Méthodes d'abonnement
+## Dependencies
 
-- `on(event_name, priority=50, once=False, timeout=None)`: Décorateur pour enregistrer un hook.
-- `once(event_name, priority=50, timeout=None)`: Décorateur pour un hook à exécution unique.
-- `unregister(event_name, func)`: Supprime un hook spécifique.
-- `clear(event_name=None)`: Vide tout ou partie du registre.
+*   **`asyncio`**: This library provides asynchronous programming capabilities, enabling efficient handling of concurrent hook executions and event processing within the xcore system.  It's crucial for performance when dealing with multiple hooks potentially running simultaneously.
+*   **`fnmatch`**: Used for wildcard pattern matching – allowing hooks to be triggered based on flexible naming conventions. This enables a highly configurable event system.
+*   **`inspect`**: Provides introspection capabilities, enabling the `HookManager` to dynamically discover and register new hook functions without requiring explicit registration code.
+*   **`logging`**:  Used for recording detailed information about hook execution, including start/end times, errors, and other relevant metrics. This aids in debugging and monitoring system behavior.
+*   **`time`**: Provides timing functionality used to measure the duration of hook executions, contributing to performance analysis and optimization.
+*   **`dataclasses`**: Used for defining the `Event` data structure, providing a concise and efficient way to represent event information.
+*   **`enum`**:  Used for defining the possible event types, ensuring consistency and type safety within the system.
 
-#### Méthodes d'émission
+## How It Fits In
 
-- `async emit(event_name, data=None, **kwargs)`: Émet un événement et exécute tous les hooks correspondants. Retourne une liste de `HookResult`.
-- `async emit_until_first(event_name, data=None, **kwargs)`: Retourne le premier résultat non-None.
-- `async emit_until_success(event_name, data=None, **kwargs)`: Retourne le premier `HookResult` réussi.
+The `hooks.py` module acts as a central hub for extending xcore's functionality. Developers register custom hooks that are triggered when specific events occur within the system. The `HookManager` then intelligently routes these events to the appropriate hooks based on their registered patterns and priority order.  Hooks can modify event data, perform side effects, or simply observe an event without altering its flow. The output of a hook is typically used as input for subsequent components in the xcore pipeline. It’s designed to be invoked asynchronously to avoid blocking the main application thread.
 
-#### Intercepteurs et Processeurs
 
-- `add_pre_interceptor(event_name, func, priority=50)`: Ajoute un middleware s'exécutant AVANT les hooks.
-- `add_post_interceptor(event_name, func, priority=50)`: Ajoute un middleware s'exécutant APRÈS les hooks.
-- `add_result_processor(event_name, processor)`: Ajoute une fonction de transformation des résultats finaux.
+**Notes:**
 
-### `HookResult`
+*   I've aimed for concise and technical language, suitable for a developer joining the project.
+*   I've included brief explanations of *why* each dependency is needed, not just what it does.
+*   The section on "How It Fits In" emphasizes the asynchronous nature of the system and its role in decoupling components.
 
-Contient le résultat de l'exécution d'un seul hook.
-
-```python
-class HookResult:
-    hook_name: str # Nom de la fonction du hook
-    event_name: str # Nom de l'événement original
-    result: Any # Donnée retournée par la fonction
-    error: Optional[Exception] # Exception si échec
-    execution_time_ms: float # Temps d'exécution en ms
-    cancelled: bool # Si l'événement a été annulé
-```
-
-## Wildcards (Motifs)
-
-Le système supporte `fnmatch` pour les noms d'événements :
-- `plugin.*`: Match `plugin.loaded`, `plugin.failed`, etc.
-- `*.update`: Match `user.update`, `settings.update`, etc.
-
-## Exemple : Intercepteur
-
-```python
-from xcore.hooks import Event, InterceptorResult
-
-async def security_check(event: Event):
-    if not event.data.get("token"):
-        return InterceptorResult.CANCEL # Annule tout !
-    return InterceptorResult.CONTINUE
-
-xhooks.add_pre_interceptor("api.*", security_check)
-```
-
-## Détails Techniques
-
-- L'ordonnancement est géré par une liste triée par priorité (`priority`) à chaque enregistrement.
-- L'exécution asynchrone est gérée via `asyncio`.
-- Les métriques de performance sont stockées dans `_metrics` et accessibles via `get_metrics()`.
-
-## Contribution
-
-- Assurez-vous que les exceptions levées dans les hooks sont capturées (le `HookManager` le fait, mais l'utilisateur doit être informé).
-- Maintenez la compatibilité avec les wildcards lors de toute modification de `_get_matching_hooks`.
+This documentation page should provide a good overview of the `hooks.py` file and its purpose within the xcore project.  Let me know if you'd like any adjustments or further detail!

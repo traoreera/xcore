@@ -160,6 +160,7 @@ def result_filter_processor(success_only: bool = False) -> Callable:
 
     def processor(results: List[HookResult]) -> List[HookResult]:
         return [r for r in results if r.success] if success_only else results
+
     return processor
 
 
@@ -275,7 +276,11 @@ def retry_hook(max_retries: int = 3, delay_seconds: float = 1.0) -> Callable:
 
             for attempt in range(max_retries + 1):
                 try:
-                    return await func(event) if inspect.iscoroutinefunction(func) else func(event)
+                    return (
+                        await func(event)
+                        if inspect.iscoroutinefunction(func)
+                        else func(event)
+                    )
                 except Exception as e:
                     last_error = e
                     if attempt < max_retries:

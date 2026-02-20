@@ -20,7 +20,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # ══════════════════════════════════════════════
 # Reproduction locale de signer.py
 # (pour pouvoir utiliser ce script standalone)
@@ -62,6 +61,7 @@ def _read_manifest_meta(plugin_dir: Path) -> dict:
             if name.endswith(".yaml"):
                 try:
                     import yaml
+
                     return yaml.safe_load(p.read_text()) or {}
                 except ImportError:
                     pass
@@ -71,23 +71,23 @@ def _read_manifest_meta(plugin_dir: Path) -> dict:
 
 
 def sign(plugin_dir: Path, secret_key: bytes) -> Path:
-    meta   = _read_manifest_meta(plugin_dir)
-    name   = meta.get("name", plugin_dir.name)
+    meta = _read_manifest_meta(plugin_dir)
+    name = meta.get("name", plugin_dir.name)
     version = meta.get("version", "unknown")
-    mode   = meta.get("execution_mode", "unknown")
+    mode = meta.get("execution_mode", "unknown")
 
     print(f"\n🔑 Signature du plugin : {name} v{version} [{mode}]")
     print(f"   Répertoire : {plugin_dir}")
     print(f"   Fichiers inclus dans le hash :")
 
-    digest   = _compute_hash(plugin_dir, secret_key)
+    digest = _compute_hash(plugin_dir, secret_key)
     sig_path = plugin_dir / SIG_FILENAME
 
     sig_data = {
-        "plugin":  name,
+        "plugin": name,
         "version": version,
-        "mode":    mode,
-        "digest":  digest,
+        "mode": mode,
+        "digest": digest,
     }
     sig_path.write_text(json.dumps(sig_data, indent=2))
 
@@ -98,8 +98,8 @@ def sign(plugin_dir: Path, secret_key: bytes) -> Path:
 
 
 def verify(plugin_dir: Path, secret_key: bytes) -> bool:
-    meta    = _read_manifest_meta(plugin_dir)
-    name    = meta.get("name", plugin_dir.name)
+    meta = _read_manifest_meta(plugin_dir)
+    name = meta.get("name", plugin_dir.name)
     version = meta.get("version", "unknown")
 
     print(f"\n🔍 Vérification de : {name} v{version}")
@@ -109,14 +109,13 @@ def verify(plugin_dir: Path, secret_key: bytes) -> bool:
         print(f"❌ Fichier {SIG_FILENAME} absent — plugin non signé")
         return False
 
-    sig_data       = json.loads(sig_path.read_text())
-    stored_digest  = sig_data.get("digest", "")
+    sig_data = json.loads(sig_path.read_text())
+    stored_digest = sig_data.get("digest", "")
     signed_version = sig_data.get("version", "")
 
     if signed_version != version:
         print(
-            f"❌ Version mismatch : manifest={version}, "
-            f"signature={signed_version}"
+            f"❌ Version mismatch : manifest={version}, " f"signature={signed_version}"
         )
         print("   → Resignez le plugin après chaque mise à jour.")
         return False
@@ -138,25 +137,22 @@ def verify(plugin_dir: Path, secret_key: bytes) -> bool:
 # CLI
 # ══════════════════════════════════════════════
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Signe ou vérifie un plugin plManager"
+    parser = argparse.ArgumentParser(description="Signe ou vérifie un plugin plManager")
+    parser.add_argument(
+        "--plugin", required=True, help="Chemin vers le répertoire du plugin"
     )
     parser.add_argument(
-        "--plugin", required=True,
-        help="Chemin vers le répertoire du plugin"
+        "--key", default=None, help="Clé secrète en clair (déconseillé en prod)"
     )
     parser.add_argument(
-        "--key", default=None,
-        help="Clé secrète en clair (déconseillé en prod)"
+        "--key-env",
+        default="PLUGIN_SECRET_KEY",
+        help="Variable d'environnement contenant la clé (défaut: PLUGIN_SECRET_KEY)",
     )
     parser.add_argument(
-        "--key-env", default="PLUGIN_SECRET_KEY",
-        help="Variable d'environnement contenant la clé (défaut: PLUGIN_SECRET_KEY)"
-    )
-    parser.add_argument(
-        "--verify", action="store_true",
-        help="Vérification seulement, sans signer"
+        "--verify", action="store_true", help="Vérification seulement, sans signer"
     )
     args = parser.parse_args()
 
@@ -172,8 +168,7 @@ def main() -> None:
         raw = os.environ.get(args.key_env)
         if not raw:
             print(
-                f"❌ Clé introuvable. Utilise --key ou "
-                f"export {args.key_env}=ta_cle"
+                f"❌ Clé introuvable. Utilise --key ou " f"export {args.key_env}=ta_cle"
             )
             sys.exit(1)
         secret_key = raw.encode()

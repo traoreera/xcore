@@ -22,40 +22,33 @@ import importlib
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from ..config.loader import ExtensionConfig, IntegrationConfig
 from .base import BaseService
+from .schemas import ServiceStatus, ServiceWorkerState
 
 logger = logging.getLogger("integrations.extensions")
 
 
 # ─────────────────────────────────────────────────────────────
+# Extension Loader principal
+# ─────────────────────────────────────────────────────────────
+def _import_class(dotted: str) -> type:
+    """Importe une classe depuis 'module.path:ClassName'."""
+    if ":" not in dotted:
+        raise ValueError(f"Format invalide '{dotted}' — attendu 'module:Classe'")
+    module_path, class_name = dotted.rsplit(":", 1)
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name, None)
+    if cls is None:
+        raise ImportError(f"Classe '{class_name}' introuvable dans '{module_path}'")
+    return cls
+
+
+# ─────────────────────────────────────────────────────────────
 # Worker de tâche de fond par service
 # ─────────────────────────────────────────────────────────────
-
-
-class ServiceStatus(str, Enum):
-    IDLE = "idle"
-    STARTING = "starting"
-    RUNNING = "running"
-    CRASHED = "crashed"
-    STOPPED = "stopped"
-
-
-@dataclass
-class ServiceWorkerState:
-    name: str
-    status: ServiceStatus = ServiceStatus.IDLE
-    restarts: int = 0
-    last_error: Optional[str] = None
-    _stop: threading.Event = field(default_factory=threading.Event, repr=False)
-    _thread: Optional[threading.Thread] = field(default=None, repr=False)
-    _scheduler: Optional[Any] = field(default=None, repr=False)
-
-
 class ServiceWorker:
     """Gère la tâche de fond d'un service (async, thread ou les deux)."""
 
@@ -222,8 +215,10 @@ class ServiceWorker:
         if self.state._scheduler:
             try:
                 self.state._scheduler.shutdown(wait=False)
-            except Exception:
-                pass
+            except Exception as e:
+                self._log.warning(
+                    f"Erreur arrêt scheduler du service '{self.name}': {e}"
+                )
         if self.state._thread and self.state._thread.is_alive():
             self.state._thread.join(timeout=timeout)
         self.state.status = ServiceStatus.STOPPED
@@ -248,23 +243,6 @@ class ServiceWorker:
             "last_error": self.state.last_error,
             "scheduled_jobs": jobs,
         }
-
-
-# ─────────────────────────────────────────────────────────────
-# Extension Loader principal
-# ─────────────────────────────────────────────────────────────
-
-
-def _import_class(dotted: str) -> type:
-    """Importe une classe depuis 'module.path:ClassName'."""
-    if ":" not in dotted:
-        raise ValueError(f"Format invalide '{dotted}' — attendu 'module:Classe'")
-    module_path, class_name = dotted.rsplit(":", 1)
-    module = importlib.import_module(module_path)
-    cls = getattr(module, class_name, None)
-    if cls is None:
-        raise ImportError(f"Classe '{class_name}' introuvable dans '{module_path}'")
-    return cls
 
 
 class ExtensionLoader:

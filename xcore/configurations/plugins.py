@@ -4,11 +4,9 @@ from .base import BaseCfg, Configure
 from .deps import Logger
 
 
-
 class PluginsPEs(TypedDict):
     name: str
-    path:str
-
+    path: str
 
 
 class PluginsConfig(BaseCfg):
@@ -22,7 +20,6 @@ class PluginsConfig(BaseCfg):
             self.custom = self.conf.plugins
         else:
             self.custom = self.default
-    
+
     def __getattribute__(self, __name):
         return super().__getattribute__(__name)
-

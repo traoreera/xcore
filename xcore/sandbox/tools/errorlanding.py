@@ -1,7 +1,8 @@
+import logging
 import time
 from functools import wraps
-import logging
 from typing import Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,8 @@ logger = logging.getLogger(__name__)
 class ExceptionResponse(BaseModel):
     type: str
     msg: str
-    extension: Optional[str] = None   # ✅ Fix 3a : était str non-nullable → ValidationError si None
+    # ✅ Fix 3a : était str non-nullable → ValidationError si None
+    extension: Optional[str] = None
 
 
 class Error:
@@ -20,8 +22,10 @@ class Error:
 
         @wraps(func)
         def wrapper(*args, **kwargs):
-            now = time.time()           # ✅ Fix 3b : now était capturé à la définition du décorateur,
-            try:                        #             pas à l'appel → tous les timings étaient faux
+            now = (
+                time.time()
+            )  # ✅ Fix 3b : now était capturé à la définition du décorateur,
+            try:  # pas à l'appel → tous les timings étaient faux
                 result = func(*args, **kwargs)
                 time_end = time.time()
                 logger.info(f" {func.__name__} executed in {time_end - now:.4f}s")
@@ -31,7 +35,9 @@ class Error:
                 time_end = time.time()
                 logger.error(f"Error in {func.__name__}: {e}")
                 logger.exception(e)
-                logger.info(f" {func.__name__} executed in {time_end - now:.4f}s with error.")
+                logger.info(
+                    f" {func.__name__} executed in {time_end - now:.4f}s with error."
+                )
                 return {"type": "error", "msg": str(e)}
 
         return wrapper
@@ -57,9 +63,9 @@ class Error:
     ) -> ExceptionResponse:
 
         mapper = {
-            "info":    Error._Error__info,
+            "info": Error._Error__info,
             "warning": Error._Error__warning,
-            "error":   Error._Error__error,
+            "error": Error._Error__error,
         }
 
         handler = mapper.get(type)

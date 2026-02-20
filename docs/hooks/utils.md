@@ -1,88 +1,46 @@
-# utils.py (Hooks)
+## Overview
 
-Le fichier `utils.py` dans le module `hooks` contient des fonctions utilitaires, des intercepteurs prédéfinis et des décorateurs avancés pour faciliter l'utilisation du système de hooks.
+The `/home/eliezer/devs/xcore/xcore/hooks/utils.py` file provides core utility functions and decorators for enhancing the `xCore` hook system. It focuses on simplifying event interception, modification, and management within the hook framework, offering pre-built interceptors and advanced control mechanisms.
 
-## Intercepteurs prédéfinis
+## Responsibilities
 
-Ces fonctions retournent des intercepteurs configurables que vous pouvez ajouter à votre `HookManager`.
+This file is responsible for providing a set of reusable components that streamline the development process when creating custom hooks in the `xCore` environment. Specifically, it handles logging, rate limiting, debouncing, validation, result processing, error monitoring, timing analysis, and dynamic hook execution.  It aims to reduce boilerplate code and provide a consistent interface for interacting with the hook system.
 
-### `logging_interceptor(log_level="info")`
+## Key Components
 
-Crée un intercepteur qui journalise chaque émission d'événement.
+*   **`logging_interceptor`**: This asynchronous decorator simplifies logging events within hooks by automatically integrating with the standard `logging` library. It allows developers to easily configure log levels and output destinations without modifying core hook logic.
+*   **`rate_limit_interceptor`**:  This decorator implements rate limiting for hook execution, preventing excessive calls and ensuring system stability. It’s designed to be configurable via a rate limit configuration object.
+*   **`debounce_interceptor`**: This decorator introduces a delay before a hook is executed, effectively "debouncing" events to prevent multiple executions triggered by rapid input.
+*   **`error_counting_processor`**:  This component tracks and aggregates errors encountered during hook execution, providing valuable insights for debugging and monitoring. It utilizes metrics to identify problematic hooks.
+*   **`timing_processor`**: This decorator measures the execution time of hooks, enabling performance analysis and optimization efforts within the `xCore` system.
+*   **`HookChain`**:  This class facilitates the creation of chained hook executions, allowing for complex event processing workflows where multiple hooks are triggered sequentially based on specific conditions.
+*   **`ConditionalHook`**: This decorator dynamically enables or disables hook execution based on data associated with the event being processed, providing flexible control over hook behavior.
+*   **`retry_hook`**:  This decorator implements retry logic for failed hook executions using exponential backoff, improving resilience and handling transient errors.
+*   **`memoized_hook`**: This decorator utilizes memoization to cache the results of a hook function, significantly improving performance when the same input is encountered repeatedly.
 
-```python
-xhooks.add_pre_interceptor("*", logging_interceptor("debug"))
+## Dependencies
+
+*   **`asyncio`**:  This library provides asynchronous programming capabilities, essential for building non-blocking and efficient hook execution within the `xCore` system.
+*   **`inspect`**: Used to introspect objects (like functions) at runtime, allowing the decorators to dynamically modify their behavior based on context.
+*   **`time`**: Provides timing related functionality used in the `timing_processor`.
+*   **`functools`**:  Provides higher-order functions like `partial` and `wraps`, which are utilized within the decorator implementation.
+*   **`typing`**: Used for type hinting, improving code readability and enabling static analysis.
+
+## How It Fits In
+
+The `utils.py` file sits at the core of the `xCore` hook system, providing foundational building blocks for custom hooks.  It's imported by various hook implementations to add functionality like logging, rate limiting, or debouncing. The output of these interceptors and processors is then passed on to subsequent hooks in a chain, or directly consumed by the application based on configured rules. This modular design promotes code reuse and simplifies the creation of complex event handling workflows within `xCore`.
 ```
 
-### `rate_limit_interceptor(max_calls, window_seconds)`
+---
 
-Crée un intercepteur qui limite le taux d'émission d'un événement.
+**Notes & Considerations:**
 
-```python
-xhooks.add_pre_interceptor("api.request", rate_limit_interceptor(100, 60.0))
-```
+*   I've aimed for clarity and conciseness, sticking to the requested length constraints.
+*   I’ve used Markdown headings and formatting to improve readability.
+*   The tone is technical and assumes a developer audience.
+*   I've expanded slightly on some of the descriptions based on the provided summary to provide more context.  You can adjust this level of detail as needed.
 
-### `debounce_interceptor(delay_seconds)`
+To help me refine this further, could you tell me:
 
-Crée un intercepteur qui "déboucle" (debounce) les émissions répétitives d'un événement.
-
-### `validation_interceptor(required_keys)`
-
-Crée un intercepteur qui valide la présence de clés obligatoires dans `event.data`.
-
-```python
-xhooks.add_pre_interceptor("user.create", validation_interceptor(["username", "email"]))
-```
-
-## Processeurs de résultats prédéfinis
-
-Ces fonctions traitent la liste des `HookResult` après l'exécution.
-
-- `error_counting_processor(max_errors=10)`: Compte les erreurs consécutives d'un hook et logue un avertissement critique.
-- `result_filter_processor(success_only=False)`: Filtre les résultats pour ne garder que les succès.
-- `timing_processor(threshold_ms=1000.0)`: Logue un avertissement si un hook est trop lent.
-
-## Décorateurs avancés
-
-### `ConditionalHook(condition: Callable[[Event], bool])`
-
-Permet d'exécuter un hook uniquement si une condition spécifique sur l'événement est remplie.
-
-```python
-@ConditionalHook(lambda e: e.data.get("admin") == True)
-@xhooks.on("user.delete")
-async def delete_user(event: Event):
-    ...
-```
-
-### `retry_hook(max_retries=3, delay_seconds=1.0)`
-
-Ajoute une logique de tentative automatique (retry) avec backoff exponentiel à un hook.
-
-```python
-@retry_hook(max_retries=3, delay_seconds=2.0)
-@xhooks.on("api.call")
-async def unreliable_task(event: Event):
-    ...
-```
-
-### `memoized_hook(ttl_seconds=300.0)`
-
-Met en cache le résultat d'un hook pendant une période donnée, basé sur le nom de l'événement et ses données.
-
-## Chaînage de Hooks (`HookChain`)
-
-Permet de créer facilement une suite de hooks dépendants les uns des autres.
-
-```python
-chain = HookChain(xhooks, "data.process")
-chain.then(validate_data, priority=10)
-chain.then(transform_data, priority=20)
-chain.then(save_data, priority=30)
-```
-
-## Contribution
-
-- Si vous ajoutez un nouvel utilitaire, assurez-vous qu'il suit le format `Callable` attendu par le `HookManager`.
-- Testez les décorateurs pour vous assurer qu'ils n'introduisent pas de latence inutile dans la boucle d'événements.
-- Documentez tout nouveau paramètre pour les processeurs de résultats.
+*   Are there any specific aspects of the `utils.py` file that you’d like me to emphasize or elaborate on?
+*   Do you have a preferred style for describing the dependencies (e.g., more detailed explanations)?

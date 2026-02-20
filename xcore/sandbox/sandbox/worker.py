@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import traceback
 from pathlib import Path
+
+logger = logging.getLogger("plManager.worker")
 
 
 def _apply_memory_limit() -> None:
@@ -22,14 +25,15 @@ def _apply_memory_limit() -> None:
         return
     try:
         import resource
+
         limit = max_mb * 1024 * 1024
         # ✅ Fix : RLIMIT_DATA ne limite que le segment BSS/heap — il ne couvre pas
         # les allocations mmap() que Python utilise massivement (>= 128 KB par défaut).
         # RLIMIT_AS limite l'espace d'adressage virtuel total du process,
         # ce qui constitue un vrai plafond mémoire pour les subprocesses sandbox.
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Impossible d'appliquer la limite mémoire sandbox: {e}")
 
 
 def _read_line_blocking() -> bytes:
@@ -45,7 +49,7 @@ async def _main() -> None:
         return
 
     plugin_dir = Path(sys.argv[1]).resolve()
-    src_dir    = plugin_dir / "src"
+    src_dir = plugin_dir / "src"
 
     if not src_dir.exists():
         _write_error(f"Répertoire src/ introuvable dans {plugin_dir}")
@@ -55,6 +59,7 @@ async def _main() -> None:
 
     try:
         import main as plugin_module
+
         plugin = plugin_module.Plugin()
     except Exception as e:
         _write_error(f"Impossible de charger le plugin : {e}\n{traceback.format_exc()}")
@@ -80,7 +85,7 @@ async def _main() -> None:
             _write_error(f"JSON invalide : {e}")
             continue
 
-        action  = request.get("action", "")
+        action = request.get("action", "")
         payload = request.get("payload", {})
 
         if not isinstance(payload, dict):

@@ -6,9 +6,11 @@ Utilisé dans plugin_manager.call() avant de router vers Trusted ou Sandbox.
 """
 
 from __future__ import annotations
+
 import asyncio
 import time
 from collections import deque
+
 from ..contracts.plugin_manifest import RateLimitConfig
 
 
@@ -23,9 +25,9 @@ class RateLimiter:
     """
 
     def __init__(self, config: RateLimitConfig) -> None:
-        self._config    = config
+        self._config = config
         self._timestamps: deque[float] = deque()
-        self._lock      = asyncio.Lock()
+        self._lock = asyncio.Lock()
 
     async def check(self, plugin_name: str) -> None:
         """
@@ -33,7 +35,7 @@ class RateLimiter:
         Lève RateLimitExceeded si le quota est dépassé.
         """
         async with self._lock:
-            now    = time.monotonic()
+            now = time.monotonic()
             cutoff = now - self._config.period_seconds
 
             # Purge les timestamps hors fenêtre
@@ -53,18 +55,19 @@ class RateLimiter:
 
     def stats(self) -> dict:
         """Retourne les stats courantes du rate limiter."""
-        now    = time.monotonic()
+        now = time.monotonic()
         cutoff = now - self._config.period_seconds
         current = sum(t >= cutoff for t in self._timestamps)
         return {
             "calls_in_window": current,
-            "limit":           self._config.calls,
-            "period_seconds":  self._config.period_seconds,
-            "remaining":       max(0, self._config.calls - current),
+            "limit": self._config.calls,
+            "period_seconds": self._config.period_seconds,
+            "remaining": max(0, self._config.calls - current),
         }
 
 
 # ── Registre global des rate limiters (un par plugin) ──
+
 
 class RateLimiterRegistry:
     """Maintient un RateLimiter par plugin."""

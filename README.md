@@ -1,220 +1,131 @@
-# xcore – Multi-Plugins Framework pour FastAPI
+# XCore Framework
 
-[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+XCore est un framework d'orchestration modulaire basé sur **FastAPI**, conçu pour charger, isoler et gérer des plugins dans un environnement sécurisé (sandbox). Il permet de construire des applications extensibles où chaque fonctionnalité peut être développée, testée et déployée indépendamment.
 
-xcore est un framework avancé pour **FastAPI**, conçu pour gérer dynamiquement des plugins, exécuter des tâches planifiées, isoler les plugins en sandbox, et fournir une interface complète d’administration et de monitoring.
+## 🚀 Fonctionnalités Clés
 
----
+- **Système de Plugins Dynamique** : Chargez, déchargez et appelez des plugins à chaud sans redémarrer le serveur.
+- **Sandboxing & Sécurité** : Exécution isolée des plugins avec un superviseur (gestion des timeouts, redémarrages automatiques, limitation de débit).
+- **Intégration de Services Native** : Support intégré pour SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Planification de tâches (APScheduler), et plus encore.
+- **Architecture Événementielle (Hooks)** : Un gestionnaire de hooks puissant permettant la communication inter-plugins et la réaction aux événements système.
+- **Hot Reloading** : Surveillance automatique du dossier `plugins/` pour recharger les modifications en temps réel.
+- **Génération de Documentation** : Outil intégré (`docgen`) pour agréger et générer la documentation technique du projet.
+- **Prêt pour la Production** : Configuration via YAML, gestion des variables d'environnement et logs structurés.
 
-## Table des matières
+## 🏗️ Architecture
 
-1. [Présentation](#présentation)
-2. [Fonctionnalités principales](#fonctionnalités-principales)
-3. [Installation](#installation)
-4. [Structure du projet](#structure-du-projet)
-5. [Développement des plugins](#développement-des-plugins)
-6. [Administration](#administration)
-7. [Scheduler & Tâches](#scheduler--tâches)
-8. [Monitoring & Logs](#monitoring--logs)
-9. [Sécurité](#sécurité)
-10. [Contribution](#contribution)
-11. [Licence](#licence)
+Le projet est structuré autour de plusieurs composants fondamentaux :
 
----
+- **`Manager`** (`xcore/manager.py`) : L'orchestrateur principal qui coordonne le cycle de vie des plugins et l'intégration des services.
+- **`PluginManager`** (`xcore/sandbox/manager.py`) : Gère le chargement, la validation des signatures et l'exécution des plugins.
+- **`Sandbox`** (`xcore/sandbox/`) : Fournit l'environnement d'isolation pour l'exécution sécurisée du code tiers.
+- **`Integration`** (`xcore/integration/`) : Unifie l'accès aux services externes (bases de données, cache, scheduler) via une configuration centralisée.
 
-## Documentation Complémentaire
+## 🛠️ Installation
 
-Pour une analyse détaillée du projet et un guide complet pour les développeurs, veuillez consulter les documents suivants dans le dossier `docs/` :
+### Prérequis
 
-*   [**GEMINI.md**](docs/GEMINI.md) : Analyse complète du projet générée par l'IA.
-*   [**DEVELOPMENT.md**](docs/DEVELOPMENT.md) : Guide détaillé pour les développeurs.
+- **Python 3.11+**
+- **Poetry** (gestionnaire de dépendances)
 
----
+### Étapes
 
-## Documentation des Modules
+1. **Cloner le dépôt** :
+   ```bash
+   git clone https://github.com/traoreera/xcore
+   cd xcore
+   ```
 
-Chaque module principal du projet est documenté en détail pour faciliter la compréhension et la contribution :
+2. **Installer les dépendances** :
+   ```bash
+   poetry install
+   ```
 
-*   [**admin/**](docs/admin.md) : Gestion des rôles, permissions et utilisateurs administrateurs.
-*   [**auth/**](docs/auth.md) : Authentification utilisateur, JWT et gestion des sessions.
-*   [**backgroundtask/**](docs/backgroundtask.md) : Conteneur pour les tâches d'arrière-plan et leur gestion.
-*   [**cache/**](docs/cache.md) : Mécanisme de cache basé sur Redis.
-*   [**configurations/**](docs/configurations.md) : Gestion centralisée de la configuration de l'application.
-*   [**database/**](docs/database.md) : Configuration et gestion de la base de données via SQLAlchemy.
-*   [**loggers/**](docs/loggers.md) : Système de journalisation configurable avec sortie colorée.
-*   [**manager/**](docs/manager.md) : Orchestrateur principal des plugins et des tâches d'arrière-plan.
-*   [**middleware/**](docs/middleware.md) : Implémentation de middlewares FastAPI personnalisés.
-*   [**otpprovider/**](docs/otpprovider.md) : Fourniture de services d'authentification à usage unique (OTP).
-*   [**plugins/**](docs/plugins.md) : Structure et développement des plugins dynamiques.
-*   [**security/**](docs/security.md) : Hachage des mots de passe et gestion des jetons JWT.
-*   [**tools/**](docs/tools.md) : Scripts utilitaires pour la migration et la gestion de la base de données.
-*   [**xcore/**](docs/xcore.md) : Package applicatif principal et gestion du cycle de vie.
+3. **Configurer l'environnement** :
+   Copiez le fichier d'exemple (si présent) ou créez un fichier `.env` à la racine :
+   ```env
+   DATABASE_URL=sqlite:///./xcore.db
+   REDIS_URL=redis://localhost:6379/0
+   WEBHOOK_SECRET=votre_secret_ici
+   ```
 
----
+4. **Lancer l'application** :
+   ```bash
+   poetry run uvicorn main:app --reload
+   ```
 
-## Présentation
+## 🔌 Développement de Plugins
 
-xcore est conçu pour les environnements où il faut :
+Chaque plugin doit résider dans le dossier `plugins/` et suivre cette structure minimale :
 
-* Charger et exécuter des plugins FastAPI de manière dynamique.
-* Isoler les plugins pour éviter qu’un plugin défectueux n’impacte le serveur.
-* Planifier des tâches périodiques ou ponctuelles via un scheduler intégré.
-* Fournir une interface d’administration et de monitoring complète pour les plugins et les tâches.
-
----
-
-## Fonctionnalités principales
-
-* **Chargement dynamique de plugins** avec purge du cache Python.
-* **Hot reload** des plugins et des routes FastAPI, avec OpenAPI/Swagger automatiquement mis à jour.
-* **Scheduler intégré** pour exécuter des tâches synchrones ou asynchrones.
-* **Sandbox** pour limiter CPU, mémoire et temps d’exécution des plugins.
-* **Monitoring** : logs centralisés, performance, statistiques par plugin et tâches.
-* **Administration via API** : liste plugins, reload, état des tâches, logs.
-* **Notifications & alertes** : échecs répétés des tâches ou plugins.
-* **Versioning et configuration des plugins**.
-
----
-
-## Installation
-
-**Pré-requis :**
-
-* Python ≥ 3.13
-* FastAPI
-* Uvicorn
-
-**Installation :**
-
-```bash
-git clone https://github.com/traoreera/xcore.git
-cd xcore
-poetry install
+```
+plugins/mon_plugin/
+├── plugin.yaml      # Manifeste du plugin (nom, version, entrées)
+├── plugin.sig       # Signature de sécurité (si strict_trusted=True)
+└── src/
+    └── main.py      # Code source principal
 ```
 
-**Lancer le serveur :**
-
-```bash
-uvicorn main:app --reload
+### Exemple de `plugin.yaml` :
+```yaml
+name: "mon_plugin"
+version: "1.0.0"
+entry_point: "src.main:Plugin"
+trusted: true
 ```
 
----
+## 📜 Scripts et Commandes
 
-## Structure du projet
+XCore propose une large gamme de commandes via **Poetry** et **Make** pour faciliter le développement et l'exploitation.
 
-```text
-xcore/
- ├─ main.py                 # Point d’entrée FastAPI
- ├─ manager/                # Core framework
- │   ├─ plManager/
- │   │   ├─ loader.py       # Gestion des plugins
- │   │   ├─ reloader.py     # Reload des plugins à chaud
- │   │   ├─ installer.py    # Installation et validation
- │   │   ├─ repository.py   # Base de données / plugins actifs
- │   │   └─ validator.py    # Validation des plugins
- │   ├─ tools/              # Outils utilitaires
- │   └─ schemas/            # Schémas Pydantic
- ├─ plugins/                # Plugins dynamiques
- │   └─ example_plugin/
- │       ├─ __init__.py
- │       ├─ run.py
- │       └─ router.py
- └─ README.md
-```
+### Commandes Makefile (Recommandé)
 
----
+Utilisez `make help` pour voir toutes les commandes disponibles. Voici les plus courantes :
 
-## Développement des plugins
+- **Développement** :
+  - `make init` : Initialise le projet (installation + lancement dev).
+  - `make run-dev` : Lance le serveur en mode développement (port 8082, avec reload).
+  - `make run-st` : Lance le serveur en mode production/statique (port 8081).
+  - `make clean` : Nettoie les fichiers temporaires et caches Python.
 
-**Structure minimale d’un plugin :**
+- **Qualité et Build** :
+  - `make lint-fix` : Corrige automatiquement le formatage du code (Black, Isort, Autopep8).
+  - `make build` : Exécute le nettoyage, l'installation et le linting.
+  - `make test` : Lance la suite de tests unitaires.
 
-```text
-plugin_name/
- ├─ __init__.py
- ├─ run.py
- ├─ router.py
- └─ config.yaml
-```
+- **Gestion des Plugins** :
+  - `make add-plugin PLUGIN_NAME=nom` : Ajoute ou met à jour un plugin depuis un dépôt Git.
+  - `make rm-plugin PLUGIN_NAME=nom` : Supprime un plugin.
 
-**Exemple de metadata dans `run.py` :**
+- **Supervision et Logs** :
+  - `make logs-live` : Affiche les logs en temps réel.
+  - `make logs-stats` : Affiche les statistiques des logs (erreurs, warnings, etc.).
+  - `make logs-health-check` : Effectue un bilan de santé complet du système via les logs.
 
-```python
-from fastapi import APIRouter, Request
-PLUGIN_INFO = {
-    "version": "1.0.0",
-    "author": "Nom Auteur",
-    "Api_prefix": "/app/plugin_name",
-    "tag_for_identified": ["plugin_name"],
-}
-router = APIRouter(prefix="/plugin_name", tags=["plugin_name"])
+- **Docker** :
+  - `make docker-dev` : Lance l'environnement de développement via Docker Compose.
+  - `make docker-prod` : Lance l'environnement de production via Docker Compose.
 
-#creation du plugins
-class Plugin:
-    
-    def __init__(self,):
-        super(Plugin, self).__init__()
+### Scripts Poetry (Alternatifs)
 
-    @router.get("/")
-    @staticmethod
-    def run(request:Request): # point d'entre
-        return {"status" "ok"}
-```
+- `poetry run migrate` : Exécute les migrations de base de données.
+- `poetry run auto_migrate` : Génère et applique automatiquement les migrations.
+- `poetry run dbutils` : Outils de découverte de modèles.
 
+## 📖 Documentation et Outils
 
-**Exécution du plugin :**
+XCore inclut des outils intégrés pour faciliter la maintenance et la documentation du code :
 
-* Async ou sync via `concured()`
-* Hot reload automatique et injection dans FastAPI via `Loader`
+- **`docgen`** : Un moteur interne qui agrège les fichiers Markdown du dossier `docs/` et peut analyser le code source pour générer une documentation technique structurée.
+- **`doc-gen-summaries.json`** : Un cache pour les résumés générés automatiquement.
+- **Sphinx** : Support optionnel pour la génération de documentation HTML statique via `make auto-docs`.
 
----
+Pour consulter la documentation technique existante, explorez le dossier `docs/` :
+- **Configurations** : `docs/configurations/` (base, core, redis, secure...).
+- **Intégration** : `docs/integration/` (config, core, services...).
+- **Sandbox** : `docs/sandbox/` (manager, router, supervisor...).
+- **Hooks** : `docs/hooks/`.
 
-## Administration
+## 📄 Licence
 
-**Endpoints principaux :**
-
-| Endpoint                | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| `admin`                 | tout ce qui concerne l'administration du serveur       |
-| `manager`               | gestion des taches programme via scheduler             |
-| `user`                  | connexion creation de compte et gestion de compte      |
-| `/auth`                 | authentification                                       |
----
-
-## Scheduler & Tâches
-
-* Tâches périodiques ou ponctuelles définies par les plugins.
-* Support des priorités et dépendances entre tâches.
-* Monitoring et alerting pour chaque tâche.
-
----
-
-## Monitoring & Logs
-
-* Logs centralisés par plugin et core.
-* Statistiques : temps d’exécution, erreurs, nombre de tâches exécutées.
-* Optionnel : intégration Prometheus/Grafana pour monitoring avancé.
-
----
-
-## Sécurité
-
-* Sandbox pour isoler les plugins (CPU/mémoire/timeouts).
-* Limitation d’accès aux routes plugins via token ou OAuth2.
-* Validation stricte des inputs des plugins exposés via API.
-
----
-
-## Contribution
-
-1. Forker le repository.
-2. Créer une branche pour votre feature : `feature/xyz`.
-3. Committer vos modifications : `git commit -m "Add feature xyz"`.
-4. Pousser sur la branche : `git push origin feature/xyz`.
-5. Ouvrir un Pull Request.
-
----
-
-## Licence
-
-MIT License – voir le fichier `LICENSE` pour plus de détails.
+Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.

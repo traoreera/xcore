@@ -35,7 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from ..config.loader import IntegrationConfig, get_config
 from ..core.registry import ServiceRegistry, get_registry
@@ -174,9 +174,9 @@ class Integration:
             "env": self._config.app.env,
             "services": self._extensions.status(),
             "db": list(self._db._adapters.keys()) if self._db else [],
-            "scheduler_running": self._scheduler.is_running
-            if self._scheduler
-            else False,
+            "scheduler_running": (
+                self._scheduler.is_running if self._scheduler else False
+            ),
         }
 
     # ── Arrêt ─────────────────────────────────────────────────

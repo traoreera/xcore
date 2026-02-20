@@ -61,7 +61,7 @@ def get_current_user(
             detail="Service auth non initialisé",
         )
     db = next(_db_dependency())
-    auth = AuthService(db, _auth_secret)
+    AuthService(db, _auth_secret)
     identity = None  # auth.verify_access_token(credentials.credentials)
     print(credentials)
     db.close()

@@ -28,6 +28,7 @@ SIG_FILENAME = "plugin.sig"
 # Erreurs
 # ──────────────────────────────────────────────
 
+
 class SignatureError(Exception):
     """Signature absente, invalide ou modifiée."""
 
@@ -35,6 +36,7 @@ class SignatureError(Exception):
 # ──────────────────────────────────────────────
 # Calcul du hash du plugin
 # ──────────────────────────────────────────────
+
 
 def _compute_plugin_hash(manifest: PluginManifest, secret_key: bytes) -> str:
     """
@@ -56,7 +58,7 @@ def _compute_plugin_hash(manifest: PluginManifest, secret_key: bytes) -> str:
     # Hash de tous les fichiers src/ dans l'ordre alphabétique
     for py_file in sorted(src_dir.rglob("*")):
         if py_file.is_file():
-            h.update(py_file.name.encode())   # nom du fichier dans le hash
+            h.update(py_file.name.encode())  # nom du fichier dans le hash
             h.update(py_file.read_bytes())
 
     return h.hexdigest()
@@ -65,6 +67,7 @@ def _compute_plugin_hash(manifest: PluginManifest, secret_key: bytes) -> str:
 # ──────────────────────────────────────────────
 # API publique
 # ──────────────────────────────────────────────
+
 
 def sign_plugin(manifest: PluginManifest, secret_key: bytes) -> Path:
     """
@@ -77,9 +80,9 @@ def sign_plugin(manifest: PluginManifest, secret_key: bytes) -> Path:
     sig_path = manifest.plugin_dir / SIG_FILENAME
 
     sig_data = {
-        "plugin":  manifest.name,
+        "plugin": manifest.name,
         "version": manifest.version,
-        "digest":  digest,
+        "digest": digest,
     }
     sig_path.write_text(json.dumps(sig_data, indent=2))
     logger.info(f"[{manifest.name}] Signature écrite dans {sig_path}")

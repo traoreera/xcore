@@ -5,11 +5,14 @@ Snapshot Service — détection de changements dans un dossier.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from pathlib import Path
 from typing import Dict, Set
 
 from ..config.loader import PluginsConfig
+
+logger = logging.getLogger("integrations.snapshot")
 
 
 class SnapshotService:
@@ -24,9 +27,7 @@ class SnapshotService:
             return True
         if path.suffix in self.ignore_ext:
             return True
-        if path.name in self.ignore_file:
-            return True
-        return False
+        return path.name in self.ignore_file
 
     def _hash_file(self, path: Path) -> str:
         hasher = hashlib.sha256()
@@ -49,8 +50,8 @@ class SnapshotService:
                     continue
                 try:
                     snapshot[str(path)] = self._hash_file(path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Impossible de hacher '{path}': {e}")
         return snapshot
 
     def diff(self, old: Dict[str, str], new: Dict[str, str]) -> Dict[str, Set[str]]:

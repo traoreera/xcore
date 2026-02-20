@@ -19,10 +19,10 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 # ──────────────────────────────────────────────
 # Stockage JSON simple
 # ──────────────────────────────────────────────
+
 
 class NoteStore:
     """Persistance des notes dans un fichier JSON local."""
@@ -70,6 +70,7 @@ class NoteStore:
 # Helpers
 # ──────────────────────────────────────────────
 
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -86,6 +87,7 @@ def _error(msg: str) -> dict:
 # Plugin
 # ──────────────────────────────────────────────
 
+
 class Plugin:
     """
     Plugin Sandboxed de gestion de notes.
@@ -100,14 +102,14 @@ class Plugin:
     async def handle(self, action: str, payload: dict) -> dict:
         """Point d'entrée unique — dispatche vers la bonne méthode."""
         handlers = {
-            "ping":   self._ping,
+            "ping": self._ping,
             "create": self._create,
-            "get":    self._get,
-            "list":   self._list,
+            "get": self._get,
+            "list": self._list,
             "update": self._update,
             "delete": self._delete,
             "search": self._search,
-            "stats":  self._stats,
+            "stats": self._stats,
         }
 
         handler = handlers.get(action)
@@ -130,9 +132,9 @@ class Plugin:
         return _ok(msg="pong", plugin="notes_manager", version="1.0.0")
 
     async def _create(self, payload: dict) -> dict:
-        title   = payload.get("title", "").strip()
+        title = payload.get("title", "").strip()
         content = payload.get("content", "").strip()
-        tags    = payload.get("tags", [])
+        tags = payload.get("tags", [])
 
         if not title:
             return _error("Le champ 'title' est requis")
@@ -140,10 +142,10 @@ class Plugin:
             return _error("'tags' doit être une liste")
 
         note = {
-            "id":         str(uuid.uuid4()),
-            "title":      title,
-            "content":    content,
-            "tags":       [str(t) for t in tags],
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "content": content,
+            "tags": [str(t) for t in tags],
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -184,7 +186,7 @@ class Plugin:
             return _error(f"Note '{note_id}' introuvable")
 
         if "title" in payload:
-            note["title"]   = str(payload["title"]).strip()
+            note["title"] = str(payload["title"]).strip()
         if "content" in payload:
             note["content"] = str(payload["content"]).strip()
         if "tags" in payload:
@@ -212,7 +214,8 @@ class Plugin:
             return _error("Le champ 'query' est requis")
 
         results = [
-            note for note in self.store.all()
+            note
+            for note in self.store.all()
             if query in note.get("title", "").lower()
             or query in note.get("content", "").lower()
             or any(query in tag.lower() for tag in note.get("tags", []))
@@ -235,5 +238,6 @@ class Plugin:
                 sorted(all_tags.items(), key=lambda x: x[1], reverse=True)
             ),
         )
+
     async def _len(self, payload: dict) -> dict:
         return _ok(count=self.store.lenf())

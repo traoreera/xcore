@@ -1,0 +1,20 @@
+project:
+  name: XCore
+  repo_path: /home/eliezer/devs/xcore/xcore
+  docs_dir: docs  # remplace output_file — la doc est maintenant un dossier
+
+cache:
+  enabled: true
+  path: docgen/cache/summaries.json
+
+model:
+  base_url: http://localhost:1234/v1
+  api_key: lm-studio
+  model_name: google/gemma-3-4b
+  temperature: 0.1
+
+generation:
+  max_file_chunk_chars: 8000
+  include_extensions: [".py", ".yaml", ".json", ".md"]
+  exclude_dirs: [".git", "__pycache__", ".venv", "docs", "backgroundtask",".vscode", "docgen"]
+  exclude_files: ["__init__.py", "*.md", "*.pyc", "*.ini", "*.html", "*.json"]   # fichiers ignores completement

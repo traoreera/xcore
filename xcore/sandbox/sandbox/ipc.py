@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+
 logger = logging.getLogger("plManager.ipc")
 
 
@@ -18,11 +19,14 @@ logger = logging.getLogger("plManager.ipc")
 # Erreurs IPC
 # ──────────────────────────────────────────────
 
+
 class IPCError(Exception):
     """Erreur de communication avec le subprocess."""
 
+
 class IPCTimeoutError(IPCError):
     """Le subprocess n'a pas répondu dans le délai imparti."""
+
 
 class IPCProcessDead(IPCError):
     """Le subprocess est mort."""
@@ -32,16 +36,18 @@ class IPCProcessDead(IPCError):
 # Résultat d'un appel IPC
 # ──────────────────────────────────────────────
 
+
 @dataclass
 class IPCResponse:
-    success:  bool
-    data:     dict
-    raw:      str = ""
+    success: bool
+    data: dict
+    raw: str = ""
 
 
 # ──────────────────────────────────────────────
 # Canal IPC
 # ──────────────────────────────────────────────
+
 
 class IPCChannel:
     """
@@ -51,14 +57,14 @@ class IPCChannel:
 
     def __init__(
         self,
-        process:         asyncio.subprocess.Process,
-        timeout:         float = 10.0,
-        max_output_size: int   = 1024 * 512,  # 512 KB max par réponse
+        process: asyncio.subprocess.Process,
+        timeout: float = 10.0,
+        max_output_size: int = 1024 * 512,  # 512 KB max par réponse
     ) -> None:
-        self._process         = process
-        self._timeout         = timeout
+        self._process = process
+        self._timeout = timeout
         self._max_output_size = max_output_size
-        self._lock            = asyncio.Lock()
+        self._lock = asyncio.Lock()
 
     # ──────────────────────────────────────────
     # Appel principal
@@ -99,7 +105,7 @@ class IPCChannel:
                 f"Pas de réponse du plugin dans {self._timeout}s"
             ) from e
         except Exception as e:
-            raise IPCError(f"Erreur lecture stdout : {e}") from e 
+            raise IPCError(f"Erreur lecture stdout : {e}") from e
 
         if not raw:
             raise IPCProcessDead("EOF inattendu sur stdout du subprocess")
@@ -115,7 +121,7 @@ class IPCChannel:
         try:
             data = json.loads(raw_str)
         except json.JSONDecodeError as e:
-            raise IPCError(f"Réponse JSON invalide : {e} — reçu : {raw_str!r}") from e 
+            raise IPCError(f"Réponse JSON invalide : {e} — reçu : {raw_str!r}") from e
 
         return IPCResponse(
             success=data.get("status") == "ok",

@@ -6,8 +6,9 @@ Intègre : mémoire (via worker), health check, env injection, disk watcher.
 """
 
 from __future__ import annotations
-import contextlib
+
 import asyncio
+import contextlib
 import logging
 import os
 import sys
@@ -16,40 +17,40 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
-from .disk_watcher import DiskWatcher, DiskQuotaExceeded
+from .disk_watcher import DiskQuotaExceeded, DiskWatcher
 from .ipc import IPCChannel, IPCProcessDead, IPCResponse
 
 logger = logging.getLogger("plManager.supervisor")
 
 
 class ProcessState(Enum):
-    STOPPED    = auto()
-    STARTING   = auto()
-    RUNNING    = auto()
+    STOPPED = auto()
+    STARTING = auto()
+    RUNNING = auto()
     RESTARTING = auto()
-    FAILED     = auto()
+    FAILED = auto()
 
 
 @dataclass
 class SupervisorConfig:
-    timeout:         float = 10.0
-    max_restarts:    int   = 3
-    restart_delay:   float = 1.0
+    timeout: float = 10.0
+    max_restarts: int = 3
+    restart_delay: float = 1.0
     startup_timeout: float = 5.0
 
 
 class SandboxSupervisor:
 
     def __init__(self, manifest, config: SupervisorConfig | None = None) -> None:
-        self.manifest  = manifest
-        self.config    = config or SupervisorConfig()
-        self._process:     asyncio.subprocess.Process | None = None
-        self._channel:     IPCChannel | None                 = None
-        self._state:       ProcessState                      = ProcessState.STOPPED
-        self._restarts:    int                               = 0
-        self._started_at:  float | None                      = None
-        self._watch_task:  asyncio.Task | None               = None
-        self._health_task: asyncio.Task | None               = None
+        self.manifest = manifest
+        self.config = config or SupervisorConfig()
+        self._process: asyncio.subprocess.Process | None = None
+        self._channel: IPCChannel | None = None
+        self._state: ProcessState = ProcessState.STOPPED
+        self._restarts: int = 0
+        self._started_at: float | None = None
+        self._watch_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task | None = None
         data_dir = manifest.plugin_dir / "data"
         self._disk = DiskWatcher(data_dir, manifest.resources.max_disk_mb)
 
@@ -76,9 +77,9 @@ class SandboxSupervisor:
         logger.info(f"[{self.manifest.name}] Démarrage subprocess...")
         await self._spawn()
         await self._ping_check()
-        self._state      = ProcessState.RUNNING
+        self._state = ProcessState.RUNNING
         self._started_at = time.monotonic()
-        self._restarts   = 0
+        self._restarts = 0
         self._watch_task = asyncio.create_task(
             self._watch_loop(), name=f"watch-{self.manifest.name}"
         )
@@ -88,7 +89,9 @@ class SandboxSupervisor:
                 self._health_loop(hc.interval_seconds, hc.timeout_seconds),
                 name=f"health-{self.manifest.name}",
             )
-        logger.info(f"[{self.manifest.name}] ✅ Subprocess démarré (PID={self._process.pid})")
+        logger.info(
+            f"[{self.manifest.name}] ✅ Subprocess démarré (PID={self._process.pid})"
+        )
 
     async def _spawn(self) -> None:
         """
@@ -101,20 +104,22 @@ class SandboxSupervisor:
         La limite est passée via _SANDBOX_MAX_MEM_MB et appliquée
         par le worker dans son propre process au démarrage.
         """
-        worker      = Path(__file__).parent / "worker.py"
+        worker = Path(__file__).parent / "worker.py"
         venv_python = self.manifest.plugin_dir / "venv" / "bin" / "python"
-        python_exe  = str(venv_python) if venv_python.exists() else sys.executable
+        python_exe = str(venv_python) if venv_python.exists() else sys.executable
+        sandbox_home = (self.manifest.plugin_dir / ".sandbox_home").resolve()
+        sandbox_home.mkdir(parents=True, exist_ok=True)
 
         # Env minimal — pas d'héritage de l'env uvicorn pour éviter
         # la fuite de secrets (DB_PASSWORD, JWT_SECRET, etc.)
         env = {
-            "PATH":                    os.environ.get("PATH", "/usr/bin:/bin"),
-            "HOME":                    os.environ.get("HOME", "/tmp"),
-            "LANG":                    os.environ.get("LANG", "en_US.UTF-8"),
-            "PYTHONIOENCODING":        "utf-8",
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(sandbox_home),
+            "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+            "PYTHONIOENCODING": "utf-8",
             "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONUNBUFFERED":        "1",
-            "_SANDBOX_MAX_MEM_MB":     str(self.manifest.resources.max_memory_mb),
+            "PYTHONUNBUFFERED": "1",
+            "_SANDBOX_MAX_MEM_MB": str(self.manifest.resources.max_memory_mb),
         }
         env |= self.manifest.env
 
@@ -139,14 +144,14 @@ class SandboxSupervisor:
 
     async def _ping_check(self) -> None:
         hc_timeout = self.manifest.runtime.health_check.timeout_seconds
-        timeout    = max(hc_timeout, self.config.startup_timeout)
+        timeout = max(hc_timeout, self.config.startup_timeout)
         try:
             resp = await asyncio.wait_for(
                 self._channel.call("ping", {}), timeout=timeout
             )
             if not resp.success:
-                raise RuntimeError(f"Ping échoué : {resp.data}") 
-        except asyncio.TimeoutError as e :
+                raise RuntimeError(f"Ping échoué : {resp.data}")
+        except asyncio.TimeoutError as e:
             await self._kill()
             raise RuntimeError(
                 f"[{self.manifest.name}] Pas de réponse au ping dans {timeout}s"
@@ -179,7 +184,9 @@ class SandboxSupervisor:
                     self._channel.call("ping", {}), timeout=timeout
                 )
                 if not resp.success:
-                    logger.warning(f"[{self.manifest.name}] Health dégradé: {resp.data}")
+                    logger.warning(
+                        f"[{self.manifest.name}] Health dégradé: {resp.data}"
+                    )
                 else:
                     logger.debug(f"[{self.manifest.name}] Health OK")
             except asyncio.TimeoutError:
@@ -215,10 +222,14 @@ class SandboxSupervisor:
         self._restarts += 1
         if self._restarts > self.config.max_restarts:
             self._state = ProcessState.FAILED
-            logger.error(f"[{self.manifest.name}] ❌ FAILED après {self._restarts-1} crashs")
+            logger.error(
+                f"[{self.manifest.name}] ❌ FAILED après {self._restarts-1} crashs"
+            )
             return
         self._state = ProcessState.RESTARTING
-        logger.info(f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts}...")
+        logger.info(
+            f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts}..."
+        )
         await asyncio.sleep(self.config.restart_delay)
         try:
             await self.start()
@@ -244,23 +255,25 @@ class SandboxSupervisor:
             except asyncio.TimeoutError:
                 self._process.kill()
             except Exception:
-                pass
+                logger.exception(
+                    f"[{self.manifest.name}] Erreur inattendue pendant _kill()"
+                )
 
     def status(self) -> dict:
         return {
-            "name":     self.manifest.name,
-            "mode":     "sandboxed",
-            "state":    self._state.name,
-            "pid":      self._process.pid if self._process else None,
+            "name": self.manifest.name,
+            "mode": "sandboxed",
+            "state": self._state.name,
+            "pid": self._process.pid if self._process else None,
             "restarts": self._restarts,
-            "uptime":   round(self.uptime, 1) if self.uptime else None,
-            "disk":     self._disk.stats(),
+            "uptime": round(self.uptime, 1) if self.uptime else None,
+            "disk": self._disk.stats(),
             "limits": {
-                "timeout_s":     self.manifest.resources.timeout_seconds,
+                "timeout_s": self.manifest.resources.timeout_seconds,
                 "max_memory_mb": self.manifest.resources.max_memory_mb,
-                "max_disk_mb":   self.manifest.resources.max_disk_mb,
+                "max_disk_mb": self.manifest.resources.max_disk_mb,
                 "rate_limit": {
-                    "calls":          self.manifest.resources.rate_limit.calls,
+                    "calls": self.manifest.resources.rate_limit.calls,
                     "period_seconds": self.manifest.resources.rate_limit.period_seconds,
                 },
             },

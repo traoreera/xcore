@@ -1,16 +1,17 @@
 import hashlib
+import logging
 import os
 from pathlib import Path
 from typing import Dict, Set
-from xcore.configurations.manager import ManagerCfg, Configure
 
-import logging
+from xcore.configurations.manager import Configure, ManagerCfg
 
 logger = logging.getLogger(__name__)
 
 # ── Config instanciée en lazy (pas au niveau module) ──────────────
 # Évite le couplage fort à l'import et facilite les tests unitaires.
 _cfg: "ManagerCfg | None" = None
+
 
 def _get_cfg() -> "ManagerCfg":
     global _cfg
@@ -33,9 +34,21 @@ class Snapshot:
         ignore_file: Set[str] | None = None,
     ):
         cfg = _get_cfg()
-        self.ignore_hidden = ignore_hidden if ignore_hidden is not None else cfg.custom_config["snapshot"]["hidden"]
-        self.ignore_ext    = ignore_ext    if ignore_ext    is not None else cfg.custom_config["snapshot"]["extensions"]
-        self.ignore_file   = ignore_file   if ignore_file   is not None else cfg.custom_config["snapshot"]["filenames"]
+        self.ignore_hidden = (
+            ignore_hidden
+            if ignore_hidden is not None
+            else cfg.custom_config["snapshot"]["hidden"]
+        )
+        self.ignore_ext = (
+            ignore_ext
+            if ignore_ext is not None
+            else cfg.custom_config["snapshot"]["extensions"]
+        )
+        self.ignore_file = (
+            ignore_file
+            if ignore_file is not None
+            else cfg.custom_config["snapshot"]["filenames"]
+        )
         # Snapshot précédent gardé en mémoire pour __call__
         self._last_snapshot: Dict[str, str] = {}
 

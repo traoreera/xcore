@@ -43,7 +43,7 @@ scheduler:
     - id: sandbox_runtimer
       func: "backgroundtask.sandbox:service_main"
       trigger: "interval"
-      minutes: 0.5
+      seconds: 30
       enabled: true
 
 logging:

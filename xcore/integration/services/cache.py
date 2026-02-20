@@ -5,6 +5,7 @@ API unifiée quelque soit le backend.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Callable, Optional
@@ -71,15 +72,18 @@ class RedisBackend:
             raise ImportError("redis-py non installé: pip install redis")
 
     def get(self, key: str) -> Optional[Any]:
-        import pickle
-
         raw = self._client.get(key)
-        return pickle.loads(raw) if raw is not None else None
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except Exception as e:
+            logger.warning(f"Valeur Redis invalide pour la clé '{key}': {e}")
+            return None
 
     def set(self, key: str, value: Any, ttl: int = 300):
-        import pickle
-
-        self._client.setex(key, ttl, pickle.dumps(value))
+        payload = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        self._client.setex(key, ttl, payload.encode("utf-8"))
 
     def delete(self, key: str):
         self._client.delete(key)

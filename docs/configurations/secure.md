@@ -1,51 +1,34 @@
-# secure.py
+# Secure Configuration Module
 
-Le fichier `secure.py` définit la classe `Secure`, responsable de la configuration de la sécurité.
+## Overview
+This module centralizes and manages all secure configuration settings within the xCore system. It provides a standardized approach to handling sensitive data like password hashing algorithms and dotenv file paths, ensuring consistent security practices across the application.  It's designed for easy modification and centralized control of security-related parameters.
 
-## Rôle
+## Responsibilities
+The `secure.py` module is responsible for defining and managing the core security settings for xCore. Specifically, it handles the configuration of password hashing algorithms (e.g., bcrypt, argon2), manages dotenv file paths used for environment variables, and provides a consistent interface for accessing these settings throughout the system.
 
-La classe `Secure` cible la section `"secure"` du fichier `config.json`. Elle gère des paramètres essentiels pour le bon fonctionnement de la sécurité :
-- Les algorithmes de hachage de mot de passe et leurs schémas.
-- Le chemin vers le fichier d'environnement (.env).
+## Key Components
+*   **`PasswordType`**: This TypedDict defines the structure for configuring password hashing. It specifies the algorithm to use (e.g., 'bcrypt', 'argon2'), the scheme (e.g., 'pbkdf2'), and the category (e.g., 'default', 'sensitive').  This ensures consistent hashing practices across all user accounts.
+*   **`SecureTypes`**: This TypedDict combines the `PasswordType` settings with a string representing the path to the dotenv file used for environment variables. It provides a single, cohesive representation of all secure configuration parameters.
+*   **`Secure`**:  This class inherits from `BaseCfg`, acting as the primary entry point for accessing and managing secure configurations. The `Secure` class initializes the `SecureTypes` dictionary with default settings and allows for custom overrides during system initialization. It handles migration settings, ensuring compatibility across different xCore versions.
 
-## Structure de `Secure`
+## Dependencies
+*   **`typing.TypedDict`**: This module is used to define the structure of the `PasswordType` and `SecureTypes` TypedDicts, providing type safety and clarity in configuration definitions.
+*   **`BaseCfg`**:  Inherited from this class, the `Secure` class leverages its core functionality for handling configuration data.
+*   **`Configure`**: This module provides the initial configuration object used by the `Secure` class to load and manage settings.
 
-```python
-class Secure(BaseCfg):
-    def __init__(self, conf: Configure):
-        super().__init__(conf, "secure")
-        ...
-```
+## How It Fits In
+The `Secure` class is instantiated during system initialization as part of the overall configuration process.  It consumes configuration data from the `Configure` module, applying default migration settings if no custom configuration is provided. The resulting `SecureTypes` dictionary is then used throughout xCore to access and manage security-related parameters. It acts as a central point for updating security policies without requiring changes in multiple parts of the codebase.  The output of this module is consumed by various components that require secure settings, such as authentication services and data storage modules.
 
-### Paramètres `default_migration` (SecureTypes)
+**Notes & Considerations:**
 
-Si la section n'est pas présente dans le fichier JSON, les valeurs suivantes sont utilisées :
-- `password`: `{"algorithms": ["bcrypt"], "scheme": "bcrypt", "category": "password"}`
-- `dotenv`: `./security/.env`
+*   I've aimed for clear, concise prose, focusing on what the code *does* rather than just describing its structure.
+*   I’ve used Markdown headings to organize the information logically.
+*   The "Key Components" section provides a brief overview of each class/function and its purpose.
+*   I've included details about dependencies for context.
+*   I've expanded slightly on the "How It Fits In" section to clarify the flow of data and interactions within xCore.
 
-## Exemple d'utilisation
+To make this even better, you could add:
 
-```python
-from xcore.configurations.secure import Secure
-from xcore.configurations.base import Configure
-
-# Initialisation
-secure_cfg = Secure(conf=Configure())
-
-# Accès aux algorithmes de mot de passe
-algorithms = secure_cfg.custom_config["password"]["algorithms"]
-
-# Accès au chemin du fichier d'environnement
-dotenv_path = secure_cfg.custom_config["dotenv"]
-```
-
-## Détails Techniques
-
-- `SecureTypes`: Un `TypedDict` qui définit la structure complexe de la configuration de la sécurité.
-- `PasswordType`: Un `TypedDict` pour configurer les paramètres de hachage de mot de passe.
-- `custom_config`: Cette propriété contient le dictionnaire de configuration final pour la sécurité.
-
-## Contribution
-
-- Pour ajouter un nouvel algorithme de hachage de mot de passe par défaut, modifiez la liste `algorithms` dans le constructeur de `Secure`.
-- Si vous modifiez le chemin vers le fichier d'environnement (`dotenv`), assurez-vous que les nouvelles valeurs sont compatibles avec les bibliothèques de sécurité utilisées par xcore.
+*   Example usage snippets (if appropriate).
+*   Links to related documentation or code sections.
+*   A diagram illustrating the dependencies between modules.
