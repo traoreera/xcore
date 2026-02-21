@@ -1,0 +1,59 @@
+# .github/labeler.yml
+# Mappage automatique des labels selon les fichiers modifiés dans une PR
+
+"plugin":
+  - changed-files:
+      - any-glob-to-any-file: "plugins/**"
+
+"extension":
+  - changed-files:
+      - any-glob-to-any-file: "extensions/**"
+
+"core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "xcore/**"
+          - "main.py"
+          - "app.py"
+
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+          - "*.rst"
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"
+          - "poetry.lock"
+
+"ci":
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+
+"security":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/services/auth/**"
+          - "extensions/services/security/**"
+
+"database":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/services/database/**"
+          - "alembic/**"
+          - "alembic.ini"
+
+"tests":
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"
+
+"config":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "config.json"
+          - "*.yaml"
+          - "*.yml"
+          - "*.toml"

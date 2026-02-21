@@ -44,8 +44,11 @@ async def lifespan(app: FastAPI):
     # 3. Injection dans PluginManager AVANT start()
     manager: Manager = app.state.manager
     manager.update_services(core_services)
-    
 
+    health = integration.get('health')
+    report = await health.check_all()
+
+    print(report)
     # 4. Hook startup
     await xhooks.emit("xcore.startup")
     # 5. Démarrage des plugins

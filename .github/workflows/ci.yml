@@ -1,0 +1,217 @@
+name: CI – Tests & Quality
+
+on:
+  push:
+    branches: [features, main]
+  pull_request:
+    branches: [features, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Lint & format ──────────────────────────────────────────────────────────
+  lint:
+    name: 🔍 Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run ruff (lint)
+        run: poetry run ruff check .
+
+      - name: Run black (format check)
+        run: poetry run black --check .
+
+  # ── Type checking ──────────────────────────────────────────────────────────
+  typecheck:
+    name: 🔎 Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run mypy
+        run: poetry run mypy xcore/ extensions/ --ignore-missing-imports
+
+  # ── Tests ──────────────────────────────────────────────────────────────────
+  test:
+    name: 🧪 Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-for-ci
+          DEBUG: "false"
+        run: |
+          poetry run pytest tests/ \
+            --cov=xcore \
+            --cov=extensions \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --tb=short \
+            -q
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.13'
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+  # ── Plugin validation ──────────────────────────────────────────────────────
+  validate-plugins:
+    name: 🔌 Validate Plugins
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Validate all plugins structure
+        run: |
+          poetry run python -c "
+          import os, sys, importlib.util
+          plugins_dir = 'plugins'
+          errors = []
+          for name in os.listdir(plugins_dir):
+              path = os.path.join(plugins_dir, name)
+              if not os.path.isdir(path): continue
+              run_py = os.path.join(path, 'run.py')
+              init_py = os.path.join(path, '__init__.py')
+              if not os.path.exists(run_py):
+                  errors.append(f'{name}: missing run.py')
+                  continue
+              if not os.path.exists(init_py):
+                  errors.append(f'{name}: missing __init__.py')
+                  continue
+              spec = importlib.util.spec_from_file_location(name, run_py)
+              mod  = importlib.util.module_from_spec(spec)
+              try:
+                  spec.loader.exec_module(mod)
+              except Exception as e:
+                  errors.append(f'{name}: import error – {e}')
+                  continue
+              if not hasattr(mod, 'PLUGIN_INFO'):
+                  errors.append(f'{name}: missing PLUGIN_INFO')
+              if not hasattr(mod, 'Plugin'):
+                  errors.append(f'{name}: missing Plugin class')
+              if not hasattr(mod, 'router'):
+                  errors.append(f'{name}: missing router')
+          if errors:
+              print('Plugin validation FAILED:')
+              for e in errors: print(' ✗', e)
+              sys.exit(1)
+          print(f'All plugins valid ✓')
+          "
+
+  # ── Résumé du CI ───────────────────────────────────────────────────────────
+  ci-success:
+    name: ✅ CI Passed
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, validate-plugins]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ||
+                "${{ needs.typecheck.result }}" != "success" ||
+                "${{ needs.test.result }}" != "success" ||
+                "${{ needs.validate-plugins.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed"
+            exit 1
+          fi
+          echo "All CI jobs passed ✓"

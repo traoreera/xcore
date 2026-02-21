@@ -1,0 +1,121 @@
+name: Security – Audit & Scan
+
+on:
+  push:
+    branches: [features, main]
+  schedule:
+    - cron: "0 7 * * 1"   # chaque lundi à 7h UTC
+  workflow_dispatch:
+
+jobs:
+
+  # ── Audit des dépendances Python ───────────────────────────────────────────
+  dependency-audit:
+    name: 🔒 Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Install deps
+        run: poetry install --no-interaction
+
+      - name: Audit with pip-audit
+        run: |
+          pip install pip-audit
+          poetry export -f requirements.txt --without-hashes | pip-audit -r /dev/stdin
+
+      - name: Check for known vulnerabilities (Safety)
+        run: |
+          pip install safety
+          poetry export -f requirements.txt --without-hashes | safety check --stdin || true
+
+  # ── Analyse statique de sécurité (Bandit) ─────────────────────────────────
+  sast:
+    name: 🛡️ SAST – Bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit -r xcore/ extensions/ plugins/ \
+            -ll \
+            --exclude ".venv,tests" \
+            -f json -o bandit-report.json || true
+
+      - name: Display results
+        run: |
+          python -c "
+          import json, sys
+          with open('bandit-report.json') as f:
+              report = json.load(f)
+          issues = report.get('results', [])
+          highs = [i for i in issues if i['issue_severity'] == 'HIGH']
+          if highs:
+              print(f'❌ {len(highs)} HIGH severity issue(s) found:')
+              for i in highs:
+                  print(f'  {i[\"filename\"]}:{i[\"line_number\"]} – {i[\"issue_text\"]}')
+              sys.exit(1)
+          print(f'✓ No HIGH severity issues ({len(issues)} total findings)')
+          "
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 30
+
+  # ── Secrets scanning ───────────────────────────────────────────────────────
+  secrets-scan:
+    name: 🔑 Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Dépendances obsolètes ──────────────────────────────────────────────────
+  outdated:
+    name: 📦 Outdated Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Check outdated packages
+        run: |
+          echo "## Outdated packages" >> $GITHUB_STEP_SUMMARY
+          poetry show --outdated --no-ansi >> $GITHUB_STEP_SUMMARY || echo "All packages up to date ✓" >> $GITHUB_STEP_SUMMARY

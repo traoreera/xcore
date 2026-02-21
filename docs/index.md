@@ -60,19 +60,6 @@ Le plugin est automatiquement découvert et monté dans FastAPI au démarrage.
 
 ---
 
-## Naviguer dans la documentation
-
-| Section | Description |
-|---------|-------------|
-| [Architecture](./architecture.md) | Vue d'ensemble technique du framework |
-| [Concepts](./concepts/plugins-vs-extensions.md) | Comprendre plugins vs extensions/services |
-| [Tutoriels](./tutorials/introduction.md) | Guides pas-à-pas pour créer et utiliser des plugins |
-| [Référence](./reference/api-endpoints.md) | API, configuration, anatomie d'un plugin |
-| [Contribution](./development/contribution-guide.md) | Contribuer au projet |
-| [Glossaire](./glossary.md) | Définitions des termes clés |
-
----
-
 ## Fonctionnalités principales
 
 - **Chargement dynamique de plugins** avec purge du cache Python
@@ -82,6 +69,54 @@ Le plugin est automatiquement découvert et monté dans FastAPI au démarrage.
 - **Administration via API** : liste, reload, monitoring des plugins
 - **Authentification JWT** et gestion des rôles intégrées
 - **Cache Redis** et journalisation centralisée
+
+---
+
+```{toctree}
+:maxdepth: 1
+:caption: 🏠 Vue d'ensemble
+
+architecture
+glossary
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: 💡 Concepts
+
+concepts/plugins-vs-extensions
+concepts/scheduler-concepts
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: 🎓 Tutoriels
+
+tutorials/introduction
+tutorials/plugin-creation
+tutorials/plugin-usage
+tutorials/service-creation
+tutorials/service-usage
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: 📖 Référence
+
+reference/plugin-anatomy
+reference/api-endpoints
+reference/config-options
+reference/commands
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: 🛠️ Développement
+
+development/contribution-guide
+development/testing
+development/code-style
+```
 
 ---
 
