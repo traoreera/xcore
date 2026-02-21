@@ -1,0 +1,129 @@
+name: Release – Tag & Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"   # déclenché sur v1.0.0, v1.2.3, etc.
+
+permissions:
+  contents: write
+
+jobs:
+
+  # ── Validation pre-release ─────────────────────────────────────────────────
+  pre-release-checks:
+    name: 🔍 Pre-release Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run full test suite
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          SECRET_KEY: release-test-key
+        run: poetry run pytest tests/ -q --tb=short
+
+      - name: Check tag matches pyproject.toml version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PYPROJECT=$(poetry version -s)
+          if [ "$TAG" != "$PYPROJECT" ]; then
+            echo "❌ Tag ($TAG) ≠ pyproject.toml version ($PYPROJECT)"
+            exit 1
+          fi
+          echo "✓ Version match: $TAG"
+
+  # ── Génération du changelog ────────────────────────────────────────────────
+  changelog:
+    name: 📝 Generate Changelog
+    runs-on: ubuntu-latest
+    needs: pre-release-checks
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # historique complet pour le changelog
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
+          CURR_TAG=${GITHUB_REF#refs/tags/}
+
+          echo "## What's Changed" > /tmp/notes.md
+          echo "" >> /tmp/notes.md
+
+          # Features
+          FEATS=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^feat" --pretty="format:- %s" 2>/dev/null)
+          if [ -n "$FEATS" ]; then
+            echo "### ✨ New Features" >> /tmp/notes.md
+            echo "$FEATS" >> /tmp/notes.md
+            echo "" >> /tmp/notes.md
+          fi
+
+          # Fixes
+          FIXES=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^fix" --pretty="format:- %s" 2>/dev/null)
+          if [ -n "$FIXES" ]; then
+            echo "### 🐛 Bug Fixes" >> /tmp/notes.md
+            echo "$FIXES" >> /tmp/notes.md
+            echo "" >> /tmp/notes.md
+          fi
+
+          # Docs
+          DOCS=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^docs" --pretty="format:- %s" 2>/dev/null)
+          if [ -n "$DOCS" ]; then
+            echo "### 📖 Documentation" >> /tmp/notes.md
+            echo "$DOCS" >> /tmp/notes.md
+            echo "" >> /tmp/notes.md
+          fi
+
+          echo "" >> /tmp/notes.md
+          echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURR_TAG}" >> /tmp/notes.md
+
+          NOTES=$(cat /tmp/notes.md)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # ── GitHub Release ─────────────────────────────────────────────────────────
+  release:
+    name: 🎉 Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: changelog
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "xcore ${{ github.ref_name }}"
+          body: ${{ needs.changelog.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+          generate_release_notes: false
+
+  # ── Notification de succès ─────────────────────────────────────────────────
+  notify:
+    name: 📣 Notify Release
+    runs-on: ubuntu-latest
+    needs: release
+    if: success()
+    steps:
+      - name: Release summary
+        run: |
+          echo "🎉 Release ${{ github.ref_name }} published successfully!"
+          echo "URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

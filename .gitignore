@@ -40,4 +40,6 @@ backgroundtask
 node_modules/
 
 .claude
-plugins/
+
+CLAUDE.md
+_build
