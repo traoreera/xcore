@@ -52,6 +52,7 @@ bandit = "^1.8.6"
 fastapi = "^0.118.2"
 aiocache = "^0.12.3"
 redis = {extras = ["hiredis"], version = "^7.0.0"}
+aiohttp = "^3.13.3"
 
 
 [tool.poetry.group.docs.dependencies]

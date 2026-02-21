@@ -262,6 +262,7 @@ class ConfigLoader:
                     "hour",
                     "minute",
                     "day_of_week",
+                    "grace_time",
                 )
             }
             jobs.append(

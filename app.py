@@ -8,8 +8,6 @@ Ordre correct :
   4. manager.start()                 → plugins chargés avec les vrais services
 """
 
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from sqlalchemy.orm import declarative_base
 
@@ -24,72 +22,58 @@ _plugin_hooks = HookManager()
 integration = Integration("./integration.yaml")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-
-    # 1. Init des services (db, email, otp...)
-    await integration.init()
-
-    # 2. Récupération de la DB après init
-    ddb: SQLAdapter = integration.db.get("default")
-
-    core_services = {
-        "db": ddb.session,
-        "base": Base,
-        "engine": ddb.engine,
-        "Hooks": _plugin_hooks,
-        "Event": Event,
-    }
-
-    # 3. Injection dans PluginManager AVANT start()
-    manager: Manager = app.state.manager
-    manager.update_services(core_services)
-
-    health = integration.get('health')
-    report = await health.check_all()
-
-    print(report)
-    # 4. Hook startup
-    await xhooks.emit("xcore.startup")
-    # 5. Démarrage des plugins
-    report = await manager.start()
-    print(f"✅ Plugins chargés : {report['loaded']}")
-    if report["failed"]:
-        print(f"❌ Échecs          : {report['failed']}")
-
-    yield
-
-    await manager.stop()
-    await integration.shutdown()
-    await xhooks.emit("xcore.shutdown")
-
-
-app = FastAPI(title="Mon API", lifespan=lifespan)
+app = FastAPI(title="Mon API")
 
 manager = Manager(
     app=app,
     base_routes=list(app.routes),
     plugins_dir="plugins",
     secret_key=b"ejkfnwefnkejw",
-    services={},  # vide ici — rempli dans lifespan via update_services()
+    services={},
     interval=2,
     strict_trusted=True,
 )
 
+
+@app.on_event("startup")
+async def event_startup():
+    # 1- integration init
+    await integration.init()
+
+    # put on depends for all app
+    await xhooks.emit("xcore.startup")  # emit starting app event
+
+
+@app.on_event("shutdown")
+async def event_shotdown():
+
+    await xhooks.emit("xcore.shutdown")
+
+
+@xhooks.on("xcore.startup")
+async def manager_setup(event: Event):
+    ddb: SQLAdapter = integration.db.get("default")  # get databse provider
+
+    core_services = {
+        "db": ddb.session,
+        "base": Base,
+        "engine": ddb.engine,
+        "Event": Event,
+        "Hooks": _plugin_hooks,
+    }
+    manager._services = core_services
+    manager.update_services(core_services)
+
+    report = await manager.start()
+
+    print("=>", report)
+
+
+@xhooks.on("xcore.shutdown")
+async def manager_shutdown(event: Event):
+    await manager.stop()
+    await integration.shutdown()
+
+
 app.state.manager = manager
 app.state.integration = integration
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@app.get("/services/status")
-async def services_status():
-    return integration.status()
-
-
-@app.get("/plugins/status")
-async def plugins_status():
-    return app.state.manager.status()

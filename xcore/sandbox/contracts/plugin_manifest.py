@@ -377,7 +377,19 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         "runtime",
         "env",
         "filesystem",
+        "requires",  # ★ FIX : déclaré ici pour ne pas tomber dans extra{}
     }
+
+    # ★ FIX : lecture du champ requires depuis le YAML
+    # Avant : requires n'était jamais lu → tombait dans extra{} → toujours []
+    # → _topo_sort voyait 0 dépendances → tous les plugins dans la même vague
+    # → erp_auth démarrait EN MÊME TEMPS qu'erp_core → services["core"] absent
+    raw_requires = raw.get("requires", []) or []
+    if not isinstance(raw_requires, list):
+        raise ManifestError(
+            f"'requires' doit être une liste de noms de plugins, "
+            f"reçu : {type(raw_requires).__name__}"
+        )
 
     return PluginManifest(
         name=str(raw["name"]),
@@ -396,6 +408,7 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         filesystem=FilesystemConfig.from_dict(
             raw.get("filesystem", {}), defaults["filesystem"]
         ),
+        requires=raw_requires,  # ★ FIX : maintenant transmis au dataclass
         extra={k: v for k, v in raw.items() if k not in known_keys},
         plugin_dir=plugin_dir,
     )

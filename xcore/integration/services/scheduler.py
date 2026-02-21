@@ -40,6 +40,7 @@ class SchedulerService:
               func: "myapp.tasks:my_function"
               trigger: "cron"
               hour: 3
+              grace_time: 3
 
     Usage programmatique :
         scheduler.add_job(
@@ -135,11 +136,16 @@ class SchedulerService:
                 trigger_kwargs["minute"] = job_cfg.minute
             if job_cfg.day_of_week is not None:
                 trigger_kwargs["day_of_week"] = job_cfg.day_of_week
+            if job_cfg.grace_time is not None:
+                trigger_kwargs["misfire_grace_time"] = job_cfg.grace_time
+
         elif job_cfg.trigger == "interval":
             if job_cfg.seconds is not None:
                 trigger_kwargs["seconds"] = job_cfg.seconds
             if job_cfg.minutes is not None:
                 trigger_kwargs["minutes"] = job_cfg.minutes
+            if job_cfg.grace_time is not None:
+                trigger_kwargs["misfire_grace_time"] = job_cfg.grace_time
 
         trigger_kwargs.update(job_cfg.extra)
         self.add_job(func, trigger=job_cfg.trigger, job_id=job_cfg.id, **trigger_kwargs)

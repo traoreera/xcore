@@ -67,6 +67,7 @@ class SchedulerJobConfig:
     minute: Optional[int] = None
     day_of_week: Optional[str] = None
     extra: Dict[str, Any] = field(default_factory=dict)
+    grace_time: Optional[int] = None
 
 
 @dataclass

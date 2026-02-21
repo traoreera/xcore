@@ -109,7 +109,7 @@ class Manager:
 
     # ── Watcher ───────────────────────────────────────────────
 
-    def start_watching(self) -> None:
+    def start_watching(self):
         last_snapshot = self.snapshot.create(self.plugins_dir)
         try:
             current_snapshot = self.snapshot.create(self.plugins_dir)
@@ -118,10 +118,9 @@ class Manager:
                 asyncio.run(self.plugin_manager.shutdown())
                 asyncio.run(self.plugin_manager.load_all())
                 last_snapshot = current_snapshot
-            time.sleep(self.interval)
+                print("-> ", self.status())
         except Exception as e:
             logger.error(f"Erreur watcher : {e}")
-            time.sleep(self.interval)
 
     # ── Arrêt ─────────────────────────────────────────────────
 

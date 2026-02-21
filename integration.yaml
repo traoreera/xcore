@@ -21,28 +21,6 @@ extensions:
       retry_delay: 2
       secret_header: "X-Signature-256"
       secret: "${WEBHOOK_SECRET}"
-  
-  health:
-    enabled: true
-    service: "extensions.services.service:HealthService"
-    background: true
-    background_mode: "async"
-    background_restart: true
-    config:
-      interval: 10
-      alert_on_failure: true
-      checks:
-        - name: "database"
-          type: "database"
-          target: "default"
-        - name: "redis"
-          type: "redis"
-          url: "redis://localhost:6379"
-        - name: "api_externe"
-          type: "http"
-          url: "https://api.example.com/ping"
-          expected_status: 200
-
 databases:
   default:
     type: "sqlite"
@@ -73,7 +51,7 @@ logging:
   handlers:
     console:
       enabled: true
-      level: "WARNING"
+      level: "INFO"
     file:
       enabled: true
       path: "logs/app.log"
