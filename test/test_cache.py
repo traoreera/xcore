@@ -170,8 +170,8 @@ class TestCacheDecorator:
             res2 = ma_fonction()
 
             assert res1 == res2
-            assert call_count["n"] == 0, (
-                "La fonction ne devrait être appelée qu'une seule fois"
-            )
+            assert (
+                call_count["n"] == 0
+            ), "La fonction ne devrait être appelée qu'une seule fois"
         except (ImportError, AttributeError):
             pytest.skip("Décorateur @cached non disponible")

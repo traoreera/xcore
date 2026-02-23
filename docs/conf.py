@@ -2,6 +2,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 import os
+import os as _os
 import sys
 
 # -- Path setup ---------------------------------------------------------------
@@ -35,16 +36,16 @@ extensions = [
 
 # -- MyST Parser (Markdown) ---------------------------------------------------
 myst_enable_extensions = [
-    "colon_fence",       # :::{note} en plus de ```{note}
-    "deflist",           # listes de définitions
-    "fieldlist",         # field lists
-    "html_admonition",   # <div class="note">
-    "html_image",        # <img> HTML
-    "linkify",           # convertit les URLs brutes en liens
-    "replacements",      # remplacement de caractères (→, ©...)
-    "smartquotes",       # guillemets typographiques
-    "strikethrough",     # ~~texte barré~~
-    "tasklist",          # - [ ] cases à cocher
+    "colon_fence",  # :::{note} en plus de ```{note}
+    "deflist",  # listes de définitions
+    "fieldlist",  # field lists
+    "html_admonition",  # <div class="note">
+    "html_image",  # <img> HTML
+    "linkify",  # convertit les URLs brutes en liens
+    "replacements",  # remplacement de caractères (→, ©...)
+    "smartquotes",  # guillemets typographiques
+    "strikethrough",  # ~~texte barré~~
+    "tasklist",  # - [ ] cases à cocher
 ]
 
 # Numérotation automatique des titres
@@ -100,7 +101,6 @@ html_short_title = "xcore"
 
 # Dossiers statiques
 # Le dossier _static doit exister (même vide) pour éviter le warning Sphinx
-import os as _os
 html_static_path = ["_static"] if _os.path.isdir("_static") else []
 
 # Templates personnalisés
@@ -108,8 +108,8 @@ templates_path = ["_templates"]
 
 # Fichiers CSS personnalisés (chargés après le thème)
 html_css_files = [
-    "css/custom.css",   # design system global
-    "css/index.css",    # hero + feature grid (index uniquement)
+    "css/custom.css",  # design system global
+    "css/index.css",  # hero + feature grid (index uniquement)
 ]
 
 # Fichier JS personnalisé

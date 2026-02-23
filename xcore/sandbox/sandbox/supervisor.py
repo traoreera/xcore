@@ -1,5 +1,4 @@
 """
-sandbox/supervisor.py
 ──────────────────────
 Superviseur du cycle de vie d'un plugin Sandboxed.
 Intègre : mémoire (via worker), health check, env injection, disk watcher.

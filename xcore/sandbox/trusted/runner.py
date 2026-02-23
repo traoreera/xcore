@@ -1,5 +1,5 @@
 """
-trusted/runner.py — PATCHÉ
+ — PATCHÉ
 ===========================
 Correction du problème de services non disponibles.
 
@@ -118,12 +118,14 @@ class TrustedRunner:
         dépendances de la vague suivante trouvent les services.
 
         Exemple :
-          erp_core.on_load() fait :
+        ```python
+            #erp_core.on_load() fait :
             self._services["core"] = CoreService(...)
-          Puis mems() fait :
+            #Puis mems() fait :
             PluginManager._services.update({"core": CoreService(...)})
-          erp_auth peut alors faire :
+            #erp_auth peut alors faire :
             core = self.get_service("core")  ✓
+        ```
         """
         if self._instance is None:
             return self._services
@@ -133,8 +135,7 @@ class TrustedRunner:
 
         # Propage uniquement les nouvelles clés vers le container partagé
         # (évite d'écraser des services existants d'autres plugins)
-        new_keys = set(instance_services.keys()) - set(self._services.keys())
-        if new_keys:
+        if new_keys := set(instance_services.keys()) - set(self._services.keys()):
             for key in new_keys:
                 self._services[key] = instance_services[key]
             logger.info(
@@ -274,7 +275,7 @@ class TrustedRunner:
         if hasattr(self._instance, "on_reload"):
             await self._instance.on_reload()
         await self.unload()
-        await self.load()  # load() appelle déjà mems() en fin
+        await self.load()  # load() appelle déjà <-mems() en fin
 
     # ──────────────────────────────────────────
     # unload (inchangé)

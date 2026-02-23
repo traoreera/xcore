@@ -1,5 +1,4 @@
 """
-sandbox/worker.py
 ──────────────────
 Boucle stdin/stdout sans connect_read_pipe.
 Utilise asyncio.StreamReader branché sur sys.stdin.buffer directement

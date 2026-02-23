@@ -1,25 +1,24 @@
 """
-plugin_manager.py — PATCH FINAL
+PATCH FINAL
 ═════════════════════════════════
-Adapté au code réel après lecture de runner.py.
 
 Le vrai mécanisme de partage des services dans xcore :
-  - PluginManager._services est un dict partagé (passé par référence)
-  - TrustedRunner reçoit CE MÊME dict à l'init
-  - Plugin hérite de TrustedBase → self._services pointe sur CE MÊME dict
-  - on_load() peut donc écrire self._services["core"] = CoreService(...)
+    - PluginManager._services est un dict partagé (passé par référence)
+    - TrustedRunner reçoit CE MÊME dict à l'init
+    - Plugin hérite de TrustedBase → self._services pointe sur CE MÊME dict
+    - on_load() peut donc écrire self._services["core"] = CoreService(...)
     et PluginManager._services["core"] est automatiquement mis à jour
 
 MAIS : si Plugin() ne prend pas `services` en __init__ et n'hérite pas de
 TrustedBase, l'injection échoue silencieusement.
 
 Corrections dans runner.py (fichier séparé) :
-  1. Injection forcée de _services même si __init__ ne l'accepte pas
-  2. mems() appelé après on_load() pour synchroniser
+    1. Injection forcée de _services même si __init__ ne l'accepte pas
+    2. mems() appelé après on_load() pour synchroniser
 
 Correction dans manager.py (ce fichier) :
-  _flush_services() appelle runner.mems() au lieu de register_services()
-  → compatible avec l'architecture existante, aucun changement dans les plugins
+    _flush_services() appelle runner.mems() au lieu de register_services()
+    → compatible avec l'architecture existante, aucun changement dans les plugins
 """
 
 from __future__ import annotations
@@ -78,7 +77,8 @@ class PluginManager:
         self._rate = RateLimiterRegistry()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Tri topologique (inchangé)
+    # Tri topologique (inchangé) algorithme de Kahn
+    # https://en.wikipedia.org/wiki/Topological_sort
     # ─────────────────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -133,14 +133,14 @@ class PluginManager:
         plutôt qu'une méthode register_services() inexistante.
 
         Sans ce flush :
-          vague 1 → erp_core.on_load() → self._services["core"] = CoreService
+            vague 1 → erp_core.on_load() → self._services["core"] = CoreService
                     Mais si _services du plugin != _services du manager → perdu
-          vague 2 → erp_auth → services["core"] introuvable 💥
+            vague 2 → erp_auth → services["core"] introuvable 💥
 
         Avec ce flush :
-          vague 1 → erp_core chargé + mems() appelé
+            vague 1 → erp_core chargé + mems() appelé
                     → manager._services["core"] = CoreService  ✓
-          vague 2 → erp_auth → services["core"] disponible  ✓
+            vague 2 → erp_auth → services["core"] disponible  ✓
         """
         for name in plugin_names:
             if name not in self._trusted:
@@ -353,7 +353,7 @@ class PluginManager:
             try:
                 verify_plugin(manifest, self._secret_key)
             except SignatureError as e:
-                raise TrustedLoadError(str(e))
+                raise TrustedLoadError(str(e)) from e
 
         scan = self._scanner.scan_plugin(
             manifest.plugin_dir, whitelist=manifest.allowed_imports

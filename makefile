@@ -215,11 +215,13 @@ init: ## Initialiser le projet (permissions scripts + install + démarrage dev)
 
 run-dev: ## Lancer en mode développement (reload automatique)
 	@echo "🚀 Lancement en mode développement..."
-	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8082
+	@$(MAKE) clean
+	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 run-st: ## Lancer en mode production / statique (sans reload)
 	@echo "🚀 Lancement en mode statique..."
-	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8081
+	@$(MAKE) clean
+	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 testing: ## Installer pip sans cache (debug)
 	@echo "📦 Installation pip sans cache..."
@@ -956,7 +958,7 @@ build-prod: ## Build pour production (build + tests + validation)
 	@echo ""
 	@poetry build --no-cache
 	@echo "🎉 Build production prêt!"
-	
+
 
 build-fast: ## Build rapide (clean + install uniquement)
 	@echo "⚡ BUILD RAPIDE"

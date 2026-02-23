@@ -42,7 +42,6 @@ class ServiceNotReadyError(Exception):
     """Levée si on accède à un service non initialisé."""
 
 
-
 class BaseService:
     def __init__(
         self,

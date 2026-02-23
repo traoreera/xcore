@@ -1,5 +1,4 @@
 """
-trusted/signer.py
 ──────────────────
 Signature et vérification des plugins Trusted via HMAC-SHA256.
 
@@ -105,7 +104,7 @@ def verify_plugin(manifest: PluginManifest, secret_key: bytes) -> None:
     try:
         sig_data = json.loads(sig_path.read_text())
     except Exception as e:
-        raise SignatureError(f"[{manifest.name}] Fichier .sig illisible : {e}")
+        raise SignatureError(f"[{manifest.name}] Fichier .sig illisible : {e}") from e
 
     stored_digest = sig_data.get("digest", "")
     if not stored_digest:

@@ -1,5 +1,4 @@
 """
-sandbox/rate_limiter.py
 ────────────────────────
 Limiteur de débit par plugin — fenêtre glissante.
 Utilisé dans plugin_manager.call() avant de router vers Trusted ou Sandbox.

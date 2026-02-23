@@ -1,5 +1,4 @@
 """
-sandbox/disk_watcher.py
 ────────────────────────
 Surveillance du quota disque pour les plugins Sandboxed.
 Vérifie la taille de data/ avant et après chaque écriture.

@@ -60,9 +60,9 @@ class TestPluginLoader:
             loader.load(fake_plugin_dir.name)
 
             routes = [r.path for r in app.routes]
-            assert any("/fake" in r for r in routes), (
-                f"Route /fake introuvable. Routes disponibles : {routes}"
-            )
+            assert any(
+                "/fake" in r for r in routes
+            ), f"Route /fake introuvable. Routes disponibles : {routes}"
         except ImportError:
             pytest.skip("PluginLoader non disponible")
 
@@ -114,9 +114,9 @@ class TestPluginLoader:
             loader.unload(fake_plugin_dir.name)
             routes_apres = len(app.routes)
 
-            assert routes_apres < routes_avant, (
-                "Les routes n'ont pas été retirées après unload()"
-            )
+            assert (
+                routes_apres < routes_avant
+            ), "Les routes n'ont pas été retirées après unload()"
         except ImportError:
             pytest.skip("PluginLoader non disponible")
 

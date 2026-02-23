@@ -52,8 +52,7 @@ def _load_dotenv(env_file: str) -> None:
     with contextlib.suppress(ImportError):
         from dotenv import find_dotenv, load_dotenv
 
-        load_dotenv(find_dotenv(filename=path, raise_error_if_not_found=False))
-        logger.info(f".env chargé via python-dotenv : {env_file}")
+        load_dotenv(find_dotenv(filename=path, raise_error_if_not_found=True))
         return
 
     # Parser minimal sans dépendance

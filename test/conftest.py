@@ -50,8 +50,9 @@ def client(app: FastAPI) -> Generator:
 def db_engine():
     """Moteur SQLAlchemy en mémoire pour les tests."""
     try:
-        from extensions.services.database import Base
         from sqlalchemy import create_engine
+
+        from extensions.services.database import Base
 
         engine = create_engine(
             "sqlite:///:memory:",

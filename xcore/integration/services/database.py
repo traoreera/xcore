@@ -5,9 +5,12 @@ Supporte SQLite, PostgreSQL, MySQL (SQLAlchemy), MongoDB, Redis.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Dict, Iterator, Optional
+
+from sqlalchemy.pool import NullPool, StaticPool
 
 from ..config.loader import DatabaseConfig, IntegrationConfig
 
@@ -85,10 +88,18 @@ class AsyncSQLAdapter:
         self._session_factory = None
 
     async def init(self):
+        if self._engine:
+            return
         try:
             from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
             from sqlalchemy.orm import sessionmaker
 
+            if "sqlite" in self.cfg.url:
+                self._engine = create_async_engine(
+                    self.cfg.url,
+                    poolclass=NullPool,
+                    echo=self.cfg.echo,
+                )
             self._engine = create_async_engine(
                 self.cfg.url,
                 pool_size=self.cfg.pool_size,
@@ -102,6 +113,16 @@ class AsyncSQLAdapter:
         except ImportError:
             logger.error("sqlalchemy[asyncio] non installé.")
             raise
+
+    @property
+    def engine(self):
+        """Retourne l'engine async. Doit être appelé après init()."""
+        if not self._engine:
+            raise RuntimeError(
+                f"[DB:{self.cfg.name}] Engine non initialisé. "
+                "Appelez await db_manager.init_all() d'abord."
+            )
+        return self._engine
 
     @asynccontextmanager
     async def session(self):
@@ -118,6 +139,7 @@ class AsyncSQLAdapter:
     async def close(self):
         if self._engine:
             await self._engine.dispose()
+            logger.info(f"[DB:{self.cfg.name}] Connexion async SQL fermée")
 
 
 class RedisAdapter:
@@ -150,7 +172,7 @@ class RedisAdapter:
 
     def close(self):
         if self._client:
-            self._client.close()
+            self._client.connection_pool.disconnect()
             logger.info(f"[DB:{self.cfg.name}] Connexion Redis fermée")
 
 
@@ -180,6 +202,7 @@ class MongoAdapter:
     def close(self):
         if self._client:
             self._client.close()
+            logger.info(f"[DB:{self.cfg.name}] Connexion MongoDB fermée")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -195,8 +218,6 @@ _ADAPTER_MAP = {
     "sqlasync": AsyncSQLAdapter,
 }
 
-_ASYNC_TYPES = {"postgresql", "mysql"}
-
 
 class DatabaseManager:
     """
@@ -204,11 +225,15 @@ class DatabaseManager:
 
     Usage:
         db_manager = DatabaseManager(config)
-        db_manager.init_all()
+        await db_manager.init_all()
 
-        # Accès direct
+        # Session SQL synchrone
         with db_manager.session("default") as db:
             db.query(User).all()
+
+        # Session SQL asynchrone
+        async with db_manager.async_session("pg") as db:
+            await db.execute(...)
 
         # Accès à un adaptateur spécifique
         redis = db_manager.get("cache")
@@ -219,7 +244,7 @@ class DatabaseManager:
         self._config = config
         self._adapters: Dict[str, Any] = {}
 
-    def init_all(self):
+    async def init_all(self):
         """Initialise toutes les connexions configurées."""
         for name, db_cfg in self._config.databases.items():
             adapter_cls = _ADAPTER_MAP.get(db_cfg.type)
@@ -228,7 +253,11 @@ class DatabaseManager:
                 continue
             try:
                 adapter = adapter_cls(db_cfg)
-                adapter.init()
+                # FIX: asyncio.iscoroutinefunction détecte correctement les méthodes async
+                if asyncio.iscoroutinefunction(adapter.init):
+                    await adapter.init()
+                else:
+                    adapter.init()
                 self._adapters[name] = adapter
             except Exception as e:
                 logger.error(f"[DB:{name}] Échec initialisation: {e}")
@@ -244,18 +273,36 @@ class DatabaseManager:
 
     @contextmanager
     def session(self, name: str = "default") -> Iterator:
-        """Context manager pour une session SQL."""
+        """Context manager pour une session SQL synchrone."""
         adapter = self.get(name)
-        if not isinstance(adapter, (SQLAdapter,)):
-            raise TypeError(f"'{name}' n'est pas une base SQL.")
+        if not isinstance(adapter, SQLAdapter):
+            raise TypeError(
+                f"'{name}' n'est pas une base SQL synchrone. "
+                f"Utilisez async_session() pour AsyncSQLAdapter."
+            )
         with adapter.session() as db:
             yield db
 
-    def close_all(self):
-        """Ferme toutes les connexions."""
+    @asynccontextmanager
+    async def async_session(self, name: str = "default"):
+        """Context manager pour une session SQL asynchrone."""
+        adapter = self.get(name)
+        if not isinstance(adapter, AsyncSQLAdapter):
+            raise TypeError(
+                f"'{name}' n'est pas une base SQL asynchrone. "
+                f"Utilisez session() pour SQLAdapter."
+            )
+        async with adapter.session() as db:
+            yield db
+
+    async def close_all(self):
+        """Ferme toutes les connexions. Doit être appelé avec await."""
         for name, adapter in self._adapters.items():
             try:
-                adapter.close()
+                if asyncio.iscoroutinefunction(adapter.close):
+                    await adapter.close()
+                else:
+                    adapter.close()
             except Exception as e:
                 logger.error(f"[DB:{name}] Erreur fermeture: {e}")
         self._adapters.clear()

@@ -1,6 +1,4 @@
 """
-sandbox/scanner.py
-───────────────────
 Scan statique AST des plugins Sandboxed.
 Vérifie les imports interdits et patterns dangereux avant tout démarrage.
 """

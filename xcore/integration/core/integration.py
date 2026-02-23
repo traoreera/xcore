@@ -83,7 +83,7 @@ class Integration:
 
         # 3. Infrastructure (BDD, cache, scheduler)
         self._db = DatabaseManager(self._config)
-        self._db.init_all()
+        await self._db.init_all()
         self._registry.register_instance("db", self._db)
 
         self._cache = CacheService(self._config)
@@ -189,7 +189,7 @@ class Integration:
         if self._scheduler:
             self._scheduler.shutdown()
         if self._db:
-            self._db.close_all()
+            await self._db.close_all()
         self._initialized = False
         self.logger.info("Framework arrêté.")
 

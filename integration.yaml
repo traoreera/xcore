@@ -23,11 +23,11 @@ extensions:
       secret: "${WEBHOOK_SECRET}"
 databases:
   default:
-    type: "sqlite"
+    type: "sqlasync"
     url: "${DATABASE_URL}"
     pool_size: 20
     max_overflow: 40
-    echo: false
+    echo: true
 
   cache:
     type: "redis"
@@ -42,7 +42,7 @@ scheduler:
     - id: sandbox_runtimer
       func: "backgroundtask.sandbox:service_main"
       trigger: "interval"
-      seconds: 30
+      minute: 1
       enabled: true
 
 logging:

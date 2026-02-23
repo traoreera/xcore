@@ -1,5 +1,4 @@
 """
-sandbox/ipc.py
 ───────────────
 Canal IPC asynchrone entre le Core et un subprocess Sandboxed.
 Protocole : JSON newline-delimited sur stdin/stdout du subprocess.

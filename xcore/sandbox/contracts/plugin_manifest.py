@@ -326,7 +326,7 @@ def _inject_envfile(raw: dict, plugin_dir: Path):
 
         load_dotenv(
             dotenv_path=find_dotenv(
-                filename=envfile_path, raise_error_if_not_found=False
+                filename=envfile_path, raise_error_if_not_found=True
             )
         )
 
@@ -383,7 +383,7 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
     # ★ FIX : lecture du champ requires depuis le YAML
     # Avant : requires n'était jamais lu → tombait dans extra{} → toujours []
     # → _topo_sort voyait 0 dépendances → tous les plugins dans la même vague
-    # → erp_auth démarrait EN MÊME TEMPS qu'erp_core → services["core"] absent
+    # exple :  → erp_auth démarrait EN MÊME TEMPS qu'erp_core → services["core"] absent
     raw_requires = raw.get("requires", []) or []
     if not isinstance(raw_requires, list):
         raise ManifestError(
