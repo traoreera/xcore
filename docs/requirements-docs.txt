@@ -1,5 +1,5 @@
-sphinx = "^8.2.3"
-myst-parser = "^5.0.0"
-sphinx-copybutton = "^0.5.2"
-sphinx-rtd-theme = "^3.1.0"
-linkify-it-py = "^2.0.3"
+sphinx
+myst-parser 
+sphinx-copybutton
+sphinx-rtd-theme
+linkify-it-py 
