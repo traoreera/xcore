@@ -1,7 +1,7 @@
 # Minimal makefile for Sphinx documentation
 
 SPHINXOPTS    ?=
-SPHINXBUILD   ?= poetry run sphinx-build
+SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
 
