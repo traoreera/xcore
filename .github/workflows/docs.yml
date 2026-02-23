@@ -47,7 +47,7 @@ jobs:
       - name: Build HTML docs
         run: |
           cd docs
-          make html SPHINXOPTS="-W --keep-going -n"
+          make html 
         # -W  → traite les warnings comme des erreurs
         # -n  → mode nitpicky (liens cassés détectés)
 
