@@ -51,7 +51,7 @@ class Integration:
     Orchestrateur central du framework d'intégration de services.
 
     Charge la configuration YAML, instancie tous les services déclarés
-    dans la section `extensions`, et les rend accessibles globalement.
+    dans la section `extensions', et les rend accessibles globalement.
     """
 
     def __init__(self, config_path: Optional[str | Path] = None):
@@ -78,7 +78,7 @@ class Integration:
         self._config = get_config(self._config_path)
         self._apply_logging()
 
-        # 2. Registre global
+        # 2.global register
         self._registry = get_registry()
 
         # 3. Infrastructure (BDD, cache, scheduler)
@@ -173,7 +173,7 @@ class Integration:
             "app": self._config.app.name,
             "env": self._config.app.env,
             "services": self._extensions.status(),
-            "db": list(self._db._adapters.keys()) if self._db else [],
+            "db": list(self._db.adapters.keys()) if self._db else [],
             "scheduler_running": (
                 self._scheduler.is_running if self._scheduler else False
             ),
@@ -200,8 +200,8 @@ class Integration:
             raise RuntimeError(
                 "Integration non initialisée. Appelez await integration.init() d'abord."
             )
-
-    def _make_logger(self) -> logging.Logger:
+    @staticmethod
+    def _make_logger() -> logging.Logger:
         log = logging.getLogger("integrations")
         if not log.handlers:
             h = logging.StreamHandler()

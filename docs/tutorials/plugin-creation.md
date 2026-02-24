@@ -1,6 +1,6 @@
-# Créer un plugin complet
+# Créer un plugin complet sandboxed
 
-Ce tutoriel couvre la création d'un plugin de bout en bout, avec schémas Pydantic, gestion d'erreurs, dépendances et tâche planifiée.
+Ce tutoriel couvre la création d'un plugin  sandboxe de bout en bout. 
 
 **Prérequis :** avoir suivi l'[introduction](./introduction.md)
 
@@ -8,215 +8,306 @@ Ce tutoriel couvre la création d'un plugin de bout en bout, avec schémas Pydan
 
 ## Ce que nous allons créer
 
-Un plugin `todo_plugin` qui expose une API CRUD simple pour gérer des tâches (todos), avec validation des données et une tâche de nettoyage automatique.
+Un plugin `note` qui expose des handlers pour recupere les information via ipc.
 
 ---
 
 ## Structure complète
 
 ```
-plugins/todo_plugin/
-├── __init__.py
-├── run.py          ← logique principale
-├── router.py       ← expose le router
-├── schemas.py      ← modèles Pydantic
-├── storage.py      ← stockage en mémoire (remplaçable par DB)
-└── config.yaml
+plugins/note/
+src
+ ├── run.py          ← logique principale
+ └── config.yaml
+└── data
 ```
 
 ---
 
-## Étape 1 — Les schémas (`schemas.py`)
-
-```python
-# plugins/todo_plugin/schemas.py
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
-
-class TodoCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
-    priority: int = Field(default=1, ge=1, le=3)  # 1=basse, 3=haute
-
-class TodoResponse(BaseModel):
-    id: int
-    title: str
-    description: Optional[str]
-    priority: int
-    done: bool
-    created_at: datetime
-```
-
----
-
-## Étape 2 — Le stockage (`storage.py`)
-
-```python
-# plugins/todo_plugin/storage.py
-from datetime import datetime
-from typing import Dict, List, Optional
-from .schemas import TodoCreate, TodoResponse
-
-_store: Dict[int, TodoResponse] = {}
-_counter = 0
-
-def create_todo(data: TodoCreate) -> TodoResponse:
-    global _counter
-    _counter += 1
-    todo = TodoResponse(
-        id=_counter,
-        title=data.title,
-        description=data.description,
-        priority=data.priority,
-        done=False,
-        created_at=datetime.utcnow(),
-    )
-    _store[_counter] = todo
-    return todo
-
-def get_all() -> List[TodoResponse]:
-    return list(_store.values())
-
-def get_by_id(todo_id: int) -> Optional[TodoResponse]:
-    return _store.get(todo_id)
-
-def mark_done(todo_id: int) -> Optional[TodoResponse]:
-    if todo_id in _store:
-        _store[todo_id].done = True
-        return _store[todo_id]
-    return None
-
-def delete_done() -> int:
-    """Supprime les todos terminés. Retourne le nombre supprimé."""
-    to_delete = [k for k, v in _store.items() if v.done]
-    for k in to_delete:
-        del _store[k]
-    return len(to_delete)
-```
-
----
-
-## Étape 3 — Le fichier principal (`run.py`)
-
-```python
-# plugins/todo_plugin/run.py
-import logging
-from fastapi import APIRouter, Request, HTTPException
-from .schemas import TodoCreate, TodoResponse
-from . import storage
-
-PLUGIN_INFO = {
-    "version": "1.0.0",
-    "author": "Votre Nom",
-    "description": "Gestionnaire de tâches (todos)",
-    "Api_prefix": "/app/todo",
-    "tag_for_identified": ["todo"],
-}
-
-router = APIRouter(prefix="/todo", tags=["todo"])
-logger = logging.getLogger("todo_plugin")
-
-
-class Plugin:
-    def __init__(self):
-        super(Plugin, self).__init__()
-        logger.info("Plugin Todo initialisé.")
-
-    def run(self, request: Request):
-        return {"plugin": "todo", "status": "ok"}
-
-
-# ─── Routes ─────────────────────────────────────────────
-@router.get("/", response_model=list[TodoResponse])
-def list_todos(request: Request):
-    """Liste toutes les tâches."""
-    return storage.get_all()
-
-
-@router.post("/", response_model=TodoResponse, status_code=201)
-def create_todo(payload: TodoCreate, request: Request):
-    """Crée une nouvelle tâche."""
-    todo = storage.create_todo(payload)
-    logger.info(f"Todo créé : #{todo.id} '{todo.title}'")
-    return todo
-
-
-@router.get("/{todo_id}", response_model=TodoResponse)
-def get_todo(todo_id: int, request: Request):
-    """Récupère une tâche par son ID."""
-    todo = storage.get_by_id(todo_id)
-    if not todo:
-        raise HTTPException(status_code=404, detail=f"Todo #{todo_id} introuvable.")
-    return todo
-
-
-@router.patch("/{todo_id}/done", response_model=TodoResponse)
-def complete_todo(todo_id: int, request: Request):
-    """Marque une tâche comme terminée."""
-    todo = storage.mark_done(todo_id)
-    if not todo:
-        raise HTTPException(status_code=404, detail=f"Todo #{todo_id} introuvable.")
-    return todo
-
-
-@router.delete("/cleanup")
-def cleanup(request: Request):
-    """Supprime toutes les tâches terminées."""
-    count = storage.delete_done()
-    return {"deleted": count, "message": f"{count} tâche(s) supprimée(s)."}
-```
-
----
-
-## Étape 4 — `__init__.py` et `router.py`
-
-```python
-# __init__.py
-from .run import Plugin, router
-__all__ = ["Plugin", "router"]
-```
-
-```python
-# router.py
-from .run import router
-__all__ = ["router"]
-```
-
----
-
-## Étape 5 — `config.yaml`
+## Étape 1 — Les schémas (`plugin.yaml`)
 
 ```yaml
-name: todo_plugin
+name: notes
 version: "1.0.0"
-author: "Votre Nom"
-description: "Gestionnaire de tâches todos"
-enabled: true
-api_prefix: /app/todo
+framework_version: ">=1.0,<2.0"
+execution_mode: sandboxed
+description: "Plugin de gestion de notes — création, lecture, suppression, recherche"
+author: "Exemple"
+entry_point: "src/main.py"
+
+
+# ── Limites de ressources ──────────────────────────────────
+resources:
+  timeout_seconds: 10        # temps max par appel handle() — lève IPCTimeoutError
+  max_memory_mb: 128         # RAM max du subprocess (0 = illimité)
+  max_disk_mb: 50            # quota total du répertoire data/ (0 = illimité)
+  rate_limit:
+    calls: 100               # appels max autorisés
+    period_seconds: 60       # par fenêtre glissante de 60 secondes
+
+# ── Configuration runtime ──────────────────────────────────
+runtime:
+  log_level: "INFO"          # DEBUG | INFO | WARNING | ERROR
+
+  health_check:
+    enabled: true
+    interval_seconds: 30     # ping automatique toutes les 30s
+    timeout_seconds: 3       # délai max pour la réponse au ping
+  retry:
+    max_attempts: 3          # nombre de tentatives sur erreur IPC
+    backoff_seconds: 0.5     # délai initial (doublé à chaque retry)
+
+# ── Permissions filesystem ─────────────────────────────────
+filesystem:
+  allowed_paths:
+    - "data/"                # seul répertoire où le plugin peut écrire
+  denied_paths:
+    - "src/"                 # protection du code source
 ```
 
 ---
 
-## Tester le plugin
+## Étape 2 — Le stockage (`main.py`)
+### class NoteStore
+```python
+import json
+from pathlib import Path
+class NoteStore:
+    """Persistance des notes dans un fichier JSON local."""
 
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._data: dict[str, dict] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if self.path.exists():
+            try:
+                self._data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                self._data = {}
+
+    def _save(self) -> None:
+        self.path.write_text(
+            json.dumps(self._data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def all(self) -> list[dict]:
+        return list(self._data.values())
+
+    def get(self, note_id: str) -> dict | None:
+        return self._data.get(note_id)
+
+    def set(self, note: dict) -> None:
+        self._data[note["id"]] = note
+        self._save()
+
+    def delete(self, note_id: str) -> bool:
+        if note_id not in self._data:
+            return False
+        del self._data[note_id]
+        self._save()
+        return True
+
+    def lenf(self) -> int:
+        return len(self._data)
+
+
+```
+
+### helper
+```python
+from datetime import datetime, timezone
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def _ok(**kwargs) -> dict:
+    return {"status": "ok", **kwargs}
+
+def _error(msg: str) -> dict:
+    return {"status": "error", "msg": msg}
+```
+---
+### class Principal `Plugin`
+```python
+
+class Plugin:
+    """
+    Plugin Sandboxed de gestion de notes.
+    Toutes les données restent dans data/notes.json — aucun accès extérieur.
+    """
+
+    def __init__(self) -> None:
+        data_dir = Path(__file__).parent.parent / "data"
+        data_dir.mkdir(exist_ok=True)
+        self.store = NoteStore(data_dir / "notes.json")
+
+    async def handle(self, action: str, payload: dict) -> dict:
+        """Point d'entrée unique — dispatche vers la bonne méthode."""
+        handlers = {
+            "ping": self._ping,
+            "create": self._create,
+            "get": self._get,
+            "list": self._list,
+            "update": self._update,
+            "delete": self._delete,
+            "search": self._search,
+            "stats": self._stats,
+        }
+
+        handler = handlers.get(action)
+        if handler is None:
+            return _error(
+                f"Action inconnue : {action!r}. "
+                f"Actions disponibles : {list(handlers.keys())}"
+            )
+
+        try:
+            return await handler(payload)
+        except Exception as e:
+            return _error(f"Erreur interne : {e}")
+
+    # ──────────────────────────────────────────
+    # Actions
+    # ──────────────────────────────────────────
+
+    async def _ping(self, payload: dict) -> dict:
+        return _ok(msg="pong", plugin="notes", version="1.0.0")
+
+    async def _create(self, payload: dict) -> dict:
+        title = payload.get("title", "").strip()
+        content = payload.get("content", "").strip()
+        tags = payload.get("tags", [])
+
+        if not title:
+            return _error("Le champ 'title' est requis")
+        if not isinstance(tags, list):
+            return _error("'tags' doit être une liste")
+
+        note = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "content": content,
+            "tags": [str(t) for t in tags],
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        self.store.set(note)
+        return _ok(note=note)
+
+    async def _get(self, payload: dict) -> dict:
+        note_id = payload.get("id")
+        if not note_id:
+            return _error("Le champ 'id' est requis")
+
+        note = self.store.get(note_id)
+        if note is None:
+            return _error(f"Note '{note_id}' introuvable")
+
+        return _ok(note=note)
+
+    async def _list(self, payload: dict) -> dict:
+        notes = self.store.all()
+
+        # Filtre par tag optionnel
+        tag_filter = payload.get("tag")
+        if tag_filter:
+            notes = [n for n in notes if tag_filter in n.get("tags", [])]
+
+        # Tri par date de création (plus récentes en premier)
+        notes.sort(key=lambda n: n.get("created_at", ""), reverse=True)
+
+        return _ok(notes=notes, count=len(notes))
+
+    async def _update(self, payload: dict) -> dict:
+        note_id = payload.get("id")
+        if not note_id:
+            return _error("Le champ 'id' est requis")
+
+        note = self.store.get(note_id)
+        if note is None:
+            return _error(f"Note '{note_id}' introuvable")
+
+        if "title" in payload:
+            note["title"] = str(payload["title"]).strip()
+        if "content" in payload:
+            note["content"] = str(payload["content"]).strip()
+        if "tags" in payload:
+            if not isinstance(payload["tags"], list):
+                return _error("'tags' doit être une liste")
+            note["tags"] = [str(t) for t in payload["tags"]]
+
+        note["updated_at"] = _now()
+        self.store.set(note)
+        return _ok(note=note)
+
+    async def _delete(self, payload: dict) -> dict:
+        note_id = payload.get("id")
+        if not note_id:
+            return _error("Le champ 'id' est requis")
+
+        if not self.store.delete(note_id):
+            return _error(f"Note '{note_id}' introuvable")
+
+        return _ok(msg=f"Note '{note_id}' supprimée")
+
+    async def _search(self, payload: dict) -> dict:
+        query = payload.get("query", "").strip().lower()
+        if not query:
+            return _error("Le champ 'query' est requis")
+
+        results = [
+            note
+            for note in self.store.all()
+            if query in note.get("title", "").lower()
+            or query in note.get("content", "").lower()
+            or any(query in tag.lower() for tag in note.get("tags", []))
+        ]
+
+        results.sort(key=lambda n: n.get("updated_at", ""), reverse=True)
+        return _ok(results=results, count=len(results), query=query)
+
+    async def _stats(self, payload: dict) -> dict:
+        notes = self.store.all()
+        all_tags: dict[str, int] = {}
+        for note in notes:
+            for tag in note.get("tags", []):
+                all_tags[tag] = all_tags.get(tag, 0) + 1
+
+        return _ok(
+            total_notes=len(notes),
+            total_tags=len(all_tags),
+            tag_frequency=dict(
+                sorted(all_tags.items(), key=lambda x: x[1], reverse=True)
+            ),
+        )
+
+    async def _len(self, payload: dict) -> dict:
+        return _ok(count=self.store.lenf())
+
+```
+### Execution et test
+1. lance l'app
+    ```bash
+        poetry run uvicorn main:app --reload
+    ```
+2. execute l'app
 ```bash
-# Créer une tâche
-curl -X POST http://localhost:8000/app/todo/ \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Lire la doc xcore", "priority": 2}'
+    curl -X POST http://localhos:8000/plugin/note/ping
+```
+reponse 
+```json
+    {
+        "status":"ok",
+        "msg": "pong",
+        "plugin":"notes",
+        "version": "1.0.0"
 
-# Lister les tâches
-curl http://localhost:8000/app/todo/
-
-# Marquer comme terminée
-curl -X PATCH http://localhost:8000/app/todo/1/done
-
-# Nettoyer
-curl -X DELETE http://localhost:8000/app/todo/cleanup
+    }
 ```
 
----
+
 
 ## Points clés à retenir
 

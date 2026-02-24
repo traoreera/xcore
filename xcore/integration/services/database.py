@@ -310,3 +310,7 @@ class DatabaseManager:
 
     def __repr__(self):
         return f"<DatabaseManager dbs={list(self._adapters.keys())}>"
+
+    @property
+    def adapters(self):
+        return self._adapters

@@ -11,7 +11,7 @@ from logging import Logger
 from xcore.sandbox.manager import PluginManager
 from xcore.sandbox.sandbox.snapshot import Snapshot
 from xcore.sandbox.sandbox.supervisor import SupervisorConfig
-
+from xcore.hooks.hooks import HookManager
 logger = Logger("xcore.manager")
 
 
@@ -39,6 +39,8 @@ class Manager:
         # Le dict services est stocké ici — update_services() le met à jour
         # ET le pousse dans plugin_manager avant load_all()
         self._services = services or {}
+
+
 
         self.plugin_manager = PluginManager(
             plugins_dir=plugins_dir,
