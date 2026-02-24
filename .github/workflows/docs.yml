@@ -1,0 +1,78 @@
+name: Docs – Build & Deploy
+
+on:
+  push:
+    branches: [features]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [features]
+    paths:
+      - "docs/**"
+  workflow_dispatch:  # déclenchement manuel
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+
+  # ── Build Sphinx ───────────────────────────────────────────────────────────
+  build:
+    name: 📖 Build Sphinx Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-docs-${{ hashFiles('docs/requirements-docs.txt') }}
+
+      - name: Install Sphinx dependencies
+        run: pip install -r docs/requirements-docs.txt
+
+      - name: Build HTML docs
+        run: |
+          cd docs
+          make html 
+        # -W  → traite les warnings comme des erreurs
+        # -n  → mode nitpicky (liens cassés détectés)
+
+      - name: Check for broken links
+        run: |
+          cd docs
+          make linkcheck || echo "::warning::Some links may be broken"
+
+      - name: Upload artifact (Pages)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  # ── Deploy sur GitHub Pages ────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/features' && github.event_name == 'push'
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

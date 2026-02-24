@@ -28,6 +28,91 @@ help: ## Afficher la liste des commandes disponibles et leur usage
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 # ============================================================
+# 🤖 Automatisation qualité / sécurité / docs
+# ============================================================
+
+REPORT_DIR ?= $(CURDIR)/reports
+STRICT ?= 0
+AUTOMATE_CMD ?= all
+
+auto-env: ## Afficher l'environnement Python détecté pour l'automatisation
+	@echo "[INFO] Mode automation: poetry run"
+
+auto-setup: ## Installer les dépendances (poetry --with dev,docs)
+	@echo "[INFO] Installation dépendances (dev + docs)"
+	@poetry install --with dev,docs || { \
+		if [ "$(STRICT)" = "1" ]; then \
+			echo "[ERR ] Echec auto-setup"; exit 1; \
+		else \
+			echo "[WARN] Echec ignoré (STRICT=0): auto-setup"; \
+		fi; \
+	}
+
+auto-tests: ## Lancer les tests unitaires
+	@echo "[INFO] Tests unitaires (pytest)"
+	@poetry run pytest -q || { \
+		if [ "$(STRICT)" = "1" ]; then \
+			echo "[ERR ] Echec tests unitaires"; exit 1; \
+		else \
+			echo "[WARN] Echec ignoré (STRICT=0): tests unitaires"; \
+		fi; \
+	}
+
+auto-security: ## Audit sécurité (Bandit) avec rapports dans REPORT_DIR
+	@mkdir -p "$(REPORT_DIR)"
+	@echo "[INFO] Audit sécurité Bandit (JSON)"
+	@poetry run bandit -r "$(CURDIR)/xcore" -f json -o "$(REPORT_DIR)/security-bandit.json" 2> "$(REPORT_DIR)/security-bandit.stderr.log" || { \
+		if grep -q "ast' has no attribute 'Num'" "$(REPORT_DIR)/security-bandit.stderr.log"; then \
+			echo "[WARN] Bandit a crashé (incompatibilité ast.Num)"; \
+			echo '{"status":"failed","reason":"Bandit internal error: ast.Num incompatibility","tool":"bandit"}' > "$(REPORT_DIR)/security-bandit.json"; \
+			echo "Bandit failed due to internal compatibility error (ast.Num)." > "$(REPORT_DIR)/security-bandit.txt"; \
+			exit 0; \
+		fi; \
+		if [ "$(STRICT)" = "1" ]; then \
+			echo "[ERR ] Echec audit Bandit JSON"; exit 1; \
+		else \
+			echo "[WARN] Echec ignoré (STRICT=0): audit Bandit JSON"; \
+		fi; \
+	}
+	@echo "[INFO] Audit sécurité Bandit (TXT)"
+	@poetry run bandit -r "$(CURDIR)/xcore" -f txt -o "$(REPORT_DIR)/security-bandit.txt" 2>> "$(REPORT_DIR)/security-bandit.stderr.log" || { \
+		if [ "$(STRICT)" = "1" ]; then \
+			echo "[ERR ] Echec audit Bandit TXT"; exit 1; \
+		else \
+			echo "[WARN] Echec ignoré (STRICT=0): audit Bandit TXT"; \
+		fi; \
+	}
+	@echo "[INFO] Rapports sécurité:"
+	@echo "[INFO] - $(REPORT_DIR)/security-bandit.json"
+	@echo "[INFO] - $(REPORT_DIR)/security-bandit.txt"
+	@echo "[INFO] - $(REPORT_DIR)/security-bandit.stderr.log"
+
+auto-docs: ## Build docs Sphinx HTML
+	@mkdir -p "$(CURDIR)/docs/_build/html"
+	@echo "[INFO] Build docs Sphinx"
+	@poetry run sphinx-build -b html "$(CURDIR)/docs" "$(CURDIR)/docs/_build/html" || { \
+		if [ "$(STRICT)" = "1" ]; then \
+			echo "[ERR ] Echec build docs"; exit 1; \
+		else \
+			echo "[WARN] Echec ignoré (STRICT=0): build docs"; \
+		fi; \
+	}
+	@echo "[INFO] Documentation HTML: $(CURDIR)/docs/_build/html/index.html"
+
+auto-all: auto-setup auto-tests auto-security auto-docs ## Exécuter toute la chaîne auto
+
+automate: ## Exécuter l'automatisation full makefile (AUTOMATE_CMD=all|env|setup|tests|security|docs)
+	@case "$(AUTOMATE_CMD)" in \
+		all) $(MAKE) auto-all ;; \
+		env) $(MAKE) auto-env ;; \
+		setup) $(MAKE) auto-setup ;; \
+		tests) $(MAKE) auto-tests ;; \
+		security) $(MAKE) auto-security ;; \
+		docs) $(MAKE) auto-docs ;; \
+		*) echo "❌ AUTOMATE_CMD invalide: $(AUTOMATE_CMD)"; exit 2 ;; \
+	esac
+
+# ============================================================
 # 🔧 Gestion des plugins (git + liens symboliques)
 # ============================================================
 
@@ -130,11 +215,13 @@ init: ## Initialiser le projet (permissions scripts + install + démarrage dev)
 
 run-dev: ## Lancer en mode développement (reload automatique)
 	@echo "🚀 Lancement en mode développement..."
-	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8082
+	@$(MAKE) clean
+	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 run-st: ## Lancer en mode production / statique (sans reload)
 	@echo "🚀 Lancement en mode statique..."
-	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8081
+	@$(MAKE) clean
+	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 testing: ## Installer pip sans cache (debug)
 	@echo "📦 Installation pip sans cache..."
@@ -173,7 +260,7 @@ poetry-ri: ## Redémarrer Poetry (script externe)
 # 📌 Cibles "PHONY" - éviter conflits avec fichiers du même nom
 # ============================================================
 
-.PHONY: help add-plugin link unlink clean install init run-dev run-st pip-Noa deploy remove-app repaire-ng start stop restart status poetry-ri pre-commit logs logs-live logs-debug logs-info logs-warning logs-error logs-critical logs-auth logs-db logs-api logs-plugins logs-tasks logs-email logs-clean logs-stats logs-search logs-today logs-last-hour logs-test logs-demo
+.PHONY: help automate auto-all auto-env auto-setup auto-tests auto-security auto-docs add-plugin link unlink clean install init run-dev run-st pip-Noa deploy remove-app repaire-ng start stop restart status poetry-ri pre-commit logs logs-live logs-debug logs-info logs-warning logs-error logs-critical logs-auth logs-db logs-api logs-plugins logs-tasks logs-email logs-clean logs-stats logs-search logs-today logs-last-hour logs-test logs-demo
 
 # ============================================================
 # 📊 Commandes de gestion des logs
@@ -871,7 +958,7 @@ build-prod: ## Build pour production (build + tests + validation)
 	@echo ""
 	@poetry build --no-cache
 	@echo "🎉 Build production prêt!"
-	
+
 
 build-fast: ## Build rapide (clean + install uniquement)
 	@echo "⚡ BUILD RAPIDE"

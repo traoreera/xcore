@@ -1,3 +1,5 @@
-from fastapi import FastAPI
+from .integration.plugins.base import BaseService
+from .manager import Manager
+from .sandbox.contracts.base_plugin import TrustedBase
 
-app = FastAPI(title="Core API with Plugin System", version="1.0.0")
+__all__ = ["BaseService", "Manager"]

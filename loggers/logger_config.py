@@ -6,8 +6,9 @@ from typing import Optional
 
 
 class ColoredFormatter(logging.Formatter):
-    """Formateur coloré pour les logs"""
+    """Logger formatter with colored output"""
 
+    # colors for console
     COLORS = {
         "DEBUG": "\033[36m",  # Cyan
         "INFO": "\033[32m",  # Vert
@@ -17,33 +18,33 @@ class ColoredFormatter(logging.Formatter):
         "RESET": "\033[0m",
     }
 
+    # logger icons format
     ICONS = {
-        "DEBUG": "🔍",
-        "INFO": "ℹ️ ",
-        "WARNING": "⚠️ ",
-        "ERROR": "❌",
-        "CRITICAL": "🚨",
+        "DEBUG": "[DEB]",
+        "INFO": "[INF]",
+        "WARNING": "[WARN]",
+        "ERROR": "[ERR]",
+        "CRITICAL": "[CRIT]",
     }
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format the log record with color and icon
+        """
         color = self.COLORS.get(record.levelname, self.COLORS["RESET"])
         reset = self.COLORS["RESET"]
         icon = self.ICONS.get(record.levelname, "")
-
         formatted_time = datetime.fromtimestamp(record.created).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-
-        log_format = f"{color}{icon} [{record.levelname}] {formatted_time} - {record.name} - {record.getMessage()}{reset}"
-
+        log_format = f"{color}{icon} {formatted_time} - {record.name} - {record.getMessage()}{reset}"
         if record.exc_info:
             log_format += f"\n{color}{self.formatException(record.exc_info)}{reset}"
-
         return log_format
 
 
 def get_log_level() -> int:
-    """Récupère le niveau de log depuis la variable d'environnement LOG_LEVEL"""
+    """get log level from environment variable LOG_LEVEL"""
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     return getattr(logging, level_name, logging.INFO)
 
@@ -52,9 +53,9 @@ def setup_logger(
     name: str, log_file: Optional[str] = None, console: bool = True
 ) -> logging.Logger:
     """
-    Configure un logger avec formatage coloré + fichier
-    - console=True  -> console + fichier
-    - console=False -> uniquement fichier
+    Configure logger with color formatting and file logging
+    - console=True  -> console + file
+    - console=False -> only file
     """
     logger = logging.getLogger(name)
     level = get_log_level()
@@ -78,15 +79,15 @@ def setup_logger(
 
 def _extracted_from_setup_logger_25(log_file, level, logger):
     """
-    Configure un handler de fichier pour un logger.
+    Configure file handler for a logger.
 
-    - log_file est le chemin du fichier de log
-    - level est le niveau de log minimum pour écrire dans le fichier
-    - logger est le logger pour lequel on configure le handler
+    - log_file is the path of the log file
+    - level is the minimum log level to write to the file
+    - logger is the logger for which we configure the handler
 
-    Le handler utilise le format de date "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    The handler uses the date format "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-    Le répertoire du fichier de log est créé s'il n'existe pas
+    The directory of the log file is created if it does not exist
     """
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
@@ -103,6 +104,6 @@ def get_logger(
     log_file: Optional[str] = "app.log",
     console: bool = True,
 ) -> logging.Logger:
-    """Récupère un logger configuré"""
+    """get logger for application"""
     log_path = os.path.join("./logs", log_file) if log_file else None
     return setup_logger(module_name, log_file=log_path, console=console)
