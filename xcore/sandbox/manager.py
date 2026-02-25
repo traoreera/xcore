@@ -22,7 +22,7 @@ Correction dans manager.py (ce fichier) :
 """
 
 from __future__ import annotations
-
+import logging
 import asyncio
 import logging
 from pathlib import Path
@@ -45,7 +45,6 @@ from .sandbox.supervisor import SandboxSupervisor, SupervisorConfig
 from .trusted.runner import TrustedLoadError, TrustedRunner
 from .trusted.signer import SignatureError, verify_plugin
 
-logger = logging.getLogger("plManager")
 
 CORE_VERSION = "1.0.0"
 
@@ -57,12 +56,14 @@ class PluginNotFound(Exception):
 class PluginManager:
     def __init__(
         self,
+        logger: logging.Logger,
         plugins_dir: str | Path,
         secret_key: bytes,
         services: dict[str, Any] | None = None,
         sandbox_config: SupervisorConfig | None = None,
         strict_trusted: bool = True,
         app: "FastAPI | None" = None,
+        
     ) -> None:
         self.plugins_dir = Path(plugins_dir)
         self._secret_key = secret_key
@@ -70,11 +71,12 @@ class PluginManager:
         self._sandbox_cfg = sandbox_config or SupervisorConfig()
         self._strict_trusted = strict_trusted
         self._app = app
-
+        self.logger = logger
         self._trusted: dict[str, TrustedRunner] = {}
         self._sandboxed: dict[str, SandboxSupervisor] = {}
         self._scanner = ASTScanner()
         self._rate = RateLimiterRegistry()
+        self.logger.debug("PluginManager init")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Tri topologique (inchangé) algorithme de Kahn
@@ -153,7 +155,7 @@ class PluginManager:
             updated = runner.mems()
 
             # Log des services disponibles après flush
-            logger.info(f"[{name}] 📦 Services disponibles : {sorted(updated.keys())}")
+            self.logger.info(f"[{name}] 📦 Services disponibles : {sorted(updated.keys())}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # load_all avec flush entre chaque vague
@@ -177,7 +179,7 @@ class PluginManager:
             try:
                 manifests.append(load_manifest(plugin_dir))
             except ManifestError as e:
-                logger.warning(f"[{plugin_dir.name}] Manifeste invalide : {e}")
+                self.logger.warning(f"[{plugin_dir.name}] Manifeste invalide : {e}")
                 skipped.append(plugin_dir.name)
 
         if not manifests:
@@ -186,7 +188,7 @@ class PluginManager:
         try:
             ordered = self._topo_sort(manifests)
         except ValueError as e:
-            logger.error(f"Erreur dépendances : {e}")
+            self.logger.error(f"Erreur dépendances : {e}")
             return {
                 "loaded": [],
                 "failed": [m.name for m in manifests],
@@ -201,7 +203,7 @@ class PluginManager:
                 self._attach_routes(manifest)
                 return manifest.name, True
             except Exception as e:
-                logger.error(f"[{manifest.name}] Échec activation : {e}")
+                self.logger.error(f"[{manifest.name}] Échec activation : {e}")
                 return manifest.name, False
 
         remaining = list(ordered)
@@ -210,11 +212,11 @@ class PluginManager:
             wave = [m for m in remaining if all(dep in resolved for dep in m.requires)]
             if not wave:
                 stuck = [m.name for m in remaining]
-                logger.error(f"Chargement bloqué : {stuck}")
+                self.logger.error(f"Chargement bloqué : {stuck}")
                 failed.extend(stuck)
                 break
 
-            logger.info(f"⚡ Vague : [{', '.join(m.name for m in wave)}]")
+            self.logger.info(f"⚡ Vague : [{', '.join(m.name for m in wave)}]")
 
             results = await asyncio.gather(*[_try_activate(m) for m in wave])
 
@@ -232,7 +234,7 @@ class PluginManager:
                         if name in m.requires and m.name not in failed
                     ]
                     if cascade:
-                        logger.error(f"[{name}] Cascade : {cascade}")
+                        self.logger.error(f"[{name}] Cascade : {cascade}")
                         failed.extend(cascade)
                         resolved.update(cascade)
 
@@ -244,7 +246,7 @@ class PluginManager:
                 m for m in remaining if m.name not in resolved and m.name not in failed
             ]
 
-        logger.info(
+        self.logger.info(
             f"Plugins — chargés: {len(loaded)}, "
             f"échecs: {len(failed)}, ignorés: {len(skipped)}"
         )
@@ -265,13 +267,13 @@ class PluginManager:
         for dep_name in manifest.requires:
             if dep_name in already_loaded:
                 continue
-            logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
+            self.logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
             await self.load(dep_name)  # récursif — flush inclus
 
         await self._activate(manifest)
         self._attach_routes(manifest)
         await self._flush_services([plugin_name])
-        logger.info(f"[{plugin_name}] ✅ Chargé")
+        self.logger.info(f"[{plugin_name}] ✅ Chargé")
 
     # ─────────────────────────────────────────────────────────────────────────
     # reload() avec flush après
@@ -288,7 +290,7 @@ class PluginManager:
 
         for dep_name in manifest.requires:
             if dep_name not in already_loaded:
-                logger.warning(
+                self.logger.warning(
                     f"[{plugin_name}] '{dep_name}' manquante → chargement..."
                 )
                 await self.load(dep_name)
@@ -306,7 +308,7 @@ class PluginManager:
             self._rate.register(plugin_name, manifest.resources.rate_limit)
 
         await self._flush_services([plugin_name])
-        logger.info(f"[{plugin_name}] 🔄 Rechargé")
+        self.logger.info(f"[{plugin_name}] 🔄 Rechargé")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reste inchangé
@@ -326,9 +328,9 @@ class PluginManager:
         try:
             self._app.include_router(api_router)
             self._app.openapi_schema = None
-            logger.info(f"[{manifest.name}] 🔗 Routes attachées")
+            self.logger.info(f"[{manifest.name}] 🔗 Routes attachées")
         except Exception as e:
-            logger.error(f"[{manifest.name}] Erreur include_router : {e}")
+            self.logger.error(f"[{manifest.name}] Erreur include_router : {e}")
 
     async def _activate(self, manifest: PluginManifest) -> None:
         if not check_framework_compatibility(manifest, CORE_VERSION):
@@ -337,7 +339,7 @@ class PluginManager:
                 f"{manifest.framework_version}, core={CORE_VERSION}"
             )
         if manifest.execution_mode == ExecutionMode.LEGACY:
-            logger.warning(
+            self.logger.warning(
                 f"[{manifest.name}] Mode LEGACY — utilisez 'trusted' ou 'sandboxed'."
             )
         self._rate.register(manifest.name, manifest.resources.rate_limit)
@@ -359,14 +361,14 @@ class PluginManager:
             manifest.plugin_dir, whitelist=manifest.allowed_imports
         )
         if not scan.passed:
-            logger.warning(f"[{manifest.name}] ⚠️  Scan AST (non bloquant) :\n{scan}")
+            self.logger.warning(f"[{manifest.name}] ⚠️  Scan AST (non bloquant) :\n{scan}")
         for w in scan.warnings:
-            logger.debug(f"[{manifest.name}] AST: {w}")
+            self.logger.debug(f"[{manifest.name}] AST: {w}")
 
         runner = TrustedRunner(manifest, services=self._services)
         await runner.load()
         self._trusted[manifest.name] = runner
-        logger.info(
+        self.logger.info(
             f"[{manifest.name}] ✅ TRUSTED | "
             f"timeout={manifest.resources.timeout_seconds}s"
         )
@@ -378,11 +380,11 @@ class PluginManager:
         if not scan.passed:
             raise ValueError(f"[{manifest.name}] Scan échoué :\n{scan}")
         for w in scan.warnings:
-            logger.warning(f"[{manifest.name}] ⚠️  {w}")
+            self.logger.warning(f"[{manifest.name}] ⚠️  {w}")
         supervisor = SandboxSupervisor(manifest, config=self._sandbox_cfg)
         await supervisor.start()
         self._sandboxed[manifest.name] = supervisor
-        logger.info(f"[{manifest.name}] ✅ SANDBOXED")
+        self.logger.info(f"[{manifest.name}] ✅ SANDBOXED")
 
     async def call(self, plugin_name: str, action: str, payload: dict) -> dict:
         try:
@@ -424,13 +426,13 @@ class PluginManager:
             except Exception as e:
                 last_error = e
                 if attempt < retry_cfg.max_attempts:
-                    logger.warning(
+                    self.logger.warning(
                         f"[{plugin_name}] Tentative {attempt} échouée. "
                         f"Retry dans {backoff}s..."
                     )
                     await asyncio.sleep(backoff)
                     backoff *= 2
-        logger.error(f"[{plugin_name}] Toutes les tentatives échouées : {last_error}")
+        self.logger.error(f"[{plugin_name}] Toutes les tentatives échouées : {last_error}")
         return plugin_error(str(last_error), code="all_retries_failed")
 
     def _get_manifest(self, plugin_name: str) -> PluginManifest | None:
@@ -453,13 +455,13 @@ class PluginManager:
             raise PluginNotFound(f"Plugin '{plugin_name}' non chargé")
 
     async def shutdown(self, timeout: float = 10.0) -> None:
-        logger.info(f"Arrêt PluginManager (timeout={timeout}s)...")
+        self.logger.info(f"Arrêt PluginManager (timeout={timeout}s)...")
 
         async def _safe(coro, name):
             try:
                 await asyncio.wait_for(coro, timeout=timeout)
             except Exception as e:
-                logger.error(f"[{name}] Erreur arrêt : {e}")
+                self.logger.error(f"[{name}] Erreur arrêt : {e}")
 
         await asyncio.gather(
             *[_safe(r.unload(), n) for n, r in self._trusted.items()],
@@ -467,7 +469,7 @@ class PluginManager:
         )
         self._trusted.clear()
         self._sandboxed.clear()
-        logger.info("PluginManager arrêté.")
+        self.logger.info("PluginManager arrêté.")
 
     def status(self) -> dict:
         return {

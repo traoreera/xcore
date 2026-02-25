@@ -15,10 +15,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-# ══════════════════════════════════════════════
-# Enums
-# ══════════════════════════════════════════════
-
 
 class ExecutionMode(str, Enum):
     TRUSTED = "trusted"
@@ -33,36 +29,19 @@ class LogLevel(str, Enum):
     ERROR = "ERROR"
 
 
-# ══════════════════════════════════════════════
-# Defaults par mode
-# ══════════════════════════════════════════════
-
 _TRUSTED_DEFAULTS = {
     "resources": {
         "timeout_seconds": 30,
-        "max_memory_mb": 0,  # illimité
-        "max_disk_mb": 0,  # illimité
-        "rate_limit": {
-            "calls": 1000,
-            "period_seconds": 60,
-        },
+        "max_memory_mb": 0,
+        "max_disk_mb": 0,
+        "rate_limit": {"calls": 1000, "period_seconds": 60},
     },
     "runtime": {
         "log_level": "INFO",
-        "health_check": {
-            "enabled": False,  # pas de subprocess à surveiller
-            "interval_seconds": 60,
-            "timeout_seconds": 5,
-        },
-        "retry": {
-            "max_attempts": 1,  # crash trusted = crash contrôlé, pas de retry
-            "backoff_seconds": 0.0,
-        },
+        "health_check": {"enabled": False, "interval_seconds": 60, "timeout_seconds": 5},
+        "retry": {"max_attempts": 1, "backoff_seconds": 0.0},
     },
-    "filesystem": {
-        "allowed_paths": ["*"],  # accès complet
-        "denied_paths": [],
-    },
+    "filesystem": {"allowed_paths": ["*"], "denied_paths": []},
 }
 
 _SANDBOXED_DEFAULTS = {
@@ -70,40 +49,21 @@ _SANDBOXED_DEFAULTS = {
         "timeout_seconds": 10,
         "max_memory_mb": 128,
         "max_disk_mb": 50,
-        "rate_limit": {
-            "calls": 100,
-            "period_seconds": 60,
-        },
+        "rate_limit": {"calls": 100, "period_seconds": 60},
     },
     "runtime": {
         "log_level": "INFO",
-        "health_check": {
-            "enabled": True,
-            "interval_seconds": 30,
-            "timeout_seconds": 3,
-        },
-        "retry": {
-            "max_attempts": 3,
-            "backoff_seconds": 0.5,
-        },
+        "health_check": {"enabled": True, "interval_seconds": 30, "timeout_seconds": 3},
+        "retry": {"max_attempts": 3, "backoff_seconds": 0.5},
     },
-    "filesystem": {
-        "allowed_paths": ["data/"],
-        "denied_paths": ["src/"],
-    },
+    "filesystem": {"allowed_paths": ["data/"], "denied_paths": ["src/"]},
 }
 
 
 def _defaults_for(mode: ExecutionMode) -> dict:
-    """Retourne les defaults selon le mode."""
     if mode in (ExecutionMode.TRUSTED, ExecutionMode.LEGACY):
         return _TRUSTED_DEFAULTS
     return _SANDBOXED_DEFAULTS
-
-
-# ══════════════════════════════════════════════
-# Sous-sections
-# ══════════════════════════════════════════════
 
 
 @dataclass
@@ -129,14 +89,11 @@ class ResourceConfig:
     @classmethod
     def from_dict(cls, d: dict, defaults: dict) -> "ResourceConfig":
         return cls(
-            timeout_seconds=float(
-                d.get("timeout_seconds", defaults["timeout_seconds"])
-            ),
+            timeout_seconds=float(d.get("timeout_seconds", defaults["timeout_seconds"])),
             max_memory_mb=int(d.get("max_memory_mb", defaults["max_memory_mb"])),
             max_disk_mb=int(d.get("max_disk_mb", defaults["max_disk_mb"])),
             rate_limit=RateLimitConfig.from_dict(
-                d.get("rate_limit", {}),
-                defaults["rate_limit"],
+                d.get("rate_limit", {}), defaults["rate_limit"]
             ),
         )
 
@@ -151,12 +108,8 @@ class HealthCheckConfig:
     def from_dict(cls, d: dict, defaults: dict) -> "HealthCheckConfig":
         return cls(
             enabled=bool(d.get("enabled", defaults["enabled"])),
-            interval_seconds=float(
-                d.get("interval_seconds", defaults["interval_seconds"])
-            ),
-            timeout_seconds=float(
-                d.get("timeout_seconds", defaults["timeout_seconds"])
-            ),
+            interval_seconds=float(d.get("interval_seconds", defaults["interval_seconds"])),
+            timeout_seconds=float(d.get("timeout_seconds", defaults["timeout_seconds"])),
         )
 
 
@@ -169,9 +122,7 @@ class RetryConfig:
     def from_dict(cls, d: dict, defaults: dict) -> "RetryConfig":
         return cls(
             max_attempts=int(d.get("max_attempts", defaults["max_attempts"])),
-            backoff_seconds=float(
-                d.get("backoff_seconds", defaults["backoff_seconds"])
-            ),
+            backoff_seconds=float(d.get("backoff_seconds", defaults["backoff_seconds"])),
         )
 
 
@@ -210,14 +161,8 @@ class FilesystemConfig:
         )
 
 
-# ══════════════════════════════════════════════
-# Manifeste complet
-# ══════════════════════════════════════════════
-
-
 @dataclass
 class PluginManifest:
-    # ── Identité ──────────────────────────────
     name: str
     version: str
     execution_mode: ExecutionMode
@@ -226,17 +171,12 @@ class PluginManifest:
     framework_version: str = ">=1.0"
     entry_point: str = "src/main.py"
     allowed_imports: list[str] = field(default_factory=list)
-
-    # ── Config prod (defaults selon mode) ─────
     resources: ResourceConfig = field(default_factory=ResourceConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     env: dict[str, str] = field(default_factory=dict)
     filesystem: FilesystemConfig = field(default_factory=FilesystemConfig)
-
-    # ── Divers ────────────────────────────────
     extra: dict[str, Any] = field(default_factory=dict)
     plugin_dir: Path = field(default_factory=Path, repr=False)
-
     requires: list[str] = field(default_factory=list)
 
     def is_trusted(self) -> bool:
@@ -246,22 +186,12 @@ class PluginManifest:
         return self.execution_mode == ExecutionMode.SANDBOXED
 
     def effective_defaults(self) -> dict:
-        """Retourne les defaults actifs pour ce manifeste."""
         return _defaults_for(self.execution_mode)
-
-
-# ══════════════════════════════════════════════
-# Erreurs
-# ══════════════════════════════════════════════
 
 
 class ManifestError(Exception):
     pass
 
-
-# ══════════════════════════════════════════════
-# Résolution des variables d'environnement
-# ══════════════════════════════════════════════
 
 _ENV_VAR_RE = re.compile(r"^\$\{(.+)\}$")
 
@@ -284,11 +214,6 @@ def _resolve_env_dict(raw: dict) -> dict[str, str]:
     return {k: _resolve_env(v) for k, v in raw.items()}
 
 
-# ══════════════════════════════════════════════
-# Chargement
-# ══════════════════════════════════════════════
-
-
 def _load_raw(plugin_dir: Path) -> dict[str, Any]:
     yaml_path = plugin_dir / "plugin.yaml"
     json_path = plugin_dir / "plugin.json"
@@ -296,7 +221,6 @@ def _load_raw(plugin_dir: Path) -> dict[str, Any]:
     if yaml_path.exists():
         try:
             import yaml
-
             with open(yaml_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except ImportError as e:
@@ -318,17 +242,66 @@ def _load_raw(plugin_dir: Path) -> dict[str, Any]:
     )
 
 
-def _inject_envfile(raw: dict, plugin_dir: Path):
-    envfile_path = plugin_dir / raw.get("envfile", ".env")
-    # import dotenv
-    if raw.get("inject", False):
-        from dotenv import find_dotenv, load_dotenv
+# FIX #4 — _inject_envfile avec dict vide :
+#
+# Trois problèmes dans l'original :
+#
+# 1. Appelée avec `raw.get("envconfiguration", {})` → si la clé est absente,
+#    `raw = {}` → `inject` vaut False → silencieux et le .env n'est pas chargé
+#    même si le développeur a déclaré `inject: true` sous une autre clé.
+#
+# 2. Si `inject: true` mais `envfile` absent → `find_dotenv` reçoit
+#    `plugin_dir / ".env"` avec `raise_error_if_not_found=True` → crash
+#    avec un message d'erreur cryptique si le fichier n'existe pas.
+#
+# 3. `_inject_envfile` était appelée AVANT `_resolve_env` sur le YAML brut,
+#    donc les `${VAR}` dans le champ `envfile` n'étaient pas résolus.
+#
+# Corrections :
+# - La fonction reçoit maintenant `plugin_dir` et le bloc `envconfiguration`
+#   déjà extrait (peut être None/vide → on sort immédiatement).
+# - On vérifie l'existence du fichier .env avant `find_dotenv` et on lève
+#   une ManifestError explicite si absent.
+# - On n'utilise plus `raise_error_if_not_found=True` ; on gère l'erreur
+#   nous-mêmes avec un message clair.
+# - `inject` vaut False par défaut : aucun effet de bord silencieux.
+def _inject_envfile(envcfg: dict | None, plugin_dir: Path) -> None:
+    """
+    Charge le fichier .env du plugin si `envconfiguration.inject: true`.
 
-        load_dotenv(
-            dotenv_path=find_dotenv(
-                filename=envfile_path, raise_error_if_not_found=True
-            )
+    Args:
+        envcfg:     bloc `envconfiguration` du YAML (peut être None ou {}).
+        plugin_dir: répertoire racine du plugin.
+    """
+    if not envcfg:
+        # Bloc absent ou vide → rien à faire, pas d'effet de bord.
+        return
+
+    if not envcfg.get("inject", False):
+        return
+
+    env_filename: str = envcfg.get("env_file", ".env")
+    env_path = (plugin_dir / env_filename).resolve()
+
+    if not env_path.exists():
+        raise ManifestError(
+            f"envconfiguration.inject est true mais le fichier .env est introuvable : "
+            f"{env_path}\n"
+            f"Créez le fichier ou désactivez inject dans plugin.yaml."
         )
+
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=env_path, override=False)
+    except ImportError as e:
+        raise ManifestError(
+            "envconfiguration.inject est true mais python-dotenv n'est pas installé. "
+            "pip install python-dotenv"
+        ) from e
+    except Exception as e:
+        raise ManifestError(
+            f"Impossible de charger le fichier .env '{env_path}' : {e}"
+        ) from e
 
 
 def load_manifest(plugin_dir: Path) -> PluginManifest:
@@ -339,11 +312,9 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
     plugin_dir = Path(plugin_dir).resolve()
     raw = _load_raw(plugin_dir)
 
-    # Champs obligatoires
     if missing := [f for f in ("name", "version") if not raw.get(f)]:
         raise ManifestError(f"Champs obligatoires manquants : {missing}")
 
-    # Mode d'exécution
     raw_mode = raw.get("execution_mode", "legacy").lower()
     try:
         mode = ExecutionMode(raw_mode)
@@ -353,37 +324,24 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
             f"Valeurs acceptées : {[m.value for m in ExecutionMode]}"
         ) from e
 
-    # Defaults selon le mode — appliqués AVANT de lire le YAML
-    # → le YAML surcharge uniquement les valeurs explicitement déclarées
     defaults = _defaults_for(mode)
 
-    # Résolution des variables d'environnement
+    # FIX #4 : on passe le bloc envconfiguration extrait (dict ou None),
+    # pas `raw` entier. _inject_envfile gère proprement le cas vide/None.
+    _inject_envfile(raw.get("envconfiguration"), plugin_dir)
+
     try:
-        _inject_envfile(raw.get("envconfiguration", {}), plugin_dir)
         resolved_env = _resolve_env_dict(raw.get("env", {}))
     except ManifestError:
         raise
 
     known_keys = {
-        "name",
-        "version",
-        "execution_mode",
-        "author",
-        "description",
-        "framework_version",
-        "entry_point",
-        "allowed_imports",
-        "resources",
-        "runtime",
-        "env",
-        "filesystem",
-        "requires",  # ★ FIX : déclaré ici pour ne pas tomber dans extra{}
+        "name", "version", "execution_mode", "author", "description",
+        "framework_version", "entry_point", "allowed_imports",
+        "resources", "runtime", "env", "filesystem", "requires",
+        "envconfiguration",
     }
 
-    # ★ FIX : lecture du champ requires depuis le YAML
-    # Avant : requires n'était jamais lu → tombait dans extra{} → toujours []
-    # → _topo_sort voyait 0 dépendances → tous les plugins dans la même vague
-    # exple :  → erp_auth démarrait EN MÊME TEMPS qu'erp_core → services["core"] absent
     raw_requires = raw.get("requires", []) or []
     if not isinstance(raw_requires, list):
         raise ManifestError(
@@ -400,23 +358,17 @@ def load_manifest(plugin_dir: Path) -> PluginManifest:
         framework_version=raw.get("framework_version", ">=1.0"),
         entry_point=raw.get("entry_point", "src/main.py"),
         allowed_imports=raw.get("allowed_imports", []),
-        resources=ResourceConfig.from_dict(
-            raw.get("resources", {}), defaults["resources"]
-        ),
+        resources=ResourceConfig.from_dict(raw.get("resources", {}), defaults["resources"]),
         runtime=RuntimeConfig.from_dict(raw.get("runtime", {}), defaults["runtime"]),
         env=resolved_env,
         filesystem=FilesystemConfig.from_dict(
             raw.get("filesystem", {}), defaults["filesystem"]
         ),
-        requires=raw_requires,  # ★ FIX : maintenant transmis au dataclass
+        requires=raw_requires,
         extra={k: v for k, v in raw.items() if k not in known_keys},
         plugin_dir=plugin_dir,
     )
 
-
-# ══════════════════════════════════════════════
-# Compatibilité framework
-# ══════════════════════════════════════════════
 
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?$")
 
@@ -434,7 +386,7 @@ def check_framework_compatibility(manifest: PluginManifest, core_version: str) -
         part = part.strip()
         for op in (">=", "<=", ">", "<", "=="):
             if part.startswith(op):
-                target = _parse_version(part[len(op) :])
+                target = _parse_version(part[len(op):])
                 ok = {
                     ">=": core >= target,
                     "<=": core <= target,

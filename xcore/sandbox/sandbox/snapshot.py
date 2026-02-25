@@ -6,7 +6,6 @@ from typing import Dict, Set
 
 from xcore.configurations.manager import Configure, ManagerCfg
 
-logger = logging.getLogger(__name__)
 
 # ── Config instanciée en lazy (pas au niveau module) ──────────────
 # Évite le couplage fort à l'import et facilite les tests unitaires.
@@ -29,6 +28,7 @@ class Snapshot:
 
     def __init__(
         self,
+        logger: logging.Logger,
         ignore_hidden: bool | None = None,
         ignore_ext: Set[str] | None = None,
         ignore_file: Set[str] | None = None,
@@ -51,6 +51,9 @@ class Snapshot:
         )
         # Snapshot précédent gardé en mémoire pour __call__
         self._last_snapshot: Dict[str, str] = {}
+        self.logger = logger
+
+        self.logger.info("Snapshot init")
 
     # ------------------------------------------------------------
     def _hash_file(self, path: Path) -> str:
@@ -62,7 +65,7 @@ class Snapshot:
                     hasher.update(chunk)
             return hasher.hexdigest()
         except Exception as e:
-            logger.warning(f"⚠️ Impossible de hacher {path}: {e}")
+            self.logger.warning(f"⚠️ Impossible de hacher {path}: {e}")
             return "ERROR"
 
     # ------------------------------------------------------------
@@ -83,7 +86,7 @@ class Snapshot:
         snapshot = {}
 
         if not directory.exists():
-            logger.warning(f"⚠️ Dossier inexistant: {directory}")
+            self.logger.warning(f"⚠️ Dossier inexistant: {directory}")
             return snapshot
 
         for root, _, files in os.walk(directory):
@@ -94,7 +97,7 @@ class Snapshot:
                 try:
                     snapshot[str(path)] = self._hash_file(path)
                 except Exception as e:
-                    logger.error(f"Erreur analyse {path}: {e}")
+                    self.logger.error(f"Erreur analyse {path}: {e}")
         return snapshot
 
     # ------------------------------------------------------------
@@ -110,7 +113,7 @@ class Snapshot:
         diff = {"added": added, "removed": removed, "modified": modified}
 
         if added or removed or modified:
-            logger.info(
+            self.logger.info(
                 f"🌀 Changement détecté → {len(added)} ajout(s), {len(removed)} suppression(s), {len(modified)} modif(s)"
             )
 

@@ -33,9 +33,12 @@ Usage FastAPI :
 from __future__ import annotations
 
 import asyncio
-import logging
+from logging import Logger
 from pathlib import Path
 from typing import Optional
+
+from xcore.integration.config.schemas import HandlerLogging, LoggingConsole, LoggingFile
+from xcore.loggers import Logs, LoggingConfig
 
 from ..config.loader import IntegrationConfig, get_config
 from ..core.registry import ServiceRegistry, get_registry
@@ -63,7 +66,6 @@ class Integration:
         self._cache: Optional[CacheService] = None
         self._scheduler: Optional[SchedulerService] = None
         self._initialized = False
-        self.logger = self._make_logger()
 
     # ── Init ──────────────────────────────────────────────────
 
@@ -71,13 +73,22 @@ class Integration:
         """Initialise tous les services de façon asynchrone."""
         if self._initialized:
             return self
-
-        self.logger.info("━━━ Démarrage Integration Framework ━━━")
-
         # 1. Config
         self._config = get_config(self._config_path)
-        self._apply_logging()
-
+        self.__logger = Logs(name="xcore", config=LoggingConfig(
+            level=self._config.logging.level,
+            format=self._config.logging.format,
+            handlers= HandlerLogging(
+                console=LoggingConsole(enabled=self._config.logging.handlers['console']['enabled']),
+                file=LoggingFile(
+                    enabled=self._config.logging.handlers['file']['enabled'],
+                    path=self._config.logging.handlers['file']['path'],
+                    max_bytes=self._config.logging.handlers['file']['max_bytes'],
+                    backup_count=self._config.logging.handlers['file']['backup_count'],
+                )
+            )
+        )).get()
+        self.__logger.info("━━━ Démarrage Integration Framework ━━━")
         # 2.global register
         self._registry = get_registry()
 
@@ -99,7 +110,7 @@ class Integration:
         await self._extensions.init_all()
 
         self._initialized = True
-        self.logger.info(
+        self.__logger.info(
             f"━━━ Framework prêt — "
             f"{len(self._extensions.all())} service(s) actif(s) ━━━"
         )
@@ -163,7 +174,15 @@ class Integration:
     def config(self) -> IntegrationConfig:
         self._assert_ready()
         return self._config
-
+    @property
+    def extensions(self) -> ExtensionLoader:
+        self._assert_ready()
+        return self._extensions
+    @property
+    def logger(self) -> Logger:
+        self._assert_ready()
+        return self.__logger
+    
     # ── Monitoring ────────────────────────────────────────────
 
     def status(self) -> dict:
@@ -183,7 +202,7 @@ class Integration:
 
     async def shutdown(self):
         """Arrêt propre de tous les services."""
-        self.logger.info("Arrêt du framework...")
+        self.__logger.info("Arrêt demande  du framework...")
         if self._extensions:
             await self._extensions.shutdown_all()
         if self._scheduler:
@@ -191,44 +210,16 @@ class Integration:
         if self._db:
             await self._db.close_all()
         self._initialized = False
-        self.logger.info("Framework arrêté.")
+        self.__logger.info("Framework arrêté.")
 
     # ── Helpers ───────────────────────────────────────────────
 
     def _assert_ready(self):
         if not self._initialized:
+            self.__logger.warning("Integration non initialisée. Appelez await integration.init() d'abord.")
             raise RuntimeError(
                 "Integration non initialisée. Appelez await integration.init() d'abord."
             )
-    @staticmethod
-    def _make_logger() -> logging.Logger:
-        log = logging.getLogger("integrations")
-        if not log.handlers:
-            h = logging.StreamHandler()
-            h.setFormatter(
-                logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-            )
-            log.addHandler(h)
-        log.setLevel(logging.DEBUG)
-        return log
-
-    def _apply_logging(self):
-        cfg = self._config.logging
-        level = getattr(logging, cfg.level.upper(), logging.INFO)
-        logging.getLogger("integrations").setLevel(level)
-        if cfg.handlers.get("file", {}).get("enabled"):
-            import logging.handlers as lh
-
-            fc = cfg.handlers["file"]
-            p = Path(fc.get("path", "logs/app.log"))
-            p.parent.mkdir(parents=True, exist_ok=True)
-            fh = lh.RotatingFileHandler(
-                p,
-                maxBytes=fc.get("max_bytes", 10_485_760),
-                backupCount=fc.get("backup_count", 5),
-            )
-            fh.setFormatter(logging.Formatter(cfg.format))
-            logging.getLogger("integrations").addHandler(fh)
 
     def __repr__(self):
         status = "ready" if self._initialized else "not initialized"

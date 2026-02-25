@@ -1,7 +1,6 @@
 from typing import TypedDict
 
 from .base import BaseCfg, Configure
-from .deps import Logger
 
 
 class PluginsType(TypedDict):

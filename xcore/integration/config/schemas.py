@@ -79,10 +79,29 @@ class SchedulerConfig:
 
 
 @dataclass
+class LoggingConsole:
+    enabled: bool = True
+
+
+@dataclass
+class LoggingFile:
+    enabled: bool = True
+    path: str = "logs/app.log"
+    max_bytes: int = 50 * 1024 * 1024
+    backup_count: int = 10
+
+
+@dataclass
+class HandlerLogging:
+    console: LoggingConsole = field(default_factory=LoggingConsole)
+    file: LoggingFile = field(default_factory=LoggingFile)
+
+
+@dataclass
 class LoggingConfig:
     level: str = "INFO"
-    format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    handlers: Dict[str, Any] = field(default_factory=dict)
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers: HandlerLogging = field(default_factory=HandlerLogging)
 
 
 @dataclass

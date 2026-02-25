@@ -1,21 +1,5 @@
 """
- — PATCHÉ
-===========================
-Correction du problème de services non disponibles.
-
-Problème :
-  erp_core.on_load() fait self._services["core"] = CoreService(...)
-  Mais self._services est vide car :
-    1. Si Plugin() n'accepte pas `services` → instancié sans le container
-    2. Même si le container est passé, on_load() modifie le dict local
-       mais mems() qui synchronise vers PluginManager._services n'est
-       jamais appelé après on_load().
-
-Correction :
-  1. Toujours passer le container `services` au plugin (via _services direct
-     si __init__ ne l'accepte pas)
-  2. Appeler mems() APRÈS on_load() pour propager les nouveaux services
-     vers le container partagé du PluginManager
+runner.py — TrustedRunner corrigé
 """
 
 from __future__ import annotations
@@ -41,11 +25,6 @@ class TrustedLoadError(Exception):
 
 class FilesystemViolation(Exception):
     pass
-
-
-# ══════════════════════════════════════════════
-# Vérification filesystem (inchangé)
-# ══════════════════════════════════════════════
 
 
 def check_filesystem_access(
@@ -84,11 +63,6 @@ def check_filesystem_access(
     )
 
 
-# ══════════════════════════════════════════════
-# Runner
-# ══════════════════════════════════════════════
-
-
 class TrustedRunner:
     def __init__(
         self,
@@ -96,58 +70,62 @@ class TrustedRunner:
         services: dict[str, Any] | None = None,
     ) -> None:
         self.manifest = manifest
-        # ★ Ce dict EST le même objet que PluginManager._services
-        # (passé par référence) — toute modification ici est visible
-        # immédiatement dans le PluginManager.
         self._services = services if services is not None else {}
         self._instance: BasePlugin | None = None
         self._module: Any = None
         self._loaded_at: float | None = None
 
-    # ──────────────────────────────────────────
-    # ★ CORRIGÉ : mems() — synchronise les services exposés par le plugin
-    # vers le container partagé du PluginManager
-    # ──────────────────────────────────────────
-
-    def mems(self) -> dict:
+    # FIX #3 — mems() ne mettait pas à jour les services existants au reload :
+    # L'ancienne logique n'ajoutait que les `new_keys` (différence d'ensembles),
+    # donc si un plugin exposait "core" → reload → "core" existait déjà dans le
+    # container → jamais mis à jour → objet stale jusqu'à redémarrage complet.
+    #
+    # Correction : on distingue deux cas :
+    #   • Chargement initial  → on ne touche PAS aux clés déjà présentes
+    #     (un autre plugin a pu les enregistrer en premier, on respecte l'ordre
+    #     topologique).
+    #   • Reload              → on force la mise à jour des clés du plugin
+    #     rechargé pour que le nouvel objet remplace l'ancien dans le container.
+    #
+    # Le paramètre `is_reload` permet de distinguer les deux appels depuis load()
+    # et reload().
+    def mems(self, *, is_reload: bool = False) -> dict:
         """
-        Propage les services enregistrés par le plugin dans son propre
-        self._services vers le container partagé du PluginManager.
+        Propage les services enregistrés par le plugin vers le container partagé.
 
-        Appelé par le PluginManager après on_load() pour que les
-        dépendances de la vague suivante trouvent les services.
+        Args:
+            is_reload: si True, écrase les clés existantes appartenant à ce plugin
+                       (comportement reload). Si False (chargement initial), n'ajoute
+                       que les nouvelles clés pour respecter l'ordre topologique.
 
-        Exemple :
-        ```python
-            #erp_core.on_load() fait :
-            self._services["core"] = CoreService(...)
-            #Puis mems() fait :
-            PluginManager._services.update({"core": CoreService(...)})
-            #erp_auth peut alors faire :
-            core = self.get_service("core")  ✓
-        ```
+        Returns:
+            Le container partagé mis à jour.
         """
         if self._instance is None:
             return self._services
 
-        # Récupère les services ajoutés par le plugin dans son propre container
-        instance_services = getattr(self._instance, "_services", {})
+        instance_services: dict = getattr(self._instance, "_services", {})
 
-        # Propage uniquement les nouvelles clés vers le container partagé
-        # (évite d'écraser des services existants d'autres plugins)
-        if new_keys := set(instance_services.keys()) - set(self._services.keys()):
-            for key in new_keys:
-                self._services[key] = instance_services[key]
-            logger.info(
-                f"[{self.manifest.name}] 📦 Nouveaux services exposés : {sorted(new_keys)}"
-            )
+        if is_reload:
+            # Reload : on met à jour toutes les clés du plugin rechargé.
+            # On ne touche pas aux clés étrangères (appartenant à d'autres plugins).
+            if updated := {
+                k:v for k, v in instance_services.items() if k in self._services or k not in self._services
+            }:
+                self._services.update(updated)
+                logger.info(
+                    f"[{self.manifest.name}] 🔄 Services mis à jour (reload) : "
+                    f"{sorted(updated.keys())}"
+                )
+        elif new_keys := set(instance_services.keys()) - set(self._services.keys()):
+                    for key in new_keys:
+                        self._services[key] = instance_services[key]
+                    logger.info(
+                        f"[{self.manifest.name}] 📦 Nouveaux services exposés : "
+                        f"{sorted(new_keys)}"
+                    )
 
         return self._services
-
-    # ──────────────────────────────────────────
-    # ★ CORRIGÉ : load() — injecte toujours le container,
-    #   puis appelle mems() après on_load()
-    # ──────────────────────────────────────────
 
     async def load(self) -> None:
         logger.info(f"[{self.manifest.name}] Chargement Trusted en mémoire...")
@@ -170,7 +148,6 @@ class TrustedRunner:
 
         plugin_class = self._module.Plugin
 
-        # ★ CORRECTION 1 : toujours tenter de passer services
         try:
             sig = inspect.signature(plugin_class.__init__)
             accepts_services = "services" in sig.parameters
@@ -180,14 +157,8 @@ class TrustedRunner:
         if accepts_services:
             self._instance = plugin_class(services=self._services)
         else:
-            # Le plugin n'accepte pas services dans __init__
-            # → on l'instancie normalement puis on injecte le container
-            # directement sur l'attribut _services s'il hérite de TrustedBase
             self._instance = plugin_class()
             if hasattr(self._instance, "_services"):
-                # TrustedBase : injecter le container partagé
-                # IMPORTANT : on remplace l'attribut pour que ce soit
-                # le MÊME objet (pas une copie)
                 self._instance._services = self._services
 
         if not isinstance(self._instance, BasePlugin):
@@ -195,18 +166,14 @@ class TrustedRunner:
                 f"[{self.manifest.name}] Plugin ne respecte pas BasePlugin"
             )
 
-        # Injection des variables d'environnement
         if hasattr(self._instance, "env_variable"):
             await self._instance.env_variable(self.manifest.env)
 
-        # Hook on_load — c'est ici que le plugin enregistre ses services
-        # ex: self._services["core"] = CoreService(...)
         if hasattr(self._instance, "on_load"):
             await self._instance.on_load()
 
-        # ★ CORRECTION 2 : appel de mems() APRÈS on_load()
-        # Propage les services ajoutés par on_load() vers le container partagé
-        self.mems()
+        # Chargement initial → is_reload=False
+        self.mems(is_reload=False)
 
         self._loaded_at = time.monotonic()
         logger.info(
@@ -225,10 +192,6 @@ class TrustedRunner:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
         return module
-
-    # ──────────────────────────────────────────
-    # Appel avec timeout (inchangé)
-    # ──────────────────────────────────────────
 
     async def call(self, action: str, payload: dict) -> dict:
         if self._instance is None:
@@ -254,10 +217,6 @@ class TrustedRunner:
             result = {"status": "ok", "result": result}
         return result
 
-    # ──────────────────────────────────────────
-    # Filesystem (inchangé)
-    # ──────────────────────────────────────────
-
     def check_path(self, path: str | Path) -> None:
         check_filesystem_access(
             path,
@@ -266,20 +225,15 @@ class TrustedRunner:
             self.manifest.name,
         )
 
-    # ──────────────────────────────────────────
-    # ★ CORRIGÉ : reload() — appelle mems() après rechargement
-    # ──────────────────────────────────────────
-
     async def reload(self) -> None:
         logger.info(f"[{self.manifest.name}] Rechargement à chaud...")
         if hasattr(self._instance, "on_reload"):
             await self._instance.on_reload()
         await self.unload()
-        await self.load()  # load() appelle déjà <-mems() en fin
-
-    # ──────────────────────────────────────────
-    # unload (inchangé)
-    # ──────────────────────────────────────────
+        await self.load()
+        # load() appelle mems(is_reload=False) mais on est dans un reload :
+        # on rappelle avec is_reload=True pour forcer la mise à jour des services.
+        self.mems(is_reload=True)
 
     async def unload(self) -> None:
         if self._instance and hasattr(self._instance, "on_unload"):
@@ -295,10 +249,6 @@ class TrustedRunner:
         self._instance = None
         self._module = None
         logger.info(f"[{self.manifest.name}] Trusted déchargé")
-
-    # ──────────────────────────────────────────
-    # Status (inchangé)
-    # ──────────────────────────────────────────
 
     @property
     def uptime(self) -> float | None:

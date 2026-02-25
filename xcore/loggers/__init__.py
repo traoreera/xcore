@@ -3,16 +3,13 @@ Module for creating and configuring loggers
 
 """
 
-from .logger_config import ColoredFormatter, get_logger
+from .logs import LoggingConfig, Logs
 
 __all__ = [
-    "get_logger",
-    "ColoredFormatter",
+    "Logs",
+    "LoggingConfig",
 ]
-__annotations__ = {
-    "get_logger": "Callable[[str, str], logging.Logger]",
-    "ColoredFormatter": "Callable[[str, str], logging.Formatter]",
-}
+
 __doc__ = "Module for creating and configuring loggers"
 __version__ = "1.0.0"
 __author__ = "Traoreera"
