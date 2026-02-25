@@ -42,16 +42,15 @@ scheduler:
     - id: sandbox_runtimer
       func: "backgroundtask.sandbox:service_main"
       trigger: "interval"
-      minute: 1
+      seconds: 30
       enabled: true
 
 logging:
-  level: "WARNING"
+  level: "INFO"
   format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
   handlers:
     console:
       enabled: true
-      level: "INFO"
     file:
       enabled: true
       path: "logs/app.log"

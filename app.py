@@ -62,6 +62,7 @@ manager = Manager(
 @xhooks.on("xcore.startup")
 async def manager_setup(event: Event):
     ddb: AsyncSQLAdapter = integration.db.get("default")
+    manager.__logger = integration.logger
     core_services = {
         "db": ddb,
         "base": Base,

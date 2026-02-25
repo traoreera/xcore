@@ -98,8 +98,6 @@ class SandboxSupervisor:
 
         IMPORTANT — Limite mémoire :
         On ne fait JAMAIS setrlimit() depuis ce process (uvicorn).
-        Le setrlimit après create_subprocess_exec() s'appliquerait au
-        process uvicorn lui-même → core dump immédiat.
         La limite est passée via _SANDBOX_MAX_MEM_MB et appliquée
         par le worker dans son propre process au démarrage.
         """
@@ -109,8 +107,6 @@ class SandboxSupervisor:
         sandbox_home = (self.manifest.plugin_dir / ".sandbox_home").resolve()
         sandbox_home.mkdir(parents=True, exist_ok=True)
 
-        # Env minimal — pas d'héritage de l'env uvicorn pour éviter
-        # la fuite de secrets (DB_PASSWORD, JWT_SECRET, etc.)
         env = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": str(sandbox_home),
@@ -217,24 +213,73 @@ class SandboxSupervisor:
                     )
         await self._handle_crash()
 
+    # FIX #2 — RecursionError corrigé :
+    # L'ancienne implémentation de _handle_crash() appelait start() en cas de
+    # succès, et start() pouvait à nouveau déclencher _handle_crash() via
+    # _ping_check() ou _watch_loop() → récursion infinie → RecursionError.
+    #
+    # Correction : _handle_crash() est désormais itératif (boucle while) avec
+    # un délai exponentiel plafonné. start() n'est JAMAIS appelé depuis
+    # _handle_crash() ; on recrée le subprocess directement via _spawn() +
+    # _ping_check() pour conserver le contrôle total du flux.
     async def _handle_crash(self) -> None:
-        self._restarts += 1
-        if self._restarts > self.config.max_restarts:
-            self._state = ProcessState.FAILED
-            logger.error(
-                f"[{self.manifest.name}] ❌ FAILED après {self._restarts-1} crashs"
-            )
+        # Évite les ré-entrances concurrentes (ex: watch_loop + health_loop
+        # détectent le crash en même temps).
+        if self._state in (ProcessState.RESTARTING, ProcessState.FAILED, ProcessState.STOPPED):
             return
+
         self._state = ProcessState.RESTARTING
-        logger.info(
-            f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts}..."
+
+        while self._restarts < self.config.max_restarts:
+            self._restarts += 1
+            delay = min(self.config.restart_delay * (2 ** (self._restarts - 1)), 60.0)
+            logger.info(
+                f"[{self.manifest.name}] Restart "
+                f"{self._restarts}/{self.config.max_restarts} dans {delay:.1f}s..."
+            )
+            await asyncio.sleep(delay)
+
+            # Annuler les tâches de surveillance de l'ancienne instance
+            # pour éviter qu'elles déclenchent un nouveau _handle_crash().
+            for task in (self._watch_task, self._health_task):
+                if task and not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+            self._watch_task = None
+            self._health_task = None
+
+            await self._kill()
+
+            try:
+                # Recréer le subprocess directement — pas via start() pour
+                # éviter toute récursion.
+                await self._spawn()
+                await self._ping_check()
+            except Exception as e:
+                logger.error(f"[{self.manifest.name}] Échec spawn/ping : {e}")
+                continue  # prochain tour de boucle
+
+            # Succès : remettre en état RUNNING et relancer les watchers
+            self._state = ProcessState.RUNNING
+            self._started_at = time.monotonic()
+            self._watch_task = asyncio.create_task(
+                self._watch_loop(), name=f"watch-{self.manifest.name}"
+            )
+            hc = self.manifest.runtime.health_check
+            if hc.enabled:
+                self._health_task = asyncio.create_task(
+                    self._health_loop(hc.interval_seconds, hc.timeout_seconds),
+                    name=f"health-{self.manifest.name}",
+                )
+            logger.info(f"[{self.manifest.name}] ✅ Redémarré avec succès")
+            return
+
+        # Quota de restarts épuisé
+        self._state = ProcessState.FAILED
+        logger.error(
+            f"[{self.manifest.name}] ❌ FAILED après {self._restarts} tentative(s)"
         )
-        await asyncio.sleep(self.config.restart_delay)
-        try:
-            await self.start()
-        except Exception as e:
-            logger.error(f"[{self.manifest.name}] Échec restart: {e}")
-            await self._handle_crash()
 
     async def stop(self) -> None:
         self._state = ProcessState.STOPPED

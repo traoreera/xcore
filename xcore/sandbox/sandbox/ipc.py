@@ -14,11 +14,6 @@ from dataclasses import dataclass
 logger = logging.getLogger("plManager.ipc")
 
 
-# ──────────────────────────────────────────────
-# Erreurs IPC
-# ──────────────────────────────────────────────
-
-
 class IPCError(Exception):
     """Erreur de communication avec le subprocess."""
 
@@ -31,21 +26,11 @@ class IPCProcessDead(IPCError):
     """Le subprocess est mort."""
 
 
-# ──────────────────────────────────────────────
-# Résultat d'un appel IPC
-# ──────────────────────────────────────────────
-
-
 @dataclass
 class IPCResponse:
     success: bool
     data: dict
     raw: str = ""
-
-
-# ──────────────────────────────────────────────
-# Canal IPC
-# ──────────────────────────────────────────────
 
 
 class IPCChannel:
@@ -58,30 +43,16 @@ class IPCChannel:
         self,
         process: asyncio.subprocess.Process,
         timeout: float = 10.0,
-        max_output_size: int = 1024 * 512,  # 512 KB max par réponse
+        max_output_size: int = 1024 * 512,
     ) -> None:
         self._process = process
         self._timeout = timeout
         self._max_output_size = max_output_size
         self._lock = asyncio.Lock()
 
-    # ──────────────────────────────────────────
-    # Appel principal
-    # ──────────────────────────────────────────
-
     async def call(self, action: str, payload: dict) -> IPCResponse:
-        """
-        Envoie une requête au subprocess et attend sa réponse.
-        Thread-safe, non-bloquant, avec timeout.
-
-        Raises:
-            IPCProcessDead   si le process est mort
-            IPCTimeoutError  si le process ne répond pas à temps
-            IPCError         pour toute autre erreur de communication
-        """
         if self._is_dead():
             raise IPCProcessDead("Le subprocess sandbox est mort")
-
         async with self._lock:
             return await self._send_and_receive(action, payload)
 
@@ -94,33 +65,40 @@ class IPCChannel:
         except (BrokenPipeError, ConnectionResetError) as e:
             raise IPCProcessDead(f"Impossible d'écrire dans stdin : {e}") from e
 
+        # FIX #1 — UnboundLocalError corrigé :
+        # Le `except asyncio.TimeoutError` original faisait `raise ... from e`
+        # mais `e` n'était défini que dans le bloc `except Exception as e` suivant
+        # → UnboundLocalError garanti à l'exécution.
+        # Correction : chaque bloc capture sa propre variable, pas de référence croisée.
         try:
             raw = await asyncio.wait_for(
                 self._process.stdout.readline(),
                 timeout=self._timeout,
             )
         except asyncio.TimeoutError:
+            # `from None` : supprime le contexte implicite, pas de variable externe.
             raise IPCTimeoutError(
                 f"Pas de réponse du plugin dans {self._timeout}s"
-            ) from e
-        except Exception as e:
-            raise IPCError(f"Erreur lecture stdout : {e}") from e
+            ) from None
+        except Exception as exc:
+            raise IPCError(f"Erreur lecture stdout : {exc}") from exc
 
         if not raw:
             raise IPCProcessDead("EOF inattendu sur stdout du subprocess")
 
         if len(raw) > self._max_output_size:
             raise IPCError(
-                f"Réponse trop volumineuse ({len(raw)} octets > "
-                f"{self._max_output_size})"
+                f"Réponse trop volumineuse ({len(raw)} octets > {self._max_output_size})"
             )
 
         raw_str = raw.decode("utf-8", errors="replace").strip()
 
         try:
             data = json.loads(raw_str)
-        except json.JSONDecodeError as e:
-            raise IPCError(f"Réponse JSON invalide : {e} — reçu : {raw_str!r}") from e
+        except json.JSONDecodeError as exc:
+            raise IPCError(
+                f"Réponse JSON invalide : {exc} — reçu : {raw_str!r}"
+            ) from exc
 
         return IPCResponse(
             success=data.get("status") == "ok",
@@ -128,15 +106,10 @@ class IPCChannel:
             raw=raw_str,
         )
 
-    # ──────────────────────────────────────────
-    # Utilitaires
-    # ──────────────────────────────────────────
-
     def _is_dead(self) -> bool:
         return self._process.returncode is not None
 
     async def close(self) -> None:
-        """Ferme stdin proprement pour signaler la fin au subprocess."""
         try:
             self._process.stdin.close()
             await self._process.stdin.wait_closed()

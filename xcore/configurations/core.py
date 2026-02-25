@@ -1,7 +1,6 @@
 from typing import TypedDict
 
 from .base import BaseCfg, Configure
-from .deps import Logger
 
 
 class Datatypes(TypedDict):
@@ -16,8 +15,13 @@ class RedisConfig(TypedDict):
     TTL: int
 
 
+class lof(TypedDict):
+    console: bool
+    file: str
+
+
 class Xcore(TypedDict):
-    logs: Logger
+    logs: lof
     data: Datatypes
     extensions: list[str]
     requirements: list[str]
