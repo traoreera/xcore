@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
     permissions:
       security-events: write
-      packagexs: read
+      packages: read
       actions: read
       contents: read
 
