@@ -73,7 +73,8 @@ max-line-length = 88
 
 
 [tool.poetry.scripts]
-migrate = "tools.migrate:main"
-dbutils = "tools.model_discovery:main"
-auto_migrate = "tools.auto_migrate:main"
-migration_utils = "tools.migration_utils:main"
+xcore = "xcore.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["xcore*"]
