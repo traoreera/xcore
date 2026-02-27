@@ -7,7 +7,7 @@ site_author: XCore Team
 site_url: https://xcore.readthedocs.io
 
 docs_dir: .
-site_dir: ../site
+site_dir: ../docs
 
 theme:
   name: material

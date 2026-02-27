@@ -3,6 +3,10 @@ site_description: Production-grade plugin-first Python framework
 site_author: XCore Team
 site_url: https://xcore.readthedocs.io
 
+docs_dir: doc
+site_dir: docs
+
+
 theme:
   name: material
   palette:
