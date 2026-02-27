@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xcore v2 plugin manifest schema",
+  "description": "Schéma de validation pour plugin.yaml / plugin.json",
+  "type": "object",
+  "required": ["name", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "name":              { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "version":           { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "author":            { "type": "string" },
+    "description":       { "type": "string" },
+    "framework_version": { "type": "string", "examples": [">=2.0", ">=2.0,<3.0"] },
+    "entry_point":       { "type": "string", "default": "src/main.py" },
+    "execution_mode": {
+      "type": "string",
+      "enum": ["trusted", "sandboxed", "legacy"],
+      "default": "legacy"
+    },
+    "requires": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Liste des plugins dont ce plugin dépend"
+    },
+    "allowed_imports": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Imports Python supplémentaires autorisés (whitelist AST)"
+    },
+    "permissions": {
+      "type": "array",
+      "description": "Règles d'accès aux ressources (voir kernel/permissions/schema.json)",
+      "items": {
+        "type": "object",
+        "required": ["resource"],
+        "properties": {
+          "resource": { "type": "string" },
+          "actions":  { "type": "array", "items": { "type": "string" } },
+          "effect":   { "type": "string", "enum": ["allow", "deny"], "default": "allow" }
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Variables d'environnement injectées dans le plugin"
+    },
+    "envconfiguration": {
+      "type": "object",
+      "properties": {
+        "inject":   { "type": "boolean", "default": false },
+        "env_file": { "type": "string", "default": ".env" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": { "type": "integer", "default": 10 },
+        "max_memory_mb":   { "type": "integer", "default": 128 },
+        "max_disk_mb":     { "type": "integer", "default": 50 },
+        "rate_limit": {
+          "type": "object",
+          "properties": {
+            "calls":          { "type": "integer", "default": 100 },
+            "period_seconds": { "type": "integer", "default": 60 }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "health_check": {
+          "type": "object",
+          "properties": {
+            "enabled":          { "type": "boolean", "default": true },
+            "interval_seconds": { "type": "integer", "default": 30 },
+            "timeout_seconds":  { "type": "integer", "default": 3 }
+          }
+        },
+        "retry": {
+          "type": "object",
+          "properties": {
+            "max_attempts":    { "type": "integer", "default": 1 },
+            "backoff_seconds": { "type": "number",  "default": 0.0 }
+          }
+        }
+      }
+    },
+    "filesystem": {
+      "type": "object",
+      "properties": {
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "denied_paths":  { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

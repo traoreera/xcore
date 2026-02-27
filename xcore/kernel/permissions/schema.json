@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xcore plugin permissions schema",
+  "type": "array",
+  "description": "Liste de règles d'accès déclarées dans plugin.yaml sous la clé 'permissions'.",
+  "items": {
+    "type": "object",
+    "required": ["resource"],
+    "additionalProperties": false,
+    "properties": {
+      "resource": {
+        "type": "string",
+        "description": "Glob pattern de la ressource ciblée. Ex: 'db.*', 'cache.get', '*'"
+      },
+      "actions": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["*"],
+        "description": "Verbes autorisés. Ex: ['read', 'write'] ou ['*'] pour tout."
+      },
+      "effect": {
+        "type": "string",
+        "enum": ["allow", "deny"],
+        "default": "allow",
+        "description": "Effet de la règle. Première correspondance gagne."
+      }
+    }
+  },
+  "examples": [
+    [
+      { "resource": "db.*",    "actions": ["read", "write"], "effect": "allow" },
+      { "resource": "cache.*", "actions": ["read"],          "effect": "allow" },
+      { "resource": "os.*",    "actions": ["*"],             "effect": "deny"  }
+    ]
+  ]
+}

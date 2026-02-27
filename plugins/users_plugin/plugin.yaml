@@ -1,0 +1,73 @@
+name: users_plugin
+version: 1.0.0
+author: Alice Dupont
+description: >
+  Plugin de gestion des utilisateurs.
+  Expose des routes HTTP REST (/plugins/users_plugin/users/...)
+  et des actions IPC (create_user, get_user, list_users, delete_user).
+
+execution_mode: trusted
+framework_version: ">=2.0"
+entry_point: src/main.py
+
+# Dépendances inter-plugins
+requires: 
+  - erp_core
+
+# Permissions d'accès aux services
+permissions:
+  - resource: "db.*"
+    actions: ["read", "write"]
+    effect: allow
+  - resource: "cache.*"
+    actions: ["read", "write"]
+    effect: allow
+  - resource: "ext.email*"
+    actions: ["send"]
+    effect: allow
+  # Pas d'accès au scheduler ou autres plugins
+  - resource: "scheduler"
+    actions: ["*"]
+    effect: deny
+
+# Variables d'environnement injectées dans le plugin
+env:
+  USERS_PER_PAGE: "20"
+  PASSWORD_SALT_ROUNDS: "12"
+  WELCOME_EMAIL_ENABLED: "true"
+
+# Dotenv optionnel (fichier .env local au plugin)
+envconfiguration:
+  inject: false
+
+# Ressources allouées
+resources:
+  timeout_seconds: 15
+  max_memory_mb: 0       # 0 = illimité (mode trusted)
+  max_disk_mb: 0
+  rate_limit:
+    calls: 500
+    period_seconds: 60
+
+# Comportement runtime
+runtime:
+  health_check:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 5
+  retry:
+    max_attempts: 2
+    backoff_seconds: 0.5
+
+# Accès filesystem
+filesystem:
+  allowed_paths: ["data/", "migrations/"]
+  denied_paths: ["src/"]
+
+# Config arbitraire du plugin (accessible via self.ctx.config)
+pagination:
+  default_page_size: 20
+  max_page_size: 100
+avatar:
+  default_url: "https://avatars.example.com/default.png"
+  allowed_formats: ["jpg", "png", "webp"]

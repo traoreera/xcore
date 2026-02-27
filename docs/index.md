@@ -1,127 +1,94 @@
-# xcore – Documentation
+# XCore Framework Documentation
 
-> **Framework multi-plugins pour FastAPI** · Python ≥ 3.13 · MIT License
+Welcome to **XCore** — a production-grade, plugin-first Python framework built on FastAPI.
 
-xcore est un framework conçu pour construire des applications FastAPI **modulaires et extensibles** grâce à un système de plugins dynamiques, un scheduler intégré, et une interface d'administration complète.
+## What is XCore?
 
----
+XCore is a modular orchestration framework designed to load, isolate, and manage plugins in a secure sandboxed environment. It enables building extensible applications where each feature can be developed, tested, and deployed independently.
 
-## Démarrage rapide
+## Key Features
 
-### 1. Installer le projet
+- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restart
+- **🔒 Sandboxing & Security** — Isolated execution with process limits, timeouts, and automatic restarts
+- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more
+- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system events
+- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints
+- **♻️ Hot Reloading** — Automatic file watching for development
+- **📊 Production Ready** — YAML configuration, environment variables, structured logging, metrics
+
+## Quick Start
 
 ```bash
-git clone https://github.com/traoreera/xcore.git
-cd xcore
-git checkout features
+# Install dependencies
 poetry install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
+
+# Run development server
+poetry run uvicorn app:app --reload --port 8082
 ```
 
-### 2. Lancer le serveur
-
-```bash
-uvicorn main:app --reload
-```
-
-### 3. Créer votre premier plugin
+## Documentation Structure
 
 ```
-plugins/
-└── hello_plugin/
-    ├── __init__.py
-    ├── run.py
-    └── config.yaml
+docs/
+├── getting-started/     # Installation and first steps
+├── guides/             # How-to guides
+├── reference/          # API reference and configuration
+├── architecture/       # System architecture and design
+├── development/        # Development guidelines
+├── deployment/         # Production deployment
+└── examples/           # Code examples and tutorials
 ```
 
-```python
-# run.py
-from fastapi import APIRouter, Request
+## Project Architecture
 
-PLUGIN_INFO = {
-    "version": "1.0.0",
-    "author": "Votre Nom",
-    "Api_prefix": "/app/hello",
-    "tag_for_identified": ["hello"],
-}
+```mermaid
+graph TB
+    subgraph XCore["XCore Framework"]
+        X[Xcore Orchestrator]
+        SC[ServiceContainer]
+        PS[PluginSupervisor]
+        EB[EventBus]
+    end
 
-router = APIRouter(prefix="/hello", tags=["hello"])
+    subgraph Services["Built-in Services"]
+        DB[(Database)]
+        CACHE[(Cache)]
+        SCHED[Scheduler]
+        EXT[Extensions]
+    end
 
-class Plugin:
-    def __init__(self):
-        super(Plugin, self).__init__()
+    subgraph Plugins["Plugin Layer"]
+        T[Trusted Plugins]
+        S[Sandboxed Plugins]
+    end
 
-    @router.get("/")
-    @staticmethod
-    def run(request: Request):
-        return {"message": "Hello from xcore!"}
+    X --> SC
+    X --> PS
+    X --> EB
+    SC --> Services
+    PS --> Plugins
+    EB --> PS
+    EB --> SC
+
+    FA[FastAPI App] --> X
 ```
 
-Le plugin est automatiquement découvert et monté dans FastAPI au démarrage.
+## Next Steps
 
----
+- [Installation Guide](getting-started/installation.md)
+- [Creating Your First Plugin](guides/creating-plugins.md)
+- [Configuration Reference](reference/configuration.md)
+- [Architecture Overview](architecture/overview.md)
 
-## Fonctionnalités principales
+## Community & Support
 
-- **Chargement dynamique de plugins** avec purge du cache Python
-- **Hot reload** des plugins et routes FastAPI sans redémarrage
-- **Scheduler intégré** pour tâches synchrones et asynchrones
-- **Sandbox** : isolation CPU, mémoire et timeout par plugin
-- **Administration via API** : liste, reload, monitoring des plugins
-- **Authentification JWT** et gestion des rôles intégrées
-- **Cache Redis** et journalisation centralisée
+- GitHub Issues: [Report bugs or request features](https://github.com/traoreera/xcore/issues)
+- Discussions: [Community forum](https://github.com/traoreera/xcore/discussions)
 
----
+## License
 
-```{toctree}
-:maxdepth: 1
-:caption: 🏠 Vue d'ensemble
-
-architecture
-glossary
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: 💡 Concepts
-
-concepts/plugins-vs-extensions
-concepts/scheduler-concepts
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: 🎓 Tutoriels
-
-tutorials/introduction
-tutorials/plugin-creation
-tutorials/plugin-usage
-tutorials/service-creation
-tutorials/service-usage
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: 📖 Référence
-
-reference/plugin-anatomy
-reference/api-endpoints
-reference/config-options
-reference/commands
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: 🛠️ Développement
-
-development/contribution-guide
-development/testing
-development/code-style
-```
-
----
-
-## Liens utiles
-
-- [Repository GitHub](https://github.com/traoreera/xcore/tree/features)
-- [Ouvrir une issue](https://github.com/traoreera/xcore/issues)
-- [Pull Requests](https://github.com/traoreera/xcore/pulls)
+XCore is released under the [MIT License](../LICENSE).

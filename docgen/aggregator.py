@@ -1,5 +1,7 @@
 from collections import defaultdict
-from summarizer import summarize_chunk, call_model
+
+from summarizer import call_model, summarize_chunk
+
 
 def summarize_by_file(chunks, cfg):
     """
@@ -9,13 +11,14 @@ def summarize_by_file(chunks, cfg):
     file_map = defaultdict(lambda: {"summaries": [], "module": None, "filename": None})
 
     for chunk in chunks:
-        path     = chunk["path"]
-        summary  = summarize_chunk(path, chunk["content"], cfg)
+        path = chunk["path"]
+        summary = summarize_chunk(path, chunk["content"], cfg)
         file_map[path]["summaries"].append(summary)
-        file_map[path]["module"]   = chunk["module"]
+        file_map[path]["module"] = chunk["module"]
         file_map[path]["filename"] = chunk["filename"]
 
     return file_map
+
 
 def aggregate_file_summaries(file_map, cfg):
     """
@@ -29,7 +32,7 @@ def aggregate_file_summaries(file_map, cfg):
 
     for path, data in file_map.items():
         summaries = data["summaries"]
-        combined  = "\n".join(summaries)
+        combined = "\n".join(summaries)
 
         if len(summaries) == 1:
             # Pas besoin de fusion si un seul chunk
@@ -54,8 +57,8 @@ Rules:
             final_summary = call_model(final_prompt, cfg)
 
         aggregated[path] = {
-            "summary":  final_summary,
-            "module":   data["module"],
+            "summary": final_summary,
+            "module": data["module"],
             "filename": data["filename"],
         }
 

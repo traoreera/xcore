@@ -1,5 +1,6 @@
 from summarizer import call_model
 
+
 def compose_file_doc(path, filename, summary, cfg):
     """
     Génère la documentation Markdown pour un seul fichier source.
@@ -106,12 +107,18 @@ def compose_root_index(modules_summary, root_files, cfg):
         for mod, desc in modules_summary.items()
     )
 
-    root_files_list = "\n".join(
-        f"- [`{fname}.py`](./{fname}.md) — {data['summary'][:120].rstrip()}"
-        for fname, data in root_files.items()
-    ) if root_files else ""
+    root_files_list = (
+        "\n".join(
+            f"- [`{fname}.py`](./{fname}.md) — {data['summary'][:120].rstrip()}"
+            for fname, data in root_files.items()
+        )
+        if root_files
+        else ""
+    )
 
-    root_files_section = f"### Root-level files\n{root_files_list}" if root_files_list else ""
+    root_files_section = (
+        f"### Root-level files\n{root_files_list}" if root_files_list else ""
+    )
 
     prompt = f"""You are writing the top-level documentation index for a software project.
 
