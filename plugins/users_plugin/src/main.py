@@ -31,12 +31,9 @@ Actions IPC (POST /app/users_plugin/<action>) :
   delete_user  → {user_id}
   ping         → {} → health check rapide
 """
+
 from __future__ import annotations
 
-import hashlib
-import os
-import time
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -55,28 +52,29 @@ from xcore.sdk import (
 )
 
 
-class Route(RoutedPlugin, AutoDispatchMixin):
+class Plugin(TrustedBase):
 
-
-
-    @action("users")
-    @staticmethod
-    async def list_users(page: int = 1, page_size: int = 10, search: str | None = None):
-        return {}
-    @route("/users", method="GET")
-    async def get_users(self,page: int = 1, page_size: int = 10, search: str | None = None):
-        return {}
-
-
-class Plugin(Route, TrustedBase):
-    
     def __init__(self) -> None:
         super().__init__()
-    
 
     async def on_load(self) -> None:
-        
-        session = self.get_service("async_default")
-        #session.close()
-        
+
+        self.get_service("async_default")
+        # session.close()
+
         return await super().on_load()
+
+    def get_router(self) -> Any | None:
+
+        from fastapi import APIRouter
+
+        router = APIRouter(prefix="/items")
+
+        @router.get("/")
+        async def list_items():
+            return []
+
+        return router
+
+    async def handle(self, action: str, payload: dict) -> dict:
+        return super().handle(action, payload)

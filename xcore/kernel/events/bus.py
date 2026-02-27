@@ -7,6 +7,7 @@ Un seul bus pour les deux usages :
 
 Supprime le doublon EventBus présent dans integration/core/events.py et hooks/hooks.py.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,6 +21,7 @@ logger = logging.getLogger("xcore.events.bus")
 @dataclass
 class Event:
     """Événement structuré passé aux handlers."""
+
     name: str
     data: dict[str, Any] = field(default_factory=dict)
     source: str | None = None
@@ -63,18 +65,24 @@ class EventBus:
 
     # ── Enregistrement ────────────────────────────────────────
 
-    def on(self, event_name: str, priority: int = 50, name: str | None = None) -> Callable:
+    def on(
+        self, event_name: str, priority: int = 50, name: str | None = None
+    ) -> Callable:
         """Décorateur pour s'abonner à un événement."""
+
         def decorator(fn: Callable) -> Callable:
             self.subscribe(event_name, fn, priority=priority, name=name)
             return fn
+
         return decorator
 
     def once(self, event_name: str, priority: int = 50) -> Callable:
         """Décorateur pour s'abonner une seule fois."""
+
         def decorator(fn: Callable) -> Callable:
             self.subscribe(event_name, fn, priority=priority, once=True)
             return fn
+
         return decorator
 
     def subscribe(
@@ -131,10 +139,14 @@ class EventBus:
             return entry.handler(event)
 
         if gather:
-            raw = await asyncio.gather(*[_call(e) for e in handlers], return_exceptions=True)
+            raw = await asyncio.gather(
+                *[_call(e) for e in handlers], return_exceptions=True
+            )
             for entry, result in zip(handlers, raw):
                 if isinstance(result, Exception):
-                    logger.error(f"Handler '{entry.name}' erreur pour '{event_name}': {result}")
+                    logger.error(
+                        f"Handler '{entry.name}' erreur pour '{event_name}': {result}"
+                    )
                 else:
                     results.append(result)
                 if entry.once:
@@ -172,8 +184,7 @@ class EventBus:
 
     def list_events(self) -> dict[str, list[str]]:
         return {
-            name: [e.name for e in entries]
-            for name, entries in self._handlers.items()
+            name: [e.name for e in entries] for name, entries in self._handlers.items()
         }
 
     def handler_count(self, event_name: str) -> int:

@@ -2,7 +2,9 @@
 ipc.py — Canal IPC JSON newline-delimited entre le Core et un subprocess Sandboxed.
 Fix #1 v1 intégré : UnboundLocalError sur asyncio.TimeoutError corrigé.
 """
+
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -11,9 +13,16 @@ from dataclasses import dataclass
 logger = logging.getLogger("xcore.sandbox.ipc")
 
 
-class IPCError(Exception): pass
-class IPCTimeoutError(IPCError): pass
-class IPCProcessDead(IPCError): pass
+class IPCError(Exception):
+    pass
+
+
+class IPCTimeoutError(IPCError):
+    pass
+
+
+class IPCProcessDead(IPCError):
+    pass
 
 
 @dataclass
@@ -26,12 +35,16 @@ class IPCResponse:
 class IPCChannel:
     """Canal IPC thread-safe via asyncio.Lock."""
 
-    def __init__(self, process: asyncio.subprocess.Process,
-                 timeout: float = 10.0, max_output_size: int = 512 * 1024) -> None:
-        self._process        = process
-        self._timeout        = timeout
+    def __init__(
+        self,
+        process: asyncio.subprocess.Process,
+        timeout: float = 10.0,
+        max_output_size: int = 512 * 1024,
+    ) -> None:
+        self._process = process
+        self._timeout = timeout
         self._max_output_size = max_output_size
-        self._lock           = asyncio.Lock()
+        self._lock = asyncio.Lock()
 
     async def call(self, action: str, payload: dict) -> IPCResponse:
         if self._is_dead():

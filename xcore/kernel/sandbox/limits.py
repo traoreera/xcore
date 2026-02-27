@@ -1,14 +1,17 @@
 """
 limits.py — Rate limiting par plugin (fenêtre glissante).
 """
+
 from __future__ import annotations
+
 import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass
 
 
-class RateLimitExceeded(Exception): pass
+class RateLimitExceeded(Exception):
+    pass
 
 
 @dataclass
@@ -19,13 +22,13 @@ class RateLimitConfig:
 
 class RateLimiter:
     def __init__(self, config: RateLimitConfig) -> None:
-        self._config     = config
+        self._config = config
         self._timestamps: deque[float] = deque()
-        self._lock       = asyncio.Lock()
+        self._lock = asyncio.Lock()
 
     async def check(self, plugin_name: str) -> None:
         async with self._lock:
-            now    = time.monotonic()
+            now = time.monotonic()
             cutoff = now - self._config.period_seconds
             while self._timestamps and self._timestamps[0] < cutoff:
                 self._timestamps.popleft()
@@ -39,12 +42,15 @@ class RateLimiter:
             self._timestamps.append(now)
 
     def stats(self) -> dict:
-        now    = time.monotonic()
+        now = time.monotonic()
         cutoff = now - self._config.period_seconds
         current = sum(t >= cutoff for t in self._timestamps)
-        return {"calls_in_window": current, "limit": self._config.calls,
-                "period_seconds": self._config.period_seconds,
-                "remaining": max(0, self._config.calls - current)}
+        return {
+            "calls_in_window": current,
+            "limit": self._config.calls,
+            "period_seconds": self._config.period_seconds,
+            "remaining": max(0, self._config.calls - current),
+        }
 
 
 class RateLimiterRegistry:

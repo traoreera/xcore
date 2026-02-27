@@ -1,6 +1,7 @@
 """
 redis.py — Backend cache Redis pour CacheService.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,8 +24,8 @@ class RedisCacheBackend:
     """
 
     def __init__(self, url: str, ttl: int = 300) -> None:
-        self._url    = url
-        self._ttl    = ttl
+        self._url = url
+        self._ttl = ttl
         self._client = None
 
     async def connect(self) -> None:

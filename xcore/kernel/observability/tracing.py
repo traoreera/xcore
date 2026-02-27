@@ -1,7 +1,9 @@
 """
 tracing.py — Interface de tracing (noop par défaut, OpenTelemetry optionnel).
 """
+
 from __future__ import annotations
+
 import time
 import uuid
 from contextlib import contextmanager
@@ -13,7 +15,7 @@ from typing import Any, Generator
 class Span:
     name: str
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    span_id:  str = field(default_factory=lambda: uuid.uuid4().hex[:16])
+    span_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     start_time: float = field(default_factory=time.monotonic)
     end_time: float | None = None
     attributes: dict[str, Any] = field(default_factory=dict)
@@ -57,9 +59,14 @@ class Tracer:
 
     def export(self) -> list[dict]:
         return [
-            {"name": s.name, "trace_id": s.trace_id, "span_id": s.span_id,
-             "duration_ms": s.duration_ms, "status": s.status,
-             "attributes": s.attributes}
+            {
+                "name": s.name,
+                "trace_id": s.trace_id,
+                "span_id": s.span_id,
+                "duration_ms": s.duration_ms,
+                "status": s.status,
+                "attributes": s.attributes,
+            }
             for s in self._spans
         ]
 

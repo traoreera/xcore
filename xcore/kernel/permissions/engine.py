@@ -6,10 +6,10 @@ Le PermissionEngine est le singleton qui :
   2. Répond aux requêtes d'autorisation à chaque appel de plugin
   3. Émet des événements d'audit (allow/deny)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from .policies import PolicyEffect, PolicySet
 
@@ -41,7 +41,9 @@ class PermissionEngine:
         self._events = events
         self._audit_log: list[dict] = []
 
-    def load_from_manifest(self, plugin_name: str, raw_permissions: list[dict] | None) -> None:
+    def load_from_manifest(
+        self, plugin_name: str, raw_permissions: list[dict] | None
+    ) -> None:
         """Charge les policies d'un plugin depuis son manifeste."""
         if not raw_permissions:
             # Sans policies déclarées → deny all (fail-closed)
@@ -83,10 +85,14 @@ class PermissionEngine:
             return PolicyEffect.DENY
         return ps.evaluate(resource, action)
 
-    def _audit(self, plugin_name: str, resource: str, action: str, effect: PolicyEffect) -> None:
+    def _audit(
+        self, plugin_name: str, resource: str, action: str, effect: PolicyEffect
+    ) -> None:
         entry = {
-            "plugin": plugin_name, "resource": resource,
-            "action": action, "effect": effect.value
+            "plugin": plugin_name,
+            "resource": resource,
+            "action": action,
+            "effect": effect.value,
         }
         self._audit_log.append(entry)
         if effect == PolicyEffect.DENY:
@@ -95,9 +101,11 @@ class PermissionEngine:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
-        log = self._audit_log if not plugin_name else [
-            e for e in self._audit_log if e["plugin"] == plugin_name
-        ]
+        log = (
+            self._audit_log
+            if not plugin_name
+            else [e for e in self._audit_log if e["plugin"] == plugin_name]
+        )
         return log[-limit:]
 
     def status(self) -> dict:

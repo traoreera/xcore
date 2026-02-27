@@ -1,7 +1,9 @@
 """
 hashing.py — Utilitaires de hachage pour la vérification d'intégrité.
 """
+
 from __future__ import annotations
+
 import hashlib
 import hmac
 from pathlib import Path

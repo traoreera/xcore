@@ -2,6 +2,7 @@
 memory.py — Backend cache mémoire : LRU + TTL + max_size.
 Zéro dépendance externe.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,7 +14,7 @@ from typing import Any
 @dataclass
 class _Entry:
     value: Any
-    expires_at: float | None   # None = jamais
+    expires_at: float | None  # None = jamais
 
 
 class MemoryBackend:
@@ -28,10 +29,10 @@ class MemoryBackend:
     """
 
     def __init__(self, ttl: int = 300, max_size: int = 1000) -> None:
-        self._ttl      = ttl
+        self._ttl = ttl
         self._max_size = max_size
         self._store: OrderedDict[str, _Entry] = OrderedDict()
-        self._hits   = 0
+        self._hits = 0
         self._misses = 0
 
     async def get(self, key: str) -> Any | None:
@@ -50,7 +51,7 @@ class MemoryBackend:
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         effective_ttl = ttl if ttl is not None else self._ttl
-        expires_at    = (time.monotonic() + effective_ttl) if effective_ttl > 0 else None
+        expires_at = (time.monotonic() + effective_ttl) if effective_ttl > 0 else None
 
         if key in self._store:
             self._store.move_to_end(key)
@@ -71,6 +72,7 @@ class MemoryBackend:
 
     async def keys(self, pattern: str | None = None) -> list[str]:
         import fnmatch
+
         all_keys = list(self._store.keys())
         if pattern:
             return [k for k in all_keys if fnmatch.fnmatch(k, pattern)]
@@ -90,9 +92,9 @@ class MemoryBackend:
         total = self._hits + self._misses
         return {
             "backend": "memory",
-            "size":    len(self._store),
+            "size": len(self._store),
             "max_size": self._max_size,
-            "hits":    self._hits,
-            "misses":  self._misses,
+            "hits": self._hits,
+            "misses": self._misses,
             "hit_rate": round(self._hits / total, 3) if total else 0.0,
         }

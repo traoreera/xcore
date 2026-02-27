@@ -2,9 +2,9 @@
 metrics.py — Registre de métriques léger (memory backend par défaut).
 Interface compatible Prometheus si le backend est configuré.
 """
+
 from __future__ import annotations
-import time
-from collections import defaultdict
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,28 +29,38 @@ class Gauge:
     labels: dict[str, str] = field(default_factory=dict)
     _value: float = 0.0
 
-    def set(self, v: float) -> None: self._value = v
-    def inc(self, v: float = 1.0) -> None: self._value += v
-    def dec(self, v: float = 1.0) -> None: self._value -= v
+    def set(self, v: float) -> None:
+        self._value = v
+
+    def inc(self, v: float = 1.0) -> None:
+        self._value += v
+
+    def dec(self, v: float = 1.0) -> None:
+        self._value -= v
 
     @property
-    def value(self) -> float: return self._value
+    def value(self) -> float:
+        return self._value
 
 
 @dataclass
 class Histogram:
     name: str
-    buckets: list[float] = field(default_factory=lambda: [.005, .01, .025, .05, .1, .5, 1, 5, 10])
+    buckets: list[float] = field(
+        default_factory=lambda: [0.005, 0.01, 0.025, 0.05, 0.1, 0.5, 1, 5, 10]
+    )
     _observations: list[float] = field(default_factory=list)
 
     def observe(self, v: float) -> None:
         self._observations.append(v)
 
     @property
-    def count(self) -> int: return len(self._observations)
+    def count(self) -> int:
+        return len(self._observations)
 
     @property
-    def sum(self) -> float: return sum(self._observations)
+    def sum(self) -> float:
+        return sum(self._observations)
 
     @property
     def mean(self) -> float:
@@ -71,8 +81,8 @@ class MetricsRegistry:
     """
 
     def __init__(self) -> None:
-        self._counters:   dict[str, Counter]   = {}
-        self._gauges:     dict[str, Gauge]     = {}
+        self._counters: dict[str, Counter] = {}
+        self._gauges: dict[str, Gauge] = {}
         self._histograms: dict[str, Histogram] = {}
 
     def counter(self, name: str, labels: dict | None = None) -> Counter:
@@ -94,8 +104,10 @@ class MetricsRegistry:
 
     def snapshot(self) -> dict[str, Any]:
         return {
-            "counters":   {k: v.value for k, v in self._counters.items()},
-            "gauges":     {k: v.value for k, v in self._gauges.items()},
-            "histograms": {k: {"count": v.count, "sum": v.sum, "mean": v.mean}
-                           for k, v in self._histograms.items()},
+            "counters": {k: v.value for k, v in self._counters.items()},
+            "gauges": {k: v.value for k, v in self._gauges.items()},
+            "histograms": {
+                k: {"count": v.count, "sum": v.sum, "mean": v.mean}
+                for k, v in self._histograms.items()
+            },
         }

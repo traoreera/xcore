@@ -3,6 +3,7 @@ hooks.py — HookManager v2 (repris de hooks/hooks.py v1).
 Conserve toutes les fonctionnalités (wildcards, priorités, intercepteurs,
 métriques) mais intégré dans le kernel/events.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -11,14 +12,18 @@ import inspect
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 from enum import Enum
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger("xcore.events.hooks")
 
 
-class HookError(Exception): pass
-class HookTimeoutError(HookError): pass
+class HookError(Exception):
+    pass
+
+
+class HookTimeoutError(HookError):
+    pass
 
 
 @dataclass
@@ -29,8 +34,11 @@ class Event:
     cancelled: bool = False
     stop_propagation: bool = False
 
-    def cancel(self) -> None: self.cancelled = True
-    def stop(self) -> None: self.stop_propagation = True
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def stop(self) -> None:
+        self.stop_propagation = True
 
 
 @dataclass
@@ -75,28 +83,48 @@ class HookManager:
         self._metrics: Dict[str, Dict[str, Any]] = {}
         self._result_processors: Dict[str, List[Callable]] = {}
 
-    def register(self, event_name: str, func: Callable, priority: int = 50,
-                 once: bool = False, timeout: Optional[float] = None) -> Callable:
+    def register(
+        self,
+        event_name: str,
+        func: Callable,
+        priority: int = 50,
+        once: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Callable:
         if event_name not in self._hooks:
             self._hooks[event_name] = []
-        hook_info = HookInfo(func=func, priority=priority, once=once,
-                             timeout=timeout, created_at=time.time())
+        hook_info = HookInfo(
+            func=func,
+            priority=priority,
+            once=once,
+            timeout=timeout,
+            created_at=time.time(),
+        )
         idx = 0
         for i, existing in enumerate(self._hooks[event_name]):
             if priority < existing.priority:
-                idx = i; break
+                idx = i
+                break
             idx = i + 1
         self._hooks[event_name].insert(idx, hook_info)
         return func
 
-    def on(self, event_name: str, priority: int = 50, once: bool = False,
-           timeout: Optional[float] = None) -> Callable:
+    def on(
+        self,
+        event_name: str,
+        priority: int = 50,
+        once: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Callable:
         def wrapper(func: Callable) -> Callable:
             self.register(event_name, func, priority, once, timeout)
             return func
+
         return wrapper
 
-    def once(self, event_name: str, priority: int = 50, timeout: Optional[float] = None) -> Callable:
+    def once(
+        self, event_name: str, priority: int = 50, timeout: Optional[float] = None
+    ) -> Callable:
         return self.on(event_name, priority=priority, once=True, timeout=timeout)
 
     def unregister(self, event_name: str, func: Callable) -> bool:
@@ -117,31 +145,48 @@ class HookManager:
         matching.sort(key=lambda x: x[1].priority)
         return matching
 
-    async def _execute_single_hook(self, hook_info: HookInfo, event: Event, pattern: str) -> HookResult:
+    async def _execute_single_hook(
+        self, hook_info: HookInfo, event: Event, pattern: str
+    ) -> HookResult:
         start = time.time()
         hook_name = hook_info.func.__name__
         try:
             if event.cancelled:
-                return HookResult(hook_name=hook_name, event_name=event.name, cancelled=True)
+                return HookResult(
+                    hook_name=hook_name, event_name=event.name, cancelled=True
+                )
             if hook_info.timeout:
                 if inspect.iscoroutinefunction(hook_info.func):
-                    result = await asyncio.wait_for(hook_info.func(event), timeout=hook_info.timeout)
+                    result = await asyncio.wait_for(
+                        hook_info.func(event), timeout=hook_info.timeout
+                    )
                 else:
                     result = await asyncio.wait_for(
-                        asyncio.to_thread(hook_info.func, event), timeout=hook_info.timeout)
+                        asyncio.to_thread(hook_info.func, event),
+                        timeout=hook_info.timeout,
+                    )
             else:
                 if inspect.iscoroutinefunction(hook_info.func):
                     result = await hook_info.func(event)
                 else:
                     result = await asyncio.to_thread(hook_info.func, event)
-            return HookResult(hook_name=hook_name, event_name=event.name,
-                              result=result, execution_time_ms=(time.time()-start)*1000)
+            return HookResult(
+                hook_name=hook_name,
+                event_name=event.name,
+                result=result,
+                execution_time_ms=(time.time() - start) * 1000,
+            )
         except Exception as e:
-            return HookResult(hook_name=hook_name, event_name=event.name,
-                              error=e, execution_time_ms=(time.time()-start)*1000)
+            return HookResult(
+                hook_name=hook_name,
+                event_name=event.name,
+                error=e,
+                execution_time_ms=(time.time() - start) * 1000,
+            )
 
-    async def emit(self, event_name: str, data: Optional[Dict[str, Any]] = None,
-                   **kwargs) -> List[HookResult]:
+    async def emit(
+        self, event_name: str, data: Optional[Dict[str, Any]] = None, **kwargs
+    ) -> List[HookResult]:
         event = Event(name=event_name, data={**(data or {}), **kwargs})
         matching = self._get_matching_hooks(event_name)
         if not matching:
@@ -167,8 +212,11 @@ class HookManager:
     def _update_metrics(self, event_name: str, results: List[HookResult]) -> None:
         if event_name not in self._metrics:
             self._metrics[event_name] = {
-                "total_emissions": 0, "total_hooks_executed": 0,
-                "total_errors": 0, "total_time_ms": 0.0, "avg_execution_time_ms": 0.0,
+                "total_emissions": 0,
+                "total_hooks_executed": 0,
+                "total_errors": 0,
+                "total_time_ms": 0.0,
+                "avg_execution_time_ms": 0.0,
             }
         m = self._metrics[event_name]
         m["total_emissions"] += 1
@@ -177,7 +225,8 @@ class HookManager:
         m["total_time_ms"] += sum(r.execution_time_ms for r in results)
         m["avg_execution_time_ms"] = (
             m["total_time_ms"] / m["total_hooks_executed"]
-            if m["total_hooks_executed"] > 0 else 0.0
+            if m["total_hooks_executed"] > 0
+            else 0.0
         )
 
     def get_metrics(self, event_name: str | None = None) -> Dict[str, Any]:
@@ -185,13 +234,21 @@ class HookManager:
 
     def list_hooks(self, event_name: str | None = None) -> Dict[str, List]:
         if event_name:
-            return {p: [{"name": h.func.__name__, "priority": h.priority, "once": h.once}
-                        for h in hooks]
-                    for p, hooks in self._hooks.items()
-                    if fnmatch.fnmatch(p, event_name) or fnmatch.fnmatch(event_name, p)}
-        return {evt: [{"name": h.func.__name__, "priority": h.priority, "once": h.once}
-                      for h in hooks]
-                for evt, hooks in self._hooks.items()}
+            return {
+                p: [
+                    {"name": h.func.__name__, "priority": h.priority, "once": h.once}
+                    for h in hooks
+                ]
+                for p, hooks in self._hooks.items()
+                if fnmatch.fnmatch(p, event_name) or fnmatch.fnmatch(event_name, p)
+            }
+        return {
+            evt: [
+                {"name": h.func.__name__, "priority": h.priority, "once": h.once}
+                for h in hooks
+            ]
+            for evt, hooks in self._hooks.items()
+        }
 
     def clear(self, event_name: str | None = None) -> None:
         if event_name:

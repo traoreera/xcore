@@ -7,6 +7,7 @@ Responsabilités :
   - Appeler les hooks on_load / on_reload / on_unload
   - Propager les services exposés vers le container partagé (mems)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,9 +19,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..api.context import PluginContext
 from ..api.contract import BasePlugin
-from ..api.context  import PluginContext
-from .state_machine import StateMachine, PluginState
+from .state_machine import PluginState, StateMachine
 
 logger = logging.getLogger("xcore.runtime.lifecycle")
 
@@ -48,19 +49,20 @@ class LifecycleManager:
 
     def __init__(
         self,
-        manifest,                          # PluginManifest
-        services: dict[str, Any],          # container partagé (référence)
-        events=None,                       # EventBus optionnel
-        hooks=None,                        # HookManager optionnel
+        manifest,  # PluginManifest
+        services: dict[str, Any],  # container partagé (référence)
+        events=None,  # EventBus optionnel
+        hooks=None,  # HookManager optionnel
     ) -> None:
-        self.manifest  = manifest
-        self._services = services          # même objet que PluginSupervisor._services
-        self._events   = events
-        self._hooks    = hooks
+        self.manifest = manifest
+        self._services = services  # même objet que PluginSupervisor._services
+        self._events = events
+        self._hooks = hooks
         self._instance: BasePlugin | None = None
         self._module: Any = None
         self._loaded_at: float | None = None
-        self.plugin_router: Any | None = None  # APIRouter exposé par le plugin (optionnel)
+        # APIRouter exposé par le plugin (optionnel)
+        self.plugin_router: Any | None = None
         self._sm = StateMachine(
             manifest.name,
             on_change=self._on_state_change,
@@ -193,12 +195,18 @@ class LifecycleManager:
             self._sm.transition("ok")
         except asyncio.TimeoutError:
             self._sm.transition("error")
-            return {"status": "error", "msg": f"Timeout après {timeout}s", "code": "timeout"}
-        except Exception as e:
+            return {
+                "status": "error",
+                "msg": f"Timeout après {timeout}s",
+                "code": "timeout",
+            }
+        except Exception:
             self._sm.transition("error")
             raise
 
-        return result if isinstance(result, dict) else {"status": "ok", "result": result}
+        return (
+            result if isinstance(result, dict) else {"status": "ok", "result": result}
+        )
 
     # ── Reload ────────────────────────────────────────────────
 
@@ -226,7 +234,7 @@ class LifecycleManager:
             await self._do_unload()
             self._sm.transition("ok")
             logger.info(f"[{self.manifest.name}] déchargé")
-        except Exception as e:
+        except Exception:
             self._sm.transition("error")
             raise
 
@@ -239,7 +247,7 @@ class LifecycleManager:
         if src_dir in sys.path:
             sys.path.remove(src_dir)
         self._instance = None
-        self._module   = None
+        self._module = None
 
     # ── Router HTTP custom ────────────────────────────────────
 
@@ -251,6 +259,9 @@ class LifecycleManager:
         if self._instance is None:
             return
         get_router = getattr(self._instance, "get_router", None)
+        if get_router is None:
+            get_router = getattr(self._instance, "router", None)
+
         if not callable(get_router):
             return
         try:
@@ -300,9 +311,9 @@ class LifecycleManager:
 
     def status(self) -> dict:
         return {
-            "name":   self.manifest.name,
-            "mode":   "trusted",
-            "state":  self._sm.state.value,
+            "name": self.manifest.name,
+            "mode": "trusted",
+            "state": self._sm.state.value,
             "loaded": self._instance is not None,
             "uptime": round(self.uptime, 1) if self.uptime else None,
         }

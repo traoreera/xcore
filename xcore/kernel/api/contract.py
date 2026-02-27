@@ -5,6 +5,7 @@ BasePlugin  : Protocol structurel (duck typing, pas d'héritage requis).
 TrustedBase : ABC avec injection de contexte riche.
 ExecutionMode : enum des modes d'exécution.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -13,9 +14,9 @@ from typing import Any, Protocol, runtime_checkable
 
 
 class ExecutionMode(str, Enum):
-    TRUSTED   = "trusted"
+    TRUSTED = "trusted"
     SANDBOXED = "sandboxed"
-    LEGACY    = "legacy"
+    LEGACY = "legacy"
 
 
 @runtime_checkable
@@ -26,8 +27,8 @@ class BasePlugin(Protocol):
     Le plugin doit exposer :
         async def handle(self, action: str, payload: dict) -> dict
     """
-    async def handle(self, action: str, payload: dict) -> dict:
-        ...
+
+    async def handle(self, action: str, payload: dict) -> dict: ...
 
 
 class TrustedBase(ABC):
@@ -67,11 +68,11 @@ class TrustedBase(ABC):
                 ...
 
     Les routes sont montées automatiquement sur l'app FastAPI au boot
-    sous le préfixe /plugins/<plugin_name>/ + le préfixe déclaré dans get_router().
+    sous le préfixe /{plugin_prefix}/<plugin_name>/ + le préfixe déclaré dans get_router().
     """
 
     def __init__(self) -> None:
-        self.ctx: Any = None   # injecté par LifecycleManager._inject_context()
+        self.ctx: Any = None  # injecté par LifecycleManager._inject_context()
 
     async def _inject_context(self, ctx: Any) -> None:
         """Appelé par le framework — ne pas overrider sauf raison valable."""
@@ -111,16 +112,16 @@ class TrustedBase(ABC):
         return None
 
     @abstractmethod
-    async def handle(self, action: str, payload: dict) -> dict:
-        ...
+    async def handle(self, action: str, payload: dict) -> dict: ...
 
     # Hooks de cycle de vie (optionnels)
-    async def on_load(self) -> None:   ...
+    async def on_load(self) -> None: ...
     async def on_unload(self) -> None: ...
     async def on_reload(self) -> None: ...
 
 
 # ── Réponses standardisées ────────────────────────────────────
+
 
 def ok(data: dict | None = None, **kwargs) -> dict:
     """Construit une réponse succès."""

@@ -1,11 +1,11 @@
 """
 versioning.py — Contraintes de version pour le registry.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-
 
 _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 _CONSTRAINT = re.compile(r"([><=!]+)\s*(\d+\.\d+(?:\.\d+)?)")
@@ -57,8 +57,8 @@ def satisfies(version_str: str, constraint_expr: str) -> bool:
         ok_map = {
             ">=": v >= t,
             "<=": v <= t,
-            ">":  v > t,
-            "<":  v < t,
+            ">": v > t,
+            "<": v < t,
             "==": v == t,
             "!=": v != t,
         }

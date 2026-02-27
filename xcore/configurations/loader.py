@@ -5,6 +5,7 @@ ConfigLoader v2 — charge xcore.yaml avec :
   - valeurs par défaut sans aucun fichier (zero-config)
   - clé secret_key auto-convertie bytes
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,9 +16,17 @@ from pathlib import Path
 from typing import Any
 
 from .sections import (
-    AppConfig, CacheConfig, DatabaseConfig, LoggingConfig,
-    MetricsConfig, ObservabilityConfig, PluginConfig,
-    SchedulerConfig, SecurityConfig, ServicesConfig, TracingConfig,
+    AppConfig,
+    CacheConfig,
+    DatabaseConfig,
+    LoggingConfig,
+    MetricsConfig,
+    ObservabilityConfig,
+    PluginConfig,
+    SchedulerConfig,
+    SecurityConfig,
+    ServicesConfig,
+    TracingConfig,
 )
 
 logger = logging.getLogger("xcore.config")
@@ -29,9 +38,11 @@ _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 # Résolution des variables d'environnement dans le YAML
 # ─────────────────────────────────────────────────────────────
 
+
 def _resolve(value: Any) -> Any:
     """Remplace ${VAR} dans toute la structure YAML."""
     if isinstance(value, str):
+
         def _sub(m: re.Match) -> str:
             var = m.group(1)
             resolved = os.environ.get(var)
@@ -39,17 +50,17 @@ def _resolve(value: Any) -> Any:
                 logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
                 return ""
             return resolved
+
         return _ENV_PATTERN.sub(_sub, value)
     if isinstance(value, dict):
         return {k: _resolve(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_resolve(v) for v in value]
-    return value
+    return [_resolve(v) for v in value] if isinstance(value, list) else value
 
 
 # ─────────────────────────────────────────────────────────────
 # Config globale
 # ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class XcoreConfig:
@@ -64,6 +75,7 @@ class XcoreConfig:
 # ─────────────────────────────────────────────────────────────
 # Loader
 # ─────────────────────────────────────────────────────────────
+
 
 class ConfigLoader:
     """
@@ -84,10 +96,10 @@ class ConfigLoader:
     """
 
     DEFAULT_PATHS = [
-        Path("xcore.yaml"),
-        Path("xcore.yml"),
-        Path("xcore.json"),
-        Path("config/xcore.yaml"),
+        Path("integration.yaml"),
+        Path("integration.yml"),
+        Path("integration.json"),
+        Path("config/integration.yaml"),
     ]
 
     @classmethod
@@ -111,10 +123,12 @@ class ConfigLoader:
             try:
                 if suffix in (".yaml", ".yml"):
                     import yaml
+
                     with open(candidate, encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                 else:
                     import json
+
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
                 logger.info(f"Configuration chargée : {candidate}")
@@ -142,6 +156,7 @@ class ConfigLoader:
             return
         try:
             from dotenv import load_dotenv
+
             load_dotenv(dotenv_path=path, override=False)
             logger.info(f".env chargé : {path}")
         except ImportError:
@@ -156,7 +171,7 @@ class ConfigLoader:
         for key, value in os.environ.items():
             if not key.startswith(prefix):
                 continue
-            parts = key[len(prefix):].lower().split("__")
+            parts = key[len(prefix) :].lower().split("__")
             target = raw
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
@@ -194,6 +209,8 @@ class ConfigLoader:
             env=d.get("env", "development"),
             debug=d.get("debug", False),
             secret_key=sk,
+            plugin_prefix=d.get("plugin_prefix", "/plugin"),
+            plugin_tags=d.get("plugin_tags", []),
         )
 
     @staticmethod
@@ -207,18 +224,20 @@ class ConfigLoader:
             strict_trusted=d.get("strict_trusted", True),
             interval=d.get("interval", 2),
             entry_point=d.get("entry_point", "src/main.py"),
-            snapshot=d.get("snapshot", {
-                "extensions": [".log", ".pyc", ".html"],
-                "filenames": ["__pycache__", "__init__.py", ".env"],
-                "hidden": True,
-            }),
+            snapshot=d.get(
+                "snapshot",
+                {
+                    "extensions": [".log", ".pyc", ".html"],
+                    "filenames": ["__pycache__", "__init__.py", ".env"],
+                    "hidden": True,
+                },
+            ),
         )
 
     @classmethod
     def _parse_services(cls, d: dict) -> ServicesConfig:
-        dbs: dict[str, DatabaseConfig] = {}
-        for name, cfg in d.get("databases", {}).items():
-            dbs[name] = DatabaseConfig(
+        dbs: dict[str, DatabaseConfig] = {
+            name: DatabaseConfig(
                 name=name,
                 type=cfg.get("type", "sqlite"),
                 url=cfg.get("url", "sqlite:///./xcore.db"),
@@ -228,7 +247,8 @@ class ConfigLoader:
                 database=cfg.get("database"),
                 max_connections=cfg.get("max_connections"),
             )
-
+            for name, cfg in d.get("databases", {}).items()
+        }
         c = d.get("cache", {})
         cache = CacheConfig(
             backend=c.get("backend", "memory"),
@@ -260,7 +280,9 @@ class ConfigLoader:
         return ObservabilityConfig(
             logging=LoggingConfig(
                 level=lg.get("level", "INFO"),
-                format=lg.get("format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"),
+                format=lg.get(
+                    "format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+                ),
                 file=lg.get("file"),
                 max_bytes=lg.get("max_bytes", 10_485_760),
                 backup_count=lg.get("backup_count", 5),
@@ -283,9 +305,9 @@ class ConfigLoader:
         return SecurityConfig(
             allowed_imports=d.get("allowed_imports", []),
             forbidden_imports=d.get("forbidden_imports", []),
-            rate_limit_default=d.get("rate_limit_default", {
-                "calls": 100, "period_seconds": 60
-            }),
+            rate_limit_default=d.get(
+                "rate_limit_default", {"calls": 100, "period_seconds": 60}
+            ),
         )
 
 

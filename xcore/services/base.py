@@ -1,6 +1,7 @@
 """
 base.py — Contrat commun pour tous les services xcore.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,11 +11,11 @@ from typing import Any
 
 class ServiceStatus(str, Enum):
     UNINITIALIZED = "uninitialized"
-    INITIALIZING  = "initializing"
-    READY         = "ready"
-    DEGRADED      = "degraded"
-    FAILED        = "failed"
-    STOPPED       = "stopped"
+    INITIALIZING = "initializing"
+    READY = "ready"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    STOPPED = "stopped"
 
 
 class BaseService(ABC):
@@ -49,6 +50,7 @@ class BaseService(ABC):
             def status(self) -> dict:
                 return {"name": self.name, "status": self._status.value}
     """
+
     name: str = "service"
 
     def __init__(self) -> None:

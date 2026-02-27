@@ -1,14 +1,18 @@
 """
 resolver.py — Résolution de dépendances et tri topologique.
 """
+
 from __future__ import annotations
 
 from collections import deque
-from typing import Any
 
 
-class CircularDependencyError(Exception): pass
-class MissingDependencyError(Exception): pass
+class CircularDependencyError(Exception):
+    pass
+
+
+class MissingDependencyError(Exception):
+    pass
 
 
 class DependencyResolver:
@@ -59,9 +63,7 @@ class DependencyResolver:
                 reverse[dep].append(name)
                 in_degree[name] += 1
 
-        queue: deque[str] = deque(
-            sorted(n for n, d in in_degree.items() if d == 0)
-        )
+        queue: deque[str] = deque(sorted(n for n, d in in_degree.items() if d == 0))
         result: list[str] = []
 
         while queue:
@@ -92,7 +94,8 @@ class DependencyResolver:
 
         while remaining:
             wave = sorted(
-                n for n in remaining
+                n
+                for n in remaining
                 if all(dep in resolved for dep in self._nodes.get(n, []))
             )
             if not wave:

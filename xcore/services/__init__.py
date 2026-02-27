@@ -15,7 +15,8 @@ Usage:
 
     await container.shutdown()
 """
+
+from .base import BaseService, ServiceStatus
 from .container import ServiceContainer
-from .base      import BaseService, ServiceStatus
 
 __all__ = ["ServiceContainer", "BaseService", "ServiceStatus"]

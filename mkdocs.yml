@@ -1,0 +1,90 @@
+site_name: XCore Framework
+site_description: Production-grade plugin-first Python framework
+site_author: XCore Team
+site_url: https://xcore.readthedocs.io
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Guides:
+      - Creating Plugins: guides/creating-plugins.md
+      - Working with Services: guides/services.md
+      - Event System: guides/events.md
+      - Security Best Practices: guides/security.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Architecture:
+      - Overview: architecture/overview.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - API Reference: reference/api.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+  - Deployment:
+      - Deployment Guide: deployment/guide.md
+  - Examples:
+      - Basic Plugin: examples/basic-plugin.md
+      - Complete Plugin: examples/complete-plugin.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/traoreera/xcore
+  version:
+    provider: mike
+
+copyright: Copyright &copy; 2024 XCore Team

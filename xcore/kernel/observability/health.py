@@ -1,7 +1,9 @@
 """
 health.py — Système de health checks pour xcore et ses services.
 """
+
 from __future__ import annotations
+
 import asyncio
 import time
 from dataclasses import dataclass, field
@@ -10,8 +12,8 @@ from typing import Any, Callable
 
 
 class HealthStatus(str, Enum):
-    HEALTHY   = "healthy"
-    DEGRADED  = "degraded"
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
 
 
@@ -46,6 +48,7 @@ class HealthChecker:
         def decorator(fn: Callable) -> Callable:
             self._checks[name] = fn
             return fn
+
         return decorator
 
     async def run_all(self, timeout: float = 5.0) -> dict[str, Any]:
@@ -64,7 +67,9 @@ class HealthChecker:
                 status, msg = HealthStatus.UNHEALTHY, str(e)
 
             duration = (time.monotonic() - start) * 1000
-            results.append(CheckResult(name=name, status=status, message=msg, duration_ms=duration))
+            results.append(
+                CheckResult(name=name, status=status, message=msg, duration_ms=duration)
+            )
 
         overall = HealthStatus.HEALTHY
         if any(r.status == HealthStatus.UNHEALTHY for r in results):
@@ -74,6 +79,12 @@ class HealthChecker:
 
         return {
             "status": overall.value,
-            "checks": {r.name: {"status": r.status.value, "message": r.message,
-                                "duration_ms": round(r.duration_ms, 2)} for r in results},
+            "checks": {
+                r.name: {
+                    "status": r.status.value,
+                    "message": r.message,
+                    "duration_ms": round(r.duration_ms, 2),
+                }
+                for r in results
+            },
         }

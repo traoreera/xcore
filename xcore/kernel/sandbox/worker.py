@@ -5,6 +5,7 @@ Lancé par SandboxProcessManager comme subprocess séparé.
 Lit des commandes JSON sur stdin, répond sur stdout.
 Limite mémoire appliquée au démarrage via RLIMIT_AS.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,6 +30,7 @@ def _apply_memory_limit() -> None:
         return
     try:
         import resource
+
         limit = max_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
         logger.debug(f"Limite mémoire : {max_mb}MB")
@@ -72,9 +74,7 @@ async def _run(plugin_dir: Path) -> None:
 
     # Connecte stdin/stdout à asyncio
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-    transport, _ = await loop.connect_write_pipe(
-        asyncio.BaseProtocol, sys.stdout
-    )
+    transport, _ = await loop.connect_write_pipe(asyncio.BaseProtocol, sys.stdout)
 
     logger.info("Worker prêt — écoute sur stdin")
 
@@ -94,7 +94,7 @@ async def _run(plugin_dir: Path) -> None:
         response: dict
         try:
             msg = json.loads(raw)
-            action  = msg.get("action", "")
+            action = msg.get("action", "")
             payload = msg.get("payload", {})
 
             if action == "ping":
@@ -105,10 +105,18 @@ async def _run(plugin_dir: Path) -> None:
                 break
             else:
                 result = await plugin.handle(action, payload)
-                response = result if isinstance(result, dict) else {"status": "ok", "result": result}
+                response = (
+                    result
+                    if isinstance(result, dict)
+                    else {"status": "ok", "result": result}
+                )
 
         except json.JSONDecodeError as e:
-            response = {"status": "error", "msg": f"JSON invalide : {e}", "code": "json_error"}
+            response = {
+                "status": "error",
+                "msg": f"JSON invalide : {e}",
+                "code": "json_error",
+            }
         except Exception as e:
             logger.exception(f"Erreur handle({action})")
             response = {"status": "error", "msg": str(e), "code": "handler_error"}
@@ -138,7 +146,11 @@ if __name__ == "__main__":
 
     plugin_dir = Path(sys.argv[1]).resolve()
     if not plugin_dir.is_dir():
-        print(json.dumps({"status": "error", "msg": f"plugin_dir introuvable : {plugin_dir}"}))
+        print(
+            json.dumps(
+                {"status": "error", "msg": f"plugin_dir introuvable : {plugin_dir}"}
+            )
+        )
         sys.exit(1)
 
     try:

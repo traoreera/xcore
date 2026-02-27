@@ -4,13 +4,16 @@ validate_cmd.py — Validation complète d'un plugin (manifeste + AST + signatur
 Usage:
     xcore plugin validate ./plugins/my_plugin
 """
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
 
-def validate_full(plugin_path: str, secret_key: bytes = b"", strict: bool = False) -> bool:
+def validate_full(
+    plugin_path: str, secret_key: bytes = b"", strict: bool = False
+) -> bool:
     """
     Validation complète d'un plugin :
       1. Lecture manifeste
@@ -20,11 +23,11 @@ def validate_full(plugin_path: str, secret_key: bytes = b"", strict: bool = Fals
 
     Retourne True si tout est valide.
     """
-    from xcore.kernel.security.validation import ManifestValidator, ASTScanner
     from xcore.kernel.api.contract import ExecutionMode
+    from xcore.kernel.security.validation import ASTScanner, ManifestValidator
 
     path = Path(plugin_path).resolve()
-    ok   = True
+    ok = True
 
     print(f"\n{'='*50}")
     print(f" Validation : {path.name}")
@@ -33,15 +36,17 @@ def validate_full(plugin_path: str, secret_key: bytes = b"", strict: bool = Fals
     # 1. Manifeste
     try:
         validator = ManifestValidator()
-        manifest  = validator.load_and_validate(path)
-        print(f"✅  Manifeste   : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]")
+        manifest = validator.load_and_validate(path)
+        print(
+            f"✅  Manifeste   : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+        )
     except Exception as e:
         print(f"❌  Manifeste   : {e}", file=sys.stderr)
         return False
 
     # 2. AST scan
     scanner = ASTScanner()
-    result  = scanner.scan(path, whitelist=manifest.allowed_imports)
+    result = scanner.scan(path, whitelist=manifest.allowed_imports)
     if result.passed:
         print(f"✅  Scan AST    : {len(result.scanned)} fichier(s) analysé(s)")
     else:
@@ -54,7 +59,8 @@ def validate_full(plugin_path: str, secret_key: bytes = b"", strict: bool = Fals
 
     # 3. Signature (Trusted seulement)
     if manifest.execution_mode == ExecutionMode.TRUSTED and secret_key:
-        from xcore.kernel.security.signature import verify_plugin, SignatureError
+        from xcore.kernel.security.signature import SignatureError, verify_plugin
+
         try:
             verify_plugin(manifest, secret_key)
             print(f"✅  Signature   : valide")

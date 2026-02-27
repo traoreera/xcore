@@ -15,10 +15,11 @@ Commandes:
     xcore services status
     xcore health
 """
+
 from __future__ import annotations
 
-import sys
 import asyncio
+import sys
 
 
 def _err(msg: str) -> None:
@@ -61,7 +62,9 @@ def main() -> None:
     verify_p.add_argument("path")
     verify_p.add_argument("--key", default=None)
 
-    validate_p = plugin_sub.add_parser("validate", help="Valide le manifeste d'un plugin")
+    validate_p = plugin_sub.add_parser(
+        "validate", help="Valide le manifeste d'un plugin"
+    )
     validate_p.add_argument("path")
 
     # services
@@ -76,17 +79,21 @@ def main() -> None:
 
     if args.version:
         from xcore import __version__
+
         print(f"xcore v{__version__}")
         return
 
     if args.command == "plugin":
         from .plugin_cmd import handle_plugin
+
         asyncio.run(handle_plugin(args))
     elif args.command == "services":
         from .plugin_cmd import handle_services
+
         asyncio.run(handle_services(args))
     elif args.command == "health":
         from .plugin_cmd import handle_health
+
         asyncio.run(handle_health(args))
     else:
         parser.print_help()

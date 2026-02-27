@@ -4,10 +4,11 @@ service.py — Façade CacheService : masque le backend (memory ou redis).
 Les plugins n'ont pas à savoir quel backend tourne.
 L'interface est identique pour les deux.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import CacheConfig
@@ -36,7 +37,7 @@ class CacheService(BaseService):
 
     def __init__(self, config: "CacheConfig") -> None:
         super().__init__()
-        self._config  = config
+        self._config = config
         self._backend = None
 
     async def init(self) -> None:
@@ -47,10 +48,14 @@ class CacheService(BaseService):
             if not self._config.url:
                 raise ValueError("CacheConfig.url obligatoire pour le backend Redis")
             from .backends.redis import RedisCacheBackend
-            self._backend = RedisCacheBackend(url=self._config.url, ttl=self._config.ttl)
+
+            self._backend = RedisCacheBackend(
+                url=self._config.url, ttl=self._config.ttl
+            )
             await self._backend.connect()
-        else:   # memory (default)
+        else:  # memory (default)
             from .backends.memory import MemoryBackend
+
             self._backend = MemoryBackend(
                 ttl=self._config.ttl,
                 max_size=self._config.max_size,

@@ -4,11 +4,12 @@ container.py — Conteneur de services avec injection de dépendances et cycle d
 Ordre d'init : database → cache → scheduler → extensions
 Ordre de shutdown : inverse (extensions → scheduler → cache → database)
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..configurations.sections import ServicesConfig
@@ -40,9 +41,9 @@ class ServiceContainer:
     INIT_ORDER = ["database", "cache", "scheduler", "extensions"]
 
     def __init__(self, config: "ServicesConfig") -> None:
-        self._config   = config
+        self._config = config
         self._services: dict[str, BaseService] = {}
-        self._raw:      dict[str, Any]         = {}   # dict exposé aux plugins
+        self._raw: dict[str, Any] = {}  # dict exposé aux plugins
 
     async def init(self) -> None:
         """Initialise tous les services dans l'ordre."""
@@ -58,6 +59,7 @@ class ServiceContainer:
         if not self._config.databases:
             return
         from .database.manager import DatabaseManager
+
         mgr = DatabaseManager(self._config.databases)
         await mgr.init()
         self._services["database"] = mgr
@@ -72,6 +74,7 @@ class ServiceContainer:
     async def _init_cache(self) -> None:
         cfg = self._config.cache
         from .cache.service import CacheService
+
         svc = CacheService(cfg)
         await svc.init()
         self._services["cache_service"] = svc
@@ -83,6 +86,7 @@ class ServiceContainer:
         if not cfg.enabled:
             return
         from .scheduler.service import SchedulerService
+
         svc = SchedulerService(cfg)
         await svc.init()
         self._services["scheduler_service"] = svc
@@ -93,6 +97,7 @@ class ServiceContainer:
         if not self._config.extensions:
             return
         from .extensions.loader import ExtensionLoader
+
         loader = ExtensionLoader(self._config.extensions)
         await loader.init()
         self._services["extensions"] = loader

@@ -1,4 +1,5 @@
 """Extension EmailService pour xcore v2."""
-from .service import EmailService, EmailConfig, EmailMessage
+
+from .service import EmailConfig, EmailMessage, EmailService
 
 __all__ = ["EmailService", "EmailConfig", "EmailMessage"]

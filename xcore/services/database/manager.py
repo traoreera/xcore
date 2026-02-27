@@ -7,6 +7,7 @@ Route vers l'adaptateur approprié selon le type déclaré dans la config :
   mongodb                      → MongoDBAdapter (Motor)
   redis                        → RedisAdapter
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,14 +21,14 @@ from ..base import BaseService, ServiceStatus
 logger = logging.getLogger("xcore.services.database")
 
 _TYPE_MAP = {
-    "sqlite":       "sql",
-    "postgresql":   "sql",
-    "mysql":        "sql",
-    "sqlite+aio":   "async_sql",
+    "sqlite": "sql",
+    "postgresql": "sql",
+    "mysql": "sql",
+    "sqlite+aio": "async_sql",
     "postgresql+aio": "async_sql",
-    "sqlasync":     "async_sql",
-    "mongodb":      "mongodb",
-    "redis":        "redis",
+    "sqlasync": "async_sql",
+    "mongodb": "mongodb",
+    "redis": "redis",
 }
 
 
@@ -56,19 +57,22 @@ class DatabaseManager(BaseService):
         kind = _TYPE_MAP.get(cfg.type.lower())
         if kind == "sql":
             from .adapters.sql import SQLAdapter
+
             return SQLAdapter(name, cfg)
         if kind == "async_sql":
             from .adapters.async_sql import AsyncSQLAdapter
+
             return AsyncSQLAdapter(name, cfg)
         if kind == "mongodb":
             from .adapters.mongodb import MongoDBAdapter
+
             return MongoDBAdapter(name, cfg)
         if kind == "redis":
             from .adapters.redis import RedisAdapter
+
             return RedisAdapter(name, cfg)
         raise ValueError(
-            f"Type BDD inconnu : '{cfg.type}'. "
-            f"Valeurs : {sorted(_TYPE_MAP.keys())}"
+            f"Type BDD inconnu : '{cfg.type}'. " f"Valeurs : {sorted(_TYPE_MAP.keys())}"
         )
 
     async def shutdown(self) -> None:
@@ -95,5 +99,7 @@ class DatabaseManager(BaseService):
         return {
             "name": self.name,
             "status": self._status.value,
-            "connections": {name: getattr(a, "url", "?")[:40] for name, a in self.adapters.items()},
+            "connections": {
+                name: getattr(a, "url", "?")[:40] for name, a in self.adapters.items()
+            },
         }

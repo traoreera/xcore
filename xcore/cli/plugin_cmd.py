@@ -1,6 +1,7 @@
 """
 plugin_cmd.py — Handlers des commandes `xcore plugin *`.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
+
     return ConfigLoader.load(getattr(args, "config", None))
 
 
@@ -34,6 +36,7 @@ async def handle_plugin(args) -> None:
 
 async def _plugin_list(args) -> None:
     from xcore import Xcore
+
     cfg = _load_config(args)
     app = Xcore.__new__(Xcore)
     app._config = cfg
@@ -43,7 +46,13 @@ async def _plugin_list(args) -> None:
     if not plugin_dir.exists():
         print(f"Dossier plugins introuvable : {plugin_dir}")
         return
-    plugins = sorted([d.name for d in plugin_dir.iterdir() if d.is_dir() and not d.name.startswith("_")])
+    plugins = sorted(
+        [
+            d.name
+            for d in plugin_dir.iterdir()
+            if d.is_dir() and not d.name.startswith("_")
+        ]
+    )
     if not plugins:
         print("Aucun plugin trouvé.")
         return
@@ -53,10 +62,11 @@ async def _plugin_list(args) -> None:
         if manifest_path.exists():
             try:
                 import yaml
+
                 with open(manifest_path) as f:
                     m = yaml.safe_load(f) or {}
                 version = m.get("version", "?")
-                mode    = m.get("execution_mode", "legacy")
+                mode = m.get("execution_mode", "legacy")
                 print(f"  {p:30s}  v{version:10s}  [{mode}]")
             except Exception:
                 print(f"  {p}")
@@ -66,6 +76,7 @@ async def _plugin_list(args) -> None:
 
 async def _plugin_validate(args) -> None:
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
     if not path.exists():
         print(f"❌  Dossier introuvable : {path}", file=sys.stderr)
@@ -73,7 +84,9 @@ async def _plugin_validate(args) -> None:
     try:
         v = ManifestValidator()
         manifest = v.load_and_validate(path)
-        print(f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]")
+        print(
+            f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+        )
     except Exception as e:
         print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
         sys.exit(1)
@@ -82,18 +95,20 @@ async def _plugin_validate(args) -> None:
 async def _plugin_sign(args) -> None:
     from xcore.kernel.security.signature import sign_plugin
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
-    key  = (args.key or "change-me").encode()
+    key = (args.key or "change-me").encode()
     manifest = ManifestValidator().load_and_validate(path)
     sig = sign_plugin(manifest, key)
     print(f"✅  Signé : {sig}")
 
 
 async def _plugin_verify(args) -> None:
-    from xcore.kernel.security.signature import verify_plugin, SignatureError
+    from xcore.kernel.security.signature import SignatureError, verify_plugin
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
-    key  = (args.key or "change-me").encode()
+    key = (args.key or "change-me").encode()
     manifest = ManifestValidator().load_and_validate(path)
     try:
         verify_plugin(manifest, key)
@@ -118,6 +133,7 @@ async def handle_services(args) -> None:
     if sub == "status":
         cfg = _load_config(args)
         from xcore.services import ServiceContainer
+
         container = ServiceContainer(cfg.services)
         await container.init()
         status = container.status()
@@ -128,6 +144,7 @@ async def handle_services(args) -> None:
 async def handle_health(args) -> None:
     cfg = _load_config(args)
     from xcore.services import ServiceContainer
+
     container = ServiceContainer(cfg.services)
     await container.init()
     health = await container.health()

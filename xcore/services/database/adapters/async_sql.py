@@ -1,11 +1,12 @@
 """
 async_sql.py — Adaptateur SQLAlchemy asynchrone (aiosqlite, asyncpg…).
 """
+
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
@@ -24,14 +25,14 @@ class AsyncSQLAdapter:
 
     def __init__(self, name: str, cfg: "DatabaseConfig") -> None:
         self.name = name
-        self.url  = cfg.url
+        self.url = cfg.url
         self._echo = cfg.echo
         self._engine = None
         self._AsyncSession = None
 
     async def connect(self) -> None:
         try:
-            from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
             from sqlalchemy.orm import sessionmaker
         except ImportError as e:
             raise ImportError(
@@ -66,6 +67,7 @@ class AsyncSQLAdapter:
         if self._engine is None:
             raise RuntimeError(f"[{self.name}] Base non initialisée")
         from sqlalchemy import text
+
         async with self._engine.connect() as conn:
             return await conn.execute(text(sql), params or {})
 

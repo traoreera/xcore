@@ -17,6 +17,7 @@ Permet de déclarer des services custom dans xcore.yaml :
 
 Le service doit hériter de BaseService ou exposer init()/shutdown()/health_check()/status().
 """
+
 from __future__ import annotations
 
 import importlib
@@ -33,7 +34,7 @@ class ExtensionLoader(BaseService):
 
     def __init__(self, config: dict[str, dict[str, Any]]) -> None:
         super().__init__()
-        self._config    = config
+        self._config = config
         self.extensions: dict[str, Any] = {}
 
     async def init(self) -> None:
@@ -56,10 +57,12 @@ class ExtensionLoader(BaseService):
 
         module_str, _, class_str = module_path.rpartition(":")
         if not module_str:
-            raise ValueError(f"Extension '{name}' : format invalide '{module_path}' (attendu module:Class)")
+            raise ValueError(
+                f"Extension '{name}' : format invalide '{module_path}' (attendu module:Class)"
+            )
 
         module = importlib.import_module(module_str)
-        cls    = getattr(module, class_str)
+        cls = getattr(module, class_str)
         ext_config = cfg.get("config", {})
 
         try:

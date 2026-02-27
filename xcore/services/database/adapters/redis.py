@@ -1,10 +1,11 @@
 """
 redis.py — Adaptateur Redis asynchrone (redis-py ≥ 4.2).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
@@ -24,7 +25,7 @@ class RedisAdapter:
 
     def __init__(self, name: str, cfg: "DatabaseConfig") -> None:
         self.name = name
-        self.url  = cfg.url or "redis://localhost:6379"
+        self.url = cfg.url or "redis://localhost:6379"
         self._max = cfg.max_connections or 10
         self._client = None
 

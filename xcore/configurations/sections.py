@@ -2,7 +2,9 @@
 Dataclasses typées pour chaque section de xcore.yaml.
 Toutes ont des valeurs par défaut : zéro config = zéro crash.
 """
+
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,26 +12,29 @@ from typing import Any
 @dataclass
 class AppConfig:
     name: str = "xcore-app"
-    env: str = "development"       # development | staging | production
+    env: str = "development"  # development | staging | production
     debug: bool = False
     secret_key: bytes = b"change-me-in-production"
+    plugin_prefix: str = "/plugin"
+    plugin_tags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class DatabaseConfig:
     name: str = "default"
-    type: str = "sqlite"           # sqlite | postgresql | mysql | mongodb | redis | sqlasync
+    # sqlite | postgresql | mysql | mongodb | redis | sqlasync
+    type: str = "sqlite"
     url: str = "sqlite:///./xcore.db"
     pool_size: int = 5
     max_overflow: int = 10
     echo: bool = False
-    database: str | None = None    # MongoDB
+    database: str | None = None  # MongoDB
     max_connections: int | None = None  # Redis
 
 
 @dataclass
 class CacheConfig:
-    backend: str = "memory"        # memory | redis
+    backend: str = "memory"  # memory | redis
     ttl: int = 300
     max_size: int = 1000
     url: str | None = None
@@ -38,7 +43,7 @@ class CacheConfig:
 @dataclass
 class SchedulerConfig:
     enabled: bool = True
-    backend: str = "memory"        # memory | redis | database
+    backend: str = "memory"  # memory | redis | database
     timezone: str = "UTC"
     jobs: list[dict[str, Any]] = field(default_factory=list)
 
@@ -56,13 +61,15 @@ class PluginConfig:
     directory: str = "./plugins"
     secret_key: bytes = b"change-me-in-production"
     strict_trusted: bool = True
-    interval: int = 2              # watcher interval (secondes)
+    interval: int = 2  # watcher interval (secondes)
     entry_point: str = "src/main.py"
-    snapshot: dict[str, Any] = field(default_factory=lambda: {
-        "extensions": [".log", ".pyc", ".html"],
-        "filenames": ["__pycache__", "__init__.py", ".env"],
-        "hidden": True,
-    })
+    snapshot: dict[str, Any] = field(
+        default_factory=lambda: {
+            "extensions": [".log", ".pyc", ".html"],
+            "filenames": ["__pycache__", "__init__.py", ".env"],
+            "hidden": True,
+        }
+    )
 
 
 @dataclass
@@ -77,14 +84,14 @@ class LoggingConfig:
 @dataclass
 class MetricsConfig:
     enabled: bool = False
-    backend: str = "memory"        # memory | prometheus | statsd
+    backend: str = "memory"  # memory | prometheus | statsd
     prefix: str = "xcore"
 
 
 @dataclass
 class TracingConfig:
     enabled: bool = False
-    backend: str = "noop"          # noop | opentelemetry | jaeger
+    backend: str = "noop"  # noop | opentelemetry | jaeger
     service_name: str = "xcore"
     endpoint: str | None = None
 
@@ -100,6 +107,6 @@ class ObservabilityConfig:
 class SecurityConfig:
     allowed_imports: list[str] = field(default_factory=list)
     forbidden_imports: list[str] = field(default_factory=list)
-    rate_limit_default: dict[str, Any] = field(default_factory=lambda: {
-        "calls": 100, "period_seconds": 60
-    })
+    rate_limit_default: dict[str, Any] = field(
+        default_factory=lambda: {"calls": 100, "period_seconds": 60}
+    )

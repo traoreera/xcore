@@ -11,7 +11,8 @@ framework_version: ">=2.0"
 entry_point: src/main.py
 
 # Dépendances inter-plugins
-requires: []
+requires: 
+  - erp_core
 
 # Permissions d'accès aux services
 permissions:

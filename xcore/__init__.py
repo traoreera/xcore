@@ -16,17 +16,16 @@ Quickstart:
 """
 
 from .__version__ import __version__
-
-from .kernel.runtime.loader     import PluginLoader
-from .kernel.runtime.lifecycle  import LifecycleManager
-from .kernel.runtime.supervisor import PluginSupervisor
-from .kernel.events.bus         import EventBus
-from .kernel.events.hooks       import HookManager
-from .kernel.api.contract       import BasePlugin, TrustedBase
-from .kernel.security.signature import sign_plugin, verify_plugin
+from .kernel.api.contract import BasePlugin, TrustedBase
+from .kernel.events.bus import EventBus
+from .kernel.events.hooks import HookManager
 from .kernel.observability.logging import get_logger
-from .services                  import ServiceContainer
-from .registry.index            import PluginRegistry
+from .kernel.runtime.lifecycle import LifecycleManager
+from .kernel.runtime.loader import PluginLoader
+from .kernel.runtime.supervisor import PluginSupervisor
+from .kernel.security.signature import sign_plugin, verify_plugin
+from .registry.index import PluginRegistry
+from .services import ServiceContainer
 
 __all__ = [
     "__version__",
@@ -80,15 +79,16 @@ class Xcore:
 
     def __init__(self, config_path: str | None = None):
         from .configurations.loader import ConfigLoader
+
         self._config = ConfigLoader.load(config_path)
         self._booted = False
 
         # Sous-systèmes — instanciés lazily à boot()
         self.services: ServiceContainer | None = None
-        self.plugins:  PluginSupervisor  | None = None
-        self.events:   EventBus           | None = None
-        self.hooks:    HookManager        | None = None
-        self.registry: PluginRegistry     | None = None
+        self.plugins: PluginSupervisor | None = None
+        self.events: EventBus | None = None
+        self.hooks: HookManager | None = None
+        self.registry: PluginRegistry | None = None
 
         self._logger = get_logger("xcore")
 
@@ -101,12 +101,13 @@ class Xcore:
 
         # 1. Services (BDD, cache, scheduler)
         from .services import ServiceContainer
+
         self.services = ServiceContainer(self._config.services)
         await self.services.init()
 
         # 2. Event bus + hooks
         self.events = EventBus()
-        self.hooks  = HookManager()
+        self.hooks = HookManager()
 
         # 3. Registry des plugins
         self.registry = PluginRegistry(self._config)
@@ -123,7 +124,9 @@ class Xcore:
 
         # 5. Attache le router FastAPI si une app est fournie
         if app is not None:
-            self._attach_router(app)
+            self._attach_router(
+                app,
+            )
 
         self._booted = True
         self._logger.info("━━━ xcore prêt ━━━")
@@ -140,11 +143,19 @@ class Xcore:
         self._booted = False
         self._logger.info("xcore arrêté.")
 
-    def _attach_router(self, app) -> None:
+    def _attach_router(
+        self,
+        app,
+    ) -> None:
         from .kernel.api.router import build_router
 
         # 1. Router système xcore (status, reload, load, unload)
-        system_router = build_router(self.plugins)
+        system_router = build_router(
+            supervisor=self.plugins,
+            secret_key=self._config.app.secret_key,
+            prefix=self._config.app.plugin_prefix,
+            tags=self._config.app.plugin_tags,
+        )
         app.include_router(system_router)
 
         # 2. Routers custom des plugins Trusted (get_router())
@@ -155,6 +166,7 @@ class Xcore:
             if not getattr(plugin_router, "prefix", "").startswith("/plugins/"):
                 # Préfixe automatique si le plugin n'a pas déjà /plugins/...
                 from fastapi import APIRouter
+
                 wrapper = APIRouter(prefix=f"/plugins/{plugin_name}")
                 wrapper.include_router(plugin_router)
                 prefixed_router = wrapper
@@ -165,7 +177,7 @@ class Xcore:
                 f"sous /plugins/{plugin_name}"
             )
 
-        app.openapi_schema = None   # force la regen du schéma OpenAPI
+        app.openapi_schema = None  # force la regen du schéma OpenAPI
 
     def __repr__(self) -> str:
         status = "booted" if self._booted else "idle"

@@ -17,6 +17,7 @@ Chaque plugin déclare dans son manifeste un bloc `permissions` :
 Les politiques sont évaluées dans l'ordre ; la première correspondance gagne.
 Sans règle → deny par défaut (fail-closed).
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -27,7 +28,7 @@ from typing import Any
 
 class PolicyEffect(str, Enum):
     ALLOW = "allow"
-    DENY  = "deny"
+    DENY = "deny"
 
 
 @dataclass
@@ -39,13 +40,14 @@ class Policy:
     actions  : liste de verbes ou ["*"]  ex. ["read", "write"]
     effect   : allow | deny
     """
+
     resource: str
-    actions:  list[str]
-    effect:   PolicyEffect = PolicyEffect.ALLOW
+    actions: list[str]
+    effect: PolicyEffect = PolicyEffect.ALLOW
 
     def matches(self, resource: str, action: str) -> bool:
         resource_match = fnmatch.fnmatch(resource, self.resource)
-        action_match   = "*" in self.actions or action in self.actions
+        action_match = "*" in self.actions or action in self.actions
         return resource_match and action_match
 
     @classmethod
@@ -54,7 +56,9 @@ class Policy:
         try:
             effect = PolicyEffect(effect_raw)
         except ValueError:
-            raise ValueError(f"effect invalide : {effect_raw!r}. Valeurs : allow | deny")
+            raise ValueError(
+                f"effect invalide : {effect_raw!r}. Valeurs : allow | deny"
+            )
         actions = d.get("actions", ["*"])
         if isinstance(actions, str):
             actions = [actions]
@@ -67,14 +71,15 @@ class PolicySet:
     Ensemble ordonné de politiques pour un plugin.
     Première correspondance gagne ; sinon → DENY.
     """
+
     plugin_name: str
-    policies:    list[Policy] = field(default_factory=list)
+    policies: list[Policy] = field(default_factory=list)
 
     def evaluate(self, resource: str, action: str) -> PolicyEffect:
         for policy in self.policies:
             if policy.matches(resource, action):
                 return policy.effect
-        return PolicyEffect.DENY   # fail-closed
+        return PolicyEffect.DENY  # fail-closed
 
     def allows(self, resource: str, action: str) -> bool:
         return self.evaluate(resource, action) == PolicyEffect.ALLOW
@@ -87,9 +92,10 @@ class PolicySet:
     @classmethod
     def allow_all(cls, plugin_name: str) -> "PolicySet":
         """Politique permissive — pour usage interne / tests uniquement."""
-        return cls(plugin_name=plugin_name, policies=[
-            Policy(resource="*", actions=["*"], effect=PolicyEffect.ALLOW)
-        ])
+        return cls(
+            plugin_name=plugin_name,
+            policies=[Policy(resource="*", actions=["*"], effect=PolicyEffect.ALLOW)],
+        )
 
     @classmethod
     def deny_all(cls, plugin_name: str) -> "PolicySet":

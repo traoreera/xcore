@@ -4,9 +4,9 @@ plugin_base.py — Dataclasses du manifeste plugin v2.
 PluginManifest est l'objet riche parsé par ManifestValidator.
 Il remplace le _SimpleManifest pour les usages SDK complets.
 """
+
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -50,7 +50,7 @@ class RuntimeConfig:
 @dataclass
 class FilesystemConfig:
     allowed_paths: list[str] = field(default_factory=lambda: ["data/"])
-    denied_paths:  list[str] = field(default_factory=lambda: ["src/"])
+    denied_paths: list[str] = field(default_factory=lambda: ["src/"])
 
 
 @dataclass
@@ -61,6 +61,7 @@ class PluginManifest:
     Champs obligatoires : name, version
     Tous les autres ont des valeurs par défaut.
     """
+
     name: str
     version: str
     plugin_dir: Path
@@ -81,9 +82,9 @@ class PluginManifest:
     env: dict[str, str] = field(default_factory=dict)
 
     # Ressources, runtime, filesystem
-    resources:   ResourceConfig   = field(default_factory=ResourceConfig)
-    runtime:     RuntimeConfig    = field(default_factory=RuntimeConfig)
-    filesystem:  FilesystemConfig = field(default_factory=FilesystemConfig)
+    resources: ResourceConfig = field(default_factory=ResourceConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    filesystem: FilesystemConfig = field(default_factory=FilesystemConfig)
 
     # Config arbitraire du plugin (bloc extra)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -97,18 +98,29 @@ class PluginManifest:
         requires: list[str],
         plugin_dir: Path,
     ) -> "PluginManifest":
-        res_raw  = raw.get("resources", {})
-        rt_raw   = raw.get("runtime", {})
-        fs_raw   = raw.get("filesystem", {})
-        rl_raw   = res_raw.get("rate_limit", {})
-        hc_raw   = rt_raw.get("health_check", {})
-        ret_raw  = rt_raw.get("retry", {})
+        res_raw = raw.get("resources", {})
+        rt_raw = raw.get("runtime", {})
+        fs_raw = raw.get("filesystem", {})
+        rl_raw = res_raw.get("rate_limit", {})
+        hc_raw = rt_raw.get("health_check", {})
+        ret_raw = rt_raw.get("retry", {})
 
         known = {
-            "name", "version", "author", "description", "framework_version",
-            "entry_point", "execution_mode", "requires", "allowed_imports",
-            "permissions", "env", "envconfiguration",
-            "resources", "runtime", "filesystem",
+            "name",
+            "version",
+            "author",
+            "description",
+            "framework_version",
+            "entry_point",
+            "execution_mode",
+            "requires",
+            "allowed_imports",
+            "permissions",
+            "env",
+            "envconfiguration",
+            "resources",
+            "runtime",
+            "filesystem",
         }
         extra = {k: v for k, v in raw.items() if k not in known}
 

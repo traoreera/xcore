@@ -32,11 +32,11 @@ Usage:
     #         hour: 3
     #         minute: 0
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from ...configurations.sections import SchedulerConfig
@@ -51,15 +51,15 @@ class SchedulerService(BaseService):
 
     def __init__(self, config: "SchedulerConfig") -> None:
         super().__init__()
-        self._config    = config
+        self._config = config
         self._scheduler = None
 
     async def init(self) -> None:
         self._status = ServiceStatus.INITIALIZING
         try:
-            from apscheduler.schedulers.asyncio import AsyncIOScheduler
             from apscheduler.jobstores.memory import MemoryJobStore
-        except ImportError as e:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        except ImportError:
             logger.warning("APScheduler non installé — pip install apscheduler")
             self._status = ServiceStatus.DEGRADED
             return
@@ -70,6 +70,7 @@ class SchedulerService(BaseService):
         if self._config.backend == "redis":
             try:
                 from apscheduler.jobstores.redis import RedisJobStore
+
                 jobstores["default"] = RedisJobStore()
             except ImportError:
                 logger.warning("apscheduler[redis] non installé — fallback memory")
@@ -90,13 +91,15 @@ class SchedulerService(BaseService):
     def _add_job_from_config(self, job_cfg: dict) -> None:
         try:
             import importlib
+
             func_path = job_cfg.get("func", "")
             module_path, func_name = func_path.rsplit(":", 1)
             module = importlib.import_module(module_path)
-            func   = getattr(module, func_name)
+            func = getattr(module, func_name)
 
-            kwargs = {k: v for k, v in job_cfg.items()
-                      if k not in ("func", "id", "trigger")}
+            kwargs = {
+                k: v for k, v in job_cfg.items() if k not in ("func", "id", "trigger")
+            }
             self.add_job(
                 func,
                 trigger=job_cfg.get("trigger", "cron"),
@@ -128,23 +131,34 @@ class SchedulerService(BaseService):
 
     def cron(self, expression: str, job_id: str | None = None) -> Callable:
         """Décorateur @scheduler.cron("0 * * * *")"""
+
         def decorator(fn: Callable) -> Callable:
             parts = expression.split()
             if len(parts) == 5:
                 minute, hour, day, month, day_of_week = parts
-                self.add_job(fn, "cron", job_id=job_id or fn.__name__,
-                             minute=minute, hour=hour, day=day,
-                             month=month, day_of_week=day_of_week)
+                self.add_job(
+                    fn,
+                    "cron",
+                    job_id=job_id or fn.__name__,
+                    minute=minute,
+                    hour=hour,
+                    day=day,
+                    month=month,
+                    day_of_week=day_of_week,
+                )
             else:
                 raise ValueError(f"Expression cron invalide : {expression!r}")
             return fn
+
         return decorator
 
     def interval(self, **kwargs) -> Callable:
         """Décorateur @scheduler.interval(seconds=30)"""
+
         def decorator(fn: Callable) -> Callable:
             self.add_job(fn, "interval", job_id=fn.__name__, **kwargs)
             return fn
+
         return decorator
 
     def remove_job(self, job_id: str) -> None:

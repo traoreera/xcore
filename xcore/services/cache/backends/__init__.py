@@ -1,2 +1,2 @@
 from .memory import MemoryBackend
-from .redis  import RedisCacheBackend
+from .redis import RedisCacheBackend

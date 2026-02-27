@@ -2,21 +2,24 @@
 validation.py — Validation des manifestes et scan AST des plugins.
 Regroupe ManifestValidator (nouveau) + ASTScanner (repris de sandbox/sandbox/scanner.py v1).
 """
+
 from __future__ import annotations
+
 import ast
 import json
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 # ─────────────────────────────────────────────────────────────
 # Manifest
 # ─────────────────────────────────────────────────────────────
 
+
 class ManifestError(Exception):
     pass
+
 
 _ENV_VAR_RE = re.compile(r"^\$\{(.+)\}$")
 
@@ -28,7 +31,9 @@ def _resolve_env(value: str) -> str:
     var = m.group(1)
     resolved = os.environ.get(var)
     if resolved is None:
-        raise ManifestError(f"Variable d'environnement '{var}' absente de l'environnement.")
+        raise ManifestError(
+            f"Variable d'environnement '{var}' absente de l'environnement."
+        )
     return resolved
 
 
@@ -78,6 +83,7 @@ class ManifestValidator:
     def _yaml(path: Path) -> dict:
         try:
             import yaml
+
             with open(path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except ImportError as e:
@@ -101,12 +107,15 @@ class ManifestValidator:
             )
         try:
             from dotenv import load_dotenv
+
             load_dotenv(dotenv_path=env_path, override=False)
         except ImportError as e:
             raise ManifestError("python-dotenv non installé") from e
 
 
-def _build_manifest(raw: dict, mode, resolved_env: dict, requires: list, plugin_dir: Path):
+def _build_manifest(
+    raw: dict, mode, resolved_env: dict, requires: list, plugin_dir: Path
+):
     """Construit un objet PluginManifest minimal depuis les données brutes."""
     # Import local pour éviter la circularité
     try:
@@ -118,25 +127,28 @@ def _build_manifest(raw: dict, mode, resolved_env: dict, requires: list, plugin_
 
 class _SimpleManifest:
     """Manifeste minimal quand le SDK complet n'est pas disponible."""
+
     def __init__(self, raw, mode, env, requires, plugin_dir):
-        self.name           = str(raw["name"])
-        self.version        = str(raw["version"])
+        self.name = str(raw["name"])
+        self.version = str(raw["version"])
         self.execution_mode = mode
-        self.author         = raw.get("author", "unknown")
-        self.description    = raw.get("description", "")
+        self.author = raw.get("author", "unknown")
+        self.description = raw.get("description", "")
         self.framework_version = raw.get("framework_version", ">=2.0")
-        self.entry_point    = raw.get("entry_point", "src/main.py")
+        self.entry_point = raw.get("entry_point", "src/main.py")
         self.allowed_imports = raw.get("allowed_imports", [])
-        self.env            = env
-        self.requires       = requires
-        self.plugin_dir     = plugin_dir
-        self.extra          = {}
+        self.env = env
+        self.requires = requires
+        self.plugin_dir = plugin_dir
+        self.extra = {}
 
         # Defaults resources/runtime
         from types import SimpleNamespace
+
         rl = SimpleNamespace(calls=100, period_seconds=60)
-        self.resources = SimpleNamespace(timeout_seconds=10, max_memory_mb=128,
-                                        max_disk_mb=50, rate_limit=rl)
+        self.resources = SimpleNamespace(
+            timeout_seconds=10, max_memory_mb=128, max_disk_mb=50, rate_limit=rl
+        )
         hc = SimpleNamespace(enabled=True, interval_seconds=30, timeout_seconds=3)
         retry = SimpleNamespace(max_attempts=1, backoff_seconds=0.0)
         self.runtime = SimpleNamespace(health_check=hc, retry=retry)
@@ -149,16 +161,58 @@ class _SimpleManifest:
 # ─────────────────────────────────────────────────────────────
 
 DEFAULT_FORBIDDEN = {
-    "os", "sys", "subprocess", "shutil", "signal", "ctypes", "cffi", "mmap",
-    "socket", "ssl", "http", "urllib", "httpx", "requests", "aiohttp", "websockets",
-    "importlib", "imp", "builtins", "inspect", "gc", "tracemalloc", "dis",
-    "tempfile", "glob", "exec", "eval", "compile", "pickle", "shelve", "marshal",
+    "os",
+    "sys",
+    "subprocess",
+    "shutil",
+    "signal",
+    "ctypes",
+    "cffi",
+    "mmap",
+    "socket",
+    "ssl",
+    "http",
+    "urllib",
+    "httpx",
+    "requests",
+    "aiohttp",
+    "websockets",
+    "importlib",
+    "imp",
+    "builtins",
+    "inspect",
+    "gc",
+    "tracemalloc",
+    "dis",
+    "tempfile",
+    "glob",
+    "exec",
+    "eval",
+    "compile",
+    "pickle",
+    "shelve",
+    "marshal",
 }
 
 DEFAULT_ALLOWED = {
-    "json", "re", "math", "random", "datetime", "time", "pathlib", "typing",
-    "dataclasses", "enum", "functools", "itertools", "collections", "string",
-    "hashlib", "base64", "asyncio", "logging",
+    "json",
+    "re",
+    "math",
+    "random",
+    "datetime",
+    "time",
+    "pathlib",
+    "typing",
+    "dataclasses",
+    "enum",
+    "functools",
+    "itertools",
+    "collections",
+    "string",
+    "hashlib",
+    "base64",
+    "asyncio",
+    "logging",
 }
 
 
@@ -184,9 +238,11 @@ class ScanResult:
 
 
 class ASTScanner:
-    def __init__(self, extra_forbidden: set | None = None, extra_allowed: set | None = None):
+    def __init__(
+        self, extra_forbidden: set | None = None, extra_allowed: set | None = None
+    ):
         self.forbidden = DEFAULT_FORBIDDEN | (extra_forbidden or set())
-        self.allowed   = DEFAULT_ALLOWED   | (extra_allowed   or set())
+        self.allowed = DEFAULT_ALLOWED | (extra_allowed or set())
 
     def scan(self, plugin_dir: Path, whitelist: list[str] | None = None) -> ScanResult:
         result = ScanResult()
@@ -211,7 +267,7 @@ class ASTScanner:
     def _scan_file(self, path: Path, result: ScanResult, extra_allowed: set) -> None:
         try:
             source = path.read_text(encoding="utf-8")
-            tree   = ast.parse(source, filename=str(path))
+            tree = ast.parse(source, filename=str(path))
         except SyntaxError as e:
             result.add_error(f"{path.name}: syntaxe : {e}")
             return
@@ -236,17 +292,21 @@ class ASTScanner:
 class _ImportVisitor(ast.NodeVisitor):
     def __init__(self, forbidden, allowed, filename):
         self.forbidden = forbidden
-        self.allowed   = allowed
-        self.filename  = filename
-        self.errors:   list[str] = []
+        self.allowed = allowed
+        self.filename = filename
+        self.errors: list[str] = []
         self.warnings: list[str] = []
 
     def _check(self, module: str, lineno: int) -> None:
         root = module.split(".")[0]
         if root in self.forbidden:
-            self.errors.append(f"{self.filename}:{lineno}: import interdit : {module!r}")
+            self.errors.append(
+                f"{self.filename}:{lineno}: import interdit : {module!r}"
+            )
         elif root not in self.allowed:
-            self.warnings.append(f"{self.filename}:{lineno}: import non whitelisté : {module!r}")
+            self.warnings.append(
+                f"{self.filename}:{lineno}: import non whitelisté : {module!r}"
+            )
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -258,5 +318,7 @@ class _ImportVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-            self.errors.append(f"{self.filename}:{node.lineno}: __import__() dynamique interdit")
+            self.errors.append(
+                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
+            )
         self.generic_visit(node)

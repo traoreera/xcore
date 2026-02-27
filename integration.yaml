@@ -27,7 +27,9 @@ app:
   debug: false
   secret_key: ${APP_SECRET_KEY}
   dotenv: "./extensions/.env"
-
+  plugin_prefix: "/plugin"
+  plugin_tags:
+    - "my-app"
 
 # ── Plugins ───────────────────────────────────────────────────
 plugins:

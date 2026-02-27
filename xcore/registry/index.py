@@ -4,10 +4,11 @@ index.py — Registre global des plugins chargés.
 Maintient un index name → handler avec métadonnées.
 Permet la découverte, l'introspection et les dépendances inter-plugins.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..configurations.sections import PluginConfig
@@ -34,21 +35,23 @@ class PluginRegistry:
     """
 
     def __init__(self, config: "PluginConfig | None" = None) -> None:
-        self._config  = config
+        self._config = config
         self._entries: dict[str, dict[str, Any]] = {}
 
     def register(self, name: str, handler: Any, metadata: dict | None = None) -> None:
         manifest = getattr(handler, "manifest", None)
         self._entries[name] = {
-            "name":    name,
+            "name": name,
             "handler": handler,
             "version": getattr(manifest, "version", "0.0.0"),
-            "mode":    getattr(manifest, "execution_mode", {}).value
-                       if hasattr(getattr(manifest, "execution_mode", None), "value")
-                       else "unknown",
-            "requires":    getattr(manifest, "requires", []),
+            "mode": (
+                getattr(manifest, "execution_mode", {}).value
+                if hasattr(getattr(manifest, "execution_mode", None), "value")
+                else "unknown"
+            ),
+            "requires": getattr(manifest, "requires", []),
             "description": getattr(manifest, "description", ""),
-            "author":      getattr(manifest, "author", "unknown"),
+            "author": getattr(manifest, "author", "unknown"),
             **(metadata or {}),
         }
         logger.debug(f"[registry] enregistré : '{name}'")
@@ -81,7 +84,8 @@ class PluginRegistry:
     def dependents_of(self, plugin_name: str) -> list[str]:
         """Retourne les plugins qui dépendent de plugin_name."""
         return [
-            name for name, e in self._entries.items()
+            name
+            for name, e in self._entries.items()
             if plugin_name in e.get("requires", [])
         ]
 
@@ -97,9 +101,11 @@ class PluginRegistry:
         q = query.lower()
         results = []
         for name, e in self._entries.items():
-            if (q in name.lower()
-                    or q in e.get("description", "").lower()
-                    or q in e.get("author", "").lower()):
+            if (
+                q in name.lower()
+                or q in e.get("description", "").lower()
+                or q in e.get("author", "").lower()
+            ):
                 results.append({k: v for k, v in e.items() if k != "handler"})
         return results
 

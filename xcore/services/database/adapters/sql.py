@@ -2,11 +2,12 @@
 sql.py — Adaptateur SQLAlchemy synchrone.
 Fournit un accès via Session (SQLAlchemy ORM) et execute() brut.
 """
+
 from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Generator, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generator
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
@@ -27,10 +28,10 @@ class SQLAdapter:
 
     def __init__(self, name: str, cfg: "DatabaseConfig") -> None:
         self.name = name
-        self.url  = cfg.url
-        self._pool_size    = cfg.pool_size
+        self.url = cfg.url
+        self._pool_size = cfg.pool_size
         self._max_overflow = cfg.max_overflow
-        self._echo         = cfg.echo
+        self._echo = cfg.echo
         self._engine = None
         self._Session = None
 
@@ -75,6 +76,7 @@ class SQLAdapter:
         if self._engine is None:
             raise RuntimeError(f"[{self.name}] Base non initialisée")
         from sqlalchemy import text
+
         with self._engine.connect() as conn:
             return conn.execute(text(sql), params or {})
 

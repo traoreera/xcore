@@ -45,6 +45,7 @@ Accès depuis un plugin :
         context={"username": "Bob", "app_name": "Mon App"},
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,18 +65,19 @@ logger = logging.getLogger("xcore.services.email")
 # Config
 # ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class EmailConfig:
-    smtp_host:     str  = "localhost"
-    smtp_port:     int  = 587
-    smtp_user:     str  = ""
-    smtp_password: str  = ""
-    from_address:  str  = "noreply@example.com"
-    from_name:     str  = "xcore App"
-    use_tls:       bool = True
-    timeout:       int  = 10
-    max_retries:   int  = 3
-    queue_size:    int  = 100
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_address: str = "noreply@example.com"
+    from_name: str = "xcore App"
+    use_tls: bool = True
+    timeout: int = 10
+    max_retries: int = 3
+    queue_size: int = 100
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "EmailConfig":
@@ -97,20 +99,21 @@ class EmailConfig:
 # Message
 # ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class EmailMessage:
-    to:          str | list[str]
-    subject:     str
-    body:        str
-    is_html:     bool        = False
-    cc:          list[str]   = field(default_factory=list)
-    bcc:         list[str]   = field(default_factory=list)
-    reply_to:    str | None  = None
-    attachments: list[dict]  = field(default_factory=list)
+    to: str | list[str]
+    subject: str
+    body: str
+    is_html: bool = False
+    cc: list[str] = field(default_factory=list)
+    bcc: list[str] = field(default_factory=list)
+    reply_to: str | None = None
+    attachments: list[dict] = field(default_factory=list)
     # Metadata interne
-    id:          str         = field(default_factory=lambda: str(time.time_ns()))
-    attempts:    int         = 0
-    created_at:  float       = field(default_factory=time.time)
+    id: str = field(default_factory=lambda: str(time.time_ns()))
+    attempts: int = 0
+    created_at: float = field(default_factory=time.time)
 
     @property
     def recipients(self) -> list[str]:
@@ -178,7 +181,9 @@ def _render_template(name: str, context: dict[str, Any]) -> str:
     """Rendu minimal par substitution de {clé}."""
     tpl = _TEMPLATES.get(name)
     if not tpl:
-        raise KeyError(f"Template email inconnu : '{name}'. Disponibles : {list(_TEMPLATES.keys())}")
+        raise KeyError(
+            f"Template email inconnu : '{name}'. Disponibles : {list(_TEMPLATES.keys())}"
+        )
     try:
         return tpl.format(**context)
     except KeyError as e:
@@ -188,6 +193,7 @@ def _render_template(name: str, context: dict[str, Any]) -> str:
 # ─────────────────────────────────────────────────────────────
 # Service principal
 # ─────────────────────────────────────────────────────────────
+
 
 class EmailService(BaseService):
     """
@@ -221,15 +227,15 @@ class EmailService(BaseService):
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
-        self._cfg     = EmailConfig.from_dict(config)
-        self._queue:  asyncio.Queue[EmailMessage] | None = None
+        self._cfg = EmailConfig.from_dict(config)
+        self._queue: asyncio.Queue[EmailMessage] | None = None
         self._worker: asyncio.Task | None = None
         self._smtp_available = False
 
         # Métriques
-        self._sent_count    = 0
-        self._failed_count  = 0
-        self._queued_count  = 0
+        self._sent_count = 0
+        self._failed_count = 0
+        self._queued_count = 0
         self._last_sent_at: float | None = None
 
     # ── Cycle de vie ──────────────────────────────────────────
@@ -240,6 +246,7 @@ class EmailService(BaseService):
         # Vérification de la dépendance aiosmtplib
         try:
             import aiosmtplib  # noqa: F401
+
             self._smtp_available = True
         except ImportError:
             logger.warning(
@@ -265,7 +272,9 @@ class EmailService(BaseService):
                 )
                 self._status = ServiceStatus.READY
             except Exception as e:
-                logger.warning(f"EmailService : connexion SMTP échouée ({e}) → mode dégradé")
+                logger.warning(
+                    f"EmailService : connexion SMTP échouée ({e}) → mode dégradé"
+                )
                 self._status = ServiceStatus.DEGRADED
         else:
             self._status = ServiceStatus.DEGRADED
@@ -291,16 +300,16 @@ class EmailService(BaseService):
 
     def status(self) -> dict[str, Any]:
         return {
-            "name":         self.name,
-            "status":       self._status.value,
-            "smtp_host":    self._cfg.smtp_host,
-            "smtp_port":    self._cfg.smtp_port,
-            "from":         self._cfg.from_address,
+            "name": self.name,
+            "status": self._status.value,
+            "smtp_host": self._cfg.smtp_host,
+            "smtp_port": self._cfg.smtp_port,
+            "from": self._cfg.from_address,
             "smtp_available": self._smtp_available,
-            "queue_size":   self._queue.qsize() if self._queue else 0,
-            "sent":         self._sent_count,
-            "failed":       self._failed_count,
-            "queued":       self._queued_count,
+            "queue_size": self._queue.qsize() if self._queue else 0,
+            "sent": self._sent_count,
+            "failed": self._failed_count,
+            "queued": self._queued_count,
             "last_sent_at": self._last_sent_at,
         }
 
@@ -324,9 +333,12 @@ class EmailService(BaseService):
             True si envoyé, False si échec (après max_retries tentatives).
         """
         msg = EmailMessage(
-            to=to, subject=subject, body=body,
+            to=to,
+            subject=subject,
+            body=body,
             is_html=is_html,
-            cc=cc or [], bcc=bcc or [],
+            cc=cc or [],
+            bcc=bcc or [],
             reply_to=reply_to,
         )
         return await self._send_with_retry(msg)
@@ -352,8 +364,12 @@ class EmailService(BaseService):
             subject:  sujet (utilise context['subject'] si absent)
         """
         html_body = _render_template(template, context)
-        email_subject = subject or context.get("subject", f"[{self._cfg.from_name}] Notification")
-        return await self.send(to=to, subject=email_subject, body=html_body, is_html=True, cc=cc)
+        email_subject = subject or context.get(
+            "subject", f"[{self._cfg.from_name}] Notification"
+        )
+        return await self.send(
+            to=to, subject=email_subject, body=html_body, is_html=True, cc=cc
+        )
 
     async def send_bulk(
         self,
@@ -380,7 +396,7 @@ class EmailService(BaseService):
             *[_send_one(m) for m in messages],
             return_exceptions=False,
         )
-        sent   = sum(1 for r in results if r)
+        sent = sum(1 for r in results if r)
         failed = len(results) - sent
         return {"sent": sent, "failed": failed, "total": len(results)}
 
@@ -417,6 +433,7 @@ class EmailService(BaseService):
     async def _test_connection(self) -> None:
         """Tente une connexion SMTP pour vérifier la disponibilité."""
         import aiosmtplib
+
         async with aiosmtplib.SMTP(
             hostname=self._cfg.smtp_host,
             port=self._cfg.smtp_port,
@@ -466,8 +483,8 @@ class EmailService(BaseService):
 
         # Construire le MIME
         mime_msg = MIMEMultipart("alternative")
-        mime_msg["From"]    = f"{self._cfg.from_name} <{self._cfg.from_address}>"
-        mime_msg["To"]      = ", ".join([msg.to] if isinstance(msg.to, str) else msg.to)
+        mime_msg["From"] = f"{self._cfg.from_name} <{self._cfg.from_address}>"
+        mime_msg["To"] = ", ".join([msg.to] if isinstance(msg.to, str) else msg.to)
         mime_msg["Subject"] = msg.subject
         if msg.cc:
             mime_msg["Cc"] = ", ".join(msg.cc)
@@ -510,6 +527,7 @@ class EmailService(BaseService):
 def _html_to_text(html: str) -> str:
     """Conversion HTML → texte très simplifiée (sans dépendance)."""
     import re
+
     text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     text = re.sub(r"<p[^>]*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)

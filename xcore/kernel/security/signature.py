@@ -2,7 +2,9 @@
 signature.py — Signature et vérification HMAC-SHA256 des plugins Trusted.
 Repris de sandbox/trusted/signer.py v1 avec refactoring propre.
 """
+
 from __future__ import annotations
+
 import hashlib
 import hmac
 import json

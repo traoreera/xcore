@@ -1,15 +1,19 @@
-import requests
-import yaml
 import json
 import os
+
+import requests
+import yaml
 from hasher import compute_hash
+
 
 def load_config():
     with open("docgen/config.yaml") as f:
         return yaml.safe_load(f)
 
+
 _cache = None
 _cache_dirty = False
+
 
 def load_cache(cfg):
     global _cache
@@ -23,11 +27,13 @@ def load_cache(cfg):
             _cache = json.load(f)
     return _cache
 
+
 def save_cache(cfg, cache):
     path = cfg["cache"]["path"]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump(cache, f, indent=2)
+
 
 def call_model(prompt, cfg=None):
     if cfg is None:
@@ -39,8 +45,8 @@ def call_model(prompt, cfg=None):
         "temperature": cfg["model"]["temperature"],
         "messages": [
             {"role": "system", "content": "You are a senior backend architect."},
-            {"role": "user", "content": prompt}
-        ]
+            {"role": "user", "content": prompt},
+        ],
     }
 
     headers = {"Authorization": f"Bearer {cfg['model']['api_key']}"}
@@ -52,8 +58,9 @@ def call_model(prompt, cfg=None):
         return data["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Model request failed: {e}")
-    except (KeyError, IndexError) as e:
+    except (KeyError, IndexError):
         raise RuntimeError(f"Unexpected model response format: {r.text[:200]}")
+
 
 def summarize_chunk(path, content, cfg=None):
     if cfg is None:

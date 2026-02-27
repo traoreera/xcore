@@ -7,6 +7,7 @@ Responsabilités :
   - Tri topologique (dépendances via `requires`)
   - Déléguer à LifecycleManager (trusted) ou SandboxProcessManager (sandboxed)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,14 +50,14 @@ class PluginLoader:
         events=None,
         hooks=None,
     ) -> None:
-        self._config   = config
+        self._config = config
         self._services = services
-        self._events   = events
-        self._hooks    = hooks
+        self._events = events
+        self._hooks = hooks
 
-        self._trusted:   dict[str, LifecycleManager]     = {}
+        self._trusted: dict[str, LifecycleManager] = {}
         self._sandboxed: dict[str, SandboxProcessManager] = {}
-        self._validator  = ManifestValidator()
+        self._validator = ManifestValidator()
 
     # ── Chargement global ─────────────────────────────────────
 
@@ -92,7 +93,11 @@ class PluginLoader:
             ordered = self._topo_sort(manifests)
         except ValueError as e:
             logger.error(f"Erreur dépendances : {e}")
-            return {"loaded": [], "failed": [m.name for m in manifests], "skipped": skipped}
+            return {
+                "loaded": [],
+                "failed": [m.name for m in manifests],
+                "skipped": skipped,
+            }
 
         resolved: set[str] = set()
         remaining = list(ordered)
@@ -122,7 +127,8 @@ class PluginLoader:
                     failed.append(name)
                     # Cascade : les plugins qui dépendent du plugin raté sont aussi ratés
                     cascade = [
-                        m.name for m in remaining
+                        m.name
+                        for m in remaining
                         if name in m.requires and m.name not in failed
                     ]
                     if cascade:
@@ -134,8 +140,7 @@ class PluginLoader:
             self._flush_services(wave_loaded)
 
             remaining = [
-                m for m in remaining
-                if m.name not in resolved and m.name not in failed
+                m for m in remaining if m.name not in resolved and m.name not in failed
             ]
 
         logger.info(
@@ -162,7 +167,7 @@ class PluginLoader:
             await self._activate_sandboxed(manifest)
 
     async def _activate_trusted(self, manifest) -> None:
-        from ...kernel.security.signature import verify_plugin, SignatureError
+        from ...kernel.security.signature import SignatureError, verify_plugin
         from ...kernel.security.validation import ASTScanner
 
         if self._config.strict_trusted or manifest.execution_mode.value == "trusted":
@@ -187,8 +192,8 @@ class PluginLoader:
         logger.info(f"[{manifest.name}] ✅ TRUSTED")
 
     async def _activate_sandboxed(self, manifest) -> None:
-        from ...kernel.security.validation import ASTScanner
         from ...kernel.sandbox.process_manager import SandboxConfig
+        from ...kernel.security.validation import ASTScanner
 
         scanner = ASTScanner()
         scan = scanner.scan(manifest.plugin_dir, whitelist=manifest.allowed_imports)
@@ -196,6 +201,7 @@ class PluginLoader:
             raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
 
         from ...kernel.sandbox.process_manager import SandboxProcessManager
+
         mgr = SandboxProcessManager(manifest)
         await mgr.start()
         self._sandboxed[manifest.name] = mgr
@@ -250,9 +256,7 @@ class PluginLoader:
         if name in self._sandboxed:
             return self._sandboxed[name]
         available = sorted(list(self._trusted) + list(self._sandboxed))
-        raise KeyError(
-            f"Plugin '{name}' non trouvé. Disponibles : {available}"
-        )
+        raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
 
     def has(self, name: str) -> bool:
         return name in self._trusted or name in self._sandboxed
@@ -284,6 +288,7 @@ class PluginLoader:
     @staticmethod
     def _topo_sort(manifests: list) -> list:
         from collections import deque
+
         by_name = {m.name: m for m in manifests}
         in_degree = {m.name: 0 for m in manifests}
         dependents: dict[str, list[str]] = {m.name: [] for m in manifests}
@@ -311,7 +316,9 @@ class PluginLoader:
                     queue.append(dep_name)
 
         if len(result) != len(manifests):
-            remaining = [m.name for m in manifests if m.name not in {s.name for s in result}]
+            remaining = [
+                m.name for m in manifests if m.name not in {s.name for s in result}
+            ]
             raise ValueError(f"Dépendances circulaires détectées : {remaining}")
 
         return result

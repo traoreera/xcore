@@ -9,38 +9,37 @@ Transitions valides :
     *         ──error──►  FAILED
     FAILED    ──reset──►  UNLOADED
 """
+
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import Enum
 from typing import Callable
 
 
 class PluginState(str, Enum):
-    UNLOADED  = "unloaded"
-    LOADING   = "loading"
-    READY     = "ready"
-    RUNNING   = "running"
+    UNLOADED = "unloaded"
+    LOADING = "loading"
+    READY = "ready"
+    RUNNING = "running"
     UNLOADING = "unloading"
     RELOADING = "reloading"
-    FAILED    = "failed"
+    FAILED = "failed"
 
 
 # Matrice des transitions autorisées : état_actuel → {événement: état_suivant}
 _TRANSITIONS: dict[PluginState, dict[str, PluginState]] = {
-    PluginState.UNLOADED:  {"load":   PluginState.LOADING},
-    PluginState.LOADING:   {"ok":     PluginState.READY,
-                            "error":  PluginState.FAILED},
-    PluginState.READY:     {"call":   PluginState.RUNNING,
-                            "unload": PluginState.UNLOADING,
-                            "reload": PluginState.RELOADING,
-                            "error":  PluginState.FAILED},
-    PluginState.RUNNING:   {"ok":     PluginState.READY,
-                            "error":  PluginState.FAILED},
-    PluginState.UNLOADING: {"ok":     PluginState.UNLOADED,
-                            "error":  PluginState.FAILED},
-    PluginState.RELOADING: {"ok":     PluginState.READY,
-                            "error":  PluginState.FAILED},
-    PluginState.FAILED:    {"reset":  PluginState.UNLOADED},
+    PluginState.UNLOADED: {"load": PluginState.LOADING},
+    PluginState.LOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
+    PluginState.READY: {
+        "call": PluginState.RUNNING,
+        "unload": PluginState.UNLOADING,
+        "reload": PluginState.RELOADING,
+        "error": PluginState.FAILED,
+    },
+    PluginState.RUNNING: {"ok": PluginState.READY, "error": PluginState.FAILED},
+    PluginState.UNLOADING: {"ok": PluginState.UNLOADED, "error": PluginState.FAILED},
+    PluginState.RELOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
+    PluginState.FAILED: {"reset": PluginState.UNLOADED},
 }
 
 
@@ -60,9 +59,13 @@ class StateMachine:
         sm.transition("ok")      # RUNNING  → READY
     """
 
-    def __init__(self, plugin_name: str, on_change: Callable[[PluginState, PluginState], None] | None = None):
-        self._name    = plugin_name
-        self._state   = PluginState.UNLOADED
+    def __init__(
+        self,
+        plugin_name: str,
+        on_change: Callable[[PluginState, PluginState], None] | None = None,
+    ):
+        self._name = plugin_name
+        self._state = PluginState.UNLOADED
         self._on_change = on_change
 
     @property

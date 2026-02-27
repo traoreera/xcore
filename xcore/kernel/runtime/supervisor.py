@@ -4,17 +4,18 @@ supervisor.py — Orchestrateur haut niveau du système de plugins.
 Agrège : PluginLoader + rate limiter + retry + routing appels.
 C'est lui qu'expose Xcore via xcore.plugins.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
-from .loader import PluginLoader
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
+from .loader import PluginLoader
 
 logger = logging.getLogger("xcore.runtime.supervisor")
 
@@ -36,24 +37,26 @@ class PluginSupervisor:
     def __init__(
         self,
         config: "PluginConfig",
-        services,    # ServiceContainer
+        services,  # ServiceContainer
         events=None,
         hooks=None,
         registry=None,
     ) -> None:
-        self._config   = config
+        self._config = config
         self._services = services
-        self._events   = events
-        self._hooks    = hooks
+        self._events = events
+        self._hooks = hooks
         self._registry = registry
-        self._rate     = RateLimiterRegistry()
+        self._rate = RateLimiterRegistry()
 
         self._loader: PluginLoader | None = None
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
         # Le container de services est un dict partagé par référence
-        svc_dict = self._services.as_dict() if hasattr(self._services, "as_dict") else {}
+        svc_dict = (
+            self._services.as_dict() if hasattr(self._services, "as_dict") else {}
+        )
 
         self._loader = PluginLoader(
             config=self._config,
@@ -101,11 +104,21 @@ class PluginSupervisor:
         handler = self._loader.get(plugin_name)
         return await self._call_with_retry(plugin_name, handler, action, payload)
 
-    async def _call_with_retry(self, name: str, handler, action: str, payload: dict) -> dict:
+    async def _call_with_retry(
+        self, name: str, handler, action: str, payload: dict
+    ) -> dict:
         manifest = getattr(handler, "manifest", None)
         retry_cfg = getattr(manifest, "runtime", None)
-        max_attempts = getattr(getattr(retry_cfg, "retry", None), "max_attempts", 1) if retry_cfg else 1
-        backoff = getattr(getattr(retry_cfg, "retry", None), "backoff_seconds", 0.0) if retry_cfg else 0.0
+        max_attempts = (
+            getattr(getattr(retry_cfg, "retry", None), "max_attempts", 1)
+            if retry_cfg
+            else 1
+        )
+        backoff = (
+            getattr(getattr(retry_cfg, "retry", None), "backoff_seconds", 0.0)
+            if retry_cfg
+            else 0.0
+        )
 
         last_err = None
         for attempt in range(1, max_attempts + 1):
@@ -114,7 +127,9 @@ class PluginSupervisor:
             except Exception as e:
                 last_err = e
                 if attempt < max_attempts:
-                    logger.warning(f"[{name}] Tentative {attempt} échouée, retry dans {backoff}s")
+                    logger.warning(
+                        f"[{name}] Tentative {attempt} échouée, retry dans {backoff}s"
+                    )
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 60.0)
 

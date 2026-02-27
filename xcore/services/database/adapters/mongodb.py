@@ -1,10 +1,11 @@
 """
 mongodb.py — Adaptateur MongoDB via Motor (asyncio).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
@@ -23,12 +24,12 @@ class MongoDBAdapter:
     """
 
     def __init__(self, name: str, cfg: "DatabaseConfig") -> None:
-        self.name     = name
-        self.url      = cfg.url
+        self.name = name
+        self.url = cfg.url
         self._db_name = cfg.database or "xcore"
         self._max_connections = cfg.max_connections or 100
         self._client = None
-        self._db     = None
+        self._db = None
 
     async def connect(self) -> None:
         try:
@@ -50,7 +51,7 @@ class MongoDBAdapter:
         if self._client:
             self._client.close()
             self._client = None
-            self._db     = None
+            self._db = None
 
     def collection(self, name: str):
         if self._db is None:

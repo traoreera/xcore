@@ -1,10 +1,11 @@
 """
 versioning.py — Vérification de compatibilité framework/plugin.
 """
+
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-
 
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?$")
 
@@ -24,10 +25,18 @@ class APIVersion:
         return cls(*parts) if len(parts) == 3 else cls(parts[0], parts[1])
 
     def __ge__(self, other: "APIVersion") -> bool:
-        return (self.major, self.minor, self.patch) >= (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) >= (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __le__(self, other: "APIVersion") -> bool:
-        return (self.major, self.minor, self.patch) <= (other.major, other.minor, other.patch)
+        return (self.major, self.minor, self.patch) <= (
+            other.major,
+            other.minor,
+            other.patch,
+        )
 
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
@@ -43,12 +52,14 @@ def check_compatibility(framework_version_expr: str, core_version: str) -> bool:
         part = part.strip()
         for op in (">=", "<=", ">", "<", "=="):
             if part.startswith(op):
-                target = APIVersion.parse(part[len(op):])
+                target = APIVersion.parse(part[len(op) :])
                 ok = {
                     ">=": core >= target,
                     "<=": core <= target,
-                    ">":  (core.major, core.minor, core.patch) > (target.major, target.minor, target.patch),
-                    "<":  (core.major, core.minor, core.patch) < (target.major, target.minor, target.patch),
+                    ">": (core.major, core.minor, core.patch)
+                    > (target.major, target.minor, target.patch),
+                    "<": (core.major, core.minor, core.patch)
+                    < (target.major, target.minor, target.patch),
                     "==": core == target,
                 }[op]
                 if not ok:

@@ -17,11 +17,11 @@ Usage:
             db = self.get_service("db")
             ...
 """
+
 from __future__ import annotations
 
 import asyncio
 import functools
-import inspect
 import logging
 from typing import Any, Callable
 
@@ -33,9 +33,11 @@ def action(name: str):
     Marque une méthode comme handler d'action.
     Génère automatiquement un dispatch dans handle() si utilisé avec AutoDispatchMixin.
     """
+
     def decorator(fn: Callable) -> Callable:
         fn._xcore_action = name
         return fn
+
     return decorator
 
 
@@ -56,16 +58,19 @@ def require_service(*service_names: str):
     Vérifie que les services requis sont disponibles avant d'exécuter la méthode.
     Lève KeyError avec un message clair si un service est absent.
     """
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         async def wrapper(self, *args, **kwargs):
             for svc_name in service_names:
                 if not hasattr(self, "get_service"):
                     break
-                self.get_service(svc_name)   # lève KeyError si absent
+                self.get_service(svc_name)  # lève KeyError si absent
             return await fn(self, *args, **kwargs)
+
         wrapper._requires_services = list(service_names)
         return wrapper
+
     return decorator
 
 
@@ -79,22 +84,29 @@ def validate_payload(**schema: type):
         async def create_user(self, payload: dict) -> dict:
             ...
     """
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         async def wrapper(self, payload: dict, *args, **kwargs):
             for field, expected_type in schema.items():
                 if field not in payload:
                     from ..kernel.api.contract import error
-                    return error(f"Champ obligatoire manquant : '{field}'", "validation_error")
+
+                    return error(
+                        f"Champ obligatoire manquant : '{field}'", "validation_error"
+                    )
                 if not isinstance(payload[field], expected_type):
                     from ..kernel.api.contract import error
+
                     return error(
                         f"'{field}' doit être de type {expected_type.__name__}, "
                         f"reçu {type(payload[field]).__name__}",
                         "validation_error",
                     )
             return await fn(self, payload, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -131,6 +143,7 @@ def route(
     Les routes sont montées automatiquement sur l'app FastAPI au boot
     sous /plugins/<plugin_name><path>.
     """
+
     def decorator(fn: Callable) -> Callable:
         fn._xcore_route = {
             "path": path,
@@ -141,6 +154,7 @@ def route(
             "response_model": response_model,
         }
         return fn
+
     return decorator
 
 
@@ -192,10 +206,15 @@ class RoutedPlugin:
             @functools.wraps(method)
             async def _handler(*args, _fn=bound, **kwargs):
                 import inspect
+
                 sig = inspect.signature(_fn)
                 # Retire les paramètres FastAPI non présents dans la signature
                 filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
-                return await _fn(**filtered) if asyncio.iscoroutinefunction(_fn) else _fn(**filtered)
+                return (
+                    await _fn(**filtered)
+                    if asyncio.iscoroutinefunction(_fn)
+                    else _fn(**filtered)
+                )
 
             router.add_api_route(
                 path=route_info["path"],
@@ -234,7 +253,10 @@ class AutoDispatchMixin:
 
         for attr_name in dir(self):
             method = getattr(self, attr_name, None)
-            if callable(method) and getattr(method, "_xcore_action", None) == action_name:
+            if (
+                callable(method)
+                and getattr(method, "_xcore_action", None) == action_name
+            ):
                 return await method(payload)
 
         available = [

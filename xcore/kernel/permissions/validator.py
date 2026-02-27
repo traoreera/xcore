@@ -1,7 +1,9 @@
 """
 validator.py — Validation statique des blocs permissions dans les manifestes.
 """
+
 from __future__ import annotations
+
 from typing import Any
 
 
@@ -24,7 +26,7 @@ class PermissionValidator:
 
     def validate(self, plugin_name: str, raw: list[dict[str, Any]] | None) -> None:
         if raw is None:
-            return   # absence = deny all, valide
+            return  # absence = deny all, valide
 
         if not isinstance(raw, list):
             raise PermissionValidationError(
