@@ -44,12 +44,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-docs-${{ hashFiles('docs/requirements.txt') }}
+          key: pip-docs-${{ hashFiles('doc/requirements.txt') }}
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r docs/requirements.txt
+          pip install -r doc/requirements.txt
 
       - name: Build site
         run: mkdocs build 
@@ -57,7 +57,7 @@ jobs:
       - name: Upload artifact (Pages)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs
 
   deploy:
     name: 🚀 Deploy to GitHub Pages
