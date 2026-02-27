@@ -1,223 +1,638 @@
-# Tests
+# Testing Guide
 
-xcore utilise `pytest` comme framework de test, avec `httpx` pour les tests d'intégration des routes FastAPI.
+Testing XCore plugins and applications.
 
----
+## Testing Setup
 
-## Lancer les tests
+### Test Dependencies
 
 ```bash
-# Tous les tests
-make test
+# Install test dependencies
+poetry install --with test
 
-# Avec sortie détaillée
-poetry run pytest -v
-
-# Un fichier spécifique
-poetry run pytest tests/test_plugins.py -v
-
-# Un test spécifique
-poetry run pytest tests/test_plugins.py::test_plugin_load -v
-
-# Avec couverture de code
-poetry run pytest --cov=xcore --cov-report=term-missing
-poetry run pytest --cov=xcore --cov-report=html  # rapport HTML dans htmlcov/
+# Or manually
+pip install pytest pytest-asyncio pytest-cov httpx
 ```
 
----
+### Test Configuration
 
-## Structure des tests
-
-```
-tests/
-├── conftest.py           ← fixtures partagées
-├── test_core/
-│   ├── test_loader.py    ← tests du PluginLoader
-│   ├── test_validator.py ← tests du Validator
-│   └── test_manager.py   ← tests du Manager
-├── test_services/
-│   ├── test_auth.py
-│   ├── test_cache.py
-│   └── test_database.py
-├── test_plugins/
-│   └── test_example_plugin.py
-└── fixtures/
-    └── fake_plugin/      ← plugin factice pour les tests
-        ├── __init__.py
-        └── run.py
+```python
+# pytest.ini or pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --cov=xcore --cov-report=html"
 ```
 
----
+## Writing Tests
 
-## Fixtures communes (`conftest.py`)
+### Basic Plugin Test
 
 ```python
 # tests/conftest.py
 import pytest
-from fastapi.testclient import TestClient
-from main import app
-from extensions.services.database import get_db, Base, engine
+from xcore import Xcore
 
-@pytest.fixture(scope="session")
-def db():
-    """Base de données de test en mémoire."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture
-def client(db):
-    """Client HTTP de test."""
-    with TestClient(app) as c:
-        yield c
+async def xcore_app():
+    """Create XCore test instance."""
+    app = Xcore(config_path="tests/test.yaml")
+    await app.boot()
+    yield app
+    await app.shutdown()
+
 
 @pytest.fixture
-def auth_headers(client):
-    """Headers avec token JWT d'un utilisateur de test."""
-    response = client.post("/auth/login", json={
-        "email": "test@example.com",
-        "password": "testpassword"
-    })
-    token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-@pytest.fixture
-def admin_headers(client):
-    """Headers avec token JWT d'un admin de test."""
-    response = client.post("/auth/login", json={
-        "email": "admin@example.com",
-        "password": "adminpassword"
-    })
-    token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+def test_config():
+    """Test configuration."""
+    return {
+        "database_url": "sqlite:///:memory:",
+        "redis_url": "redis://localhost:6379/1"
+    }
 ```
 
----
-
-## Écrire des tests de routes
+### Testing Plugin Actions
 
 ```python
-# tests/test_plugins/test_todo_plugin.py
+# tests/test_my_plugin.py
 import pytest
+from xcore import Xcore
 
-def test_create_todo(client):
-    response = client.post("/app/todo/", json={
-        "title": "Mon premier todo",
-        "priority": 2
-    })
+
+@pytest.mark.asyncio
+async def test_plugin_ping(xcore_app):
+    """Test basic ping action."""
+    result = await xcore_app.plugins.call(
+        "my_plugin",
+        "ping",
+        {}
+    )
+
+    assert result["status"] == "ok"
+    assert result["message"] == "pong"
+
+
+@pytest.mark.asyncio
+async def test_plugin_echo(xcore_app):
+    """Test echo action."""
+    payload = {"key": "value", "number": 123}
+
+    result = await xcore_app.plugins.call(
+        "my_plugin",
+        "echo",
+        payload
+    )
+
+    assert result["status"] == "ok"
+    assert result["received"] == payload
+
+
+@pytest.mark.asyncio
+async def test_plugin_error_handling(xcore_app):
+    """Test error handling."""
+    result = await xcore_app.plugins.call(
+        "my_plugin",
+        "unknown_action",
+        {}
+    )
+
+    assert result["status"] == "error"
+    assert "code" in result
+```
+
+### Testing HTTP Routes
+
+```python
+# tests/test_http_routes.py
+import pytest
+from httpx import AsyncClient
+from fastapi import FastAPI
+
+
+@pytest.fixture
+def fastapi_app(xcore_app):
+    """Create FastAPI test app."""
+    from app import app
+    return app
+
+
+@pytest.mark.asyncio
+async def test_list_items(fastapi_app):
+    """Test GET /plugins/my_plugin/items/."""
+    async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
+        response = await client.get("/plugins/my_plugin/items/")
+
+    assert response.status_code == 200
+    assert "items" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_create_item(fastapi_app):
+    """Test POST /plugins/my_plugin/items/."""
+    data = {"name": "Test Item", "value": 42}
+
+    async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
+        response = await client.post(
+            "/plugins/my_plugin/items/",
+            json=data
+        )
+
     assert response.status_code == 201
-    data = response.json()
-    assert data["title"] == "Mon premier todo"
-    assert data["priority"] == 2
-    assert data["done"] is False
-    assert "id" in data
+    result = response.json()
+    assert result["name"] == data["name"]
+    assert "id" in result
 
-def test_create_todo_titre_vide(client):
-    response = client.post("/app/todo/", json={"title": ""})
-    assert response.status_code == 422  # Validation Pydantic
 
-def test_get_todo_inexistant(client):
-    response = client.get("/app/todo/99999")
+@pytest.mark.asyncio
+async def test_item_not_found(fastapi_app):
+    """Test 404 handling."""
+    async with AsyncClient(app=fastapi_app, base_url="http://test") as client:
+        response = await client.get("/plugins/my_plugin/items/99999")
+
     assert response.status_code == 404
-
-def test_complete_todo(client):
-    # Créer d'abord
-    create_resp = client.post("/app/todo/", json={"title": "À faire"})
-    todo_id = create_resp.json()["id"]
-    
-    # Marquer comme fait
-    response = client.patch(f"/app/todo/{todo_id}/done")
-    assert response.status_code == 200
-    assert response.json()["done"] is True
 ```
 
----
-
-## Tester le PluginLoader
+### Testing Services
 
 ```python
-# tests/test_core/test_loader.py
+# tests/test_services.py
 import pytest
-from manager.plManager.loader import PluginLoader
-from manager.plManager.validator import PluginValidator
 
-def test_charge_plugin_valide(tmp_path):
-    """Un plugin conforme doit être chargé sans erreur."""
-    # Créer un plugin factice
-    plugin_dir = tmp_path / "fake_plugin"
-    plugin_dir.mkdir()
-    (plugin_dir / "__init__.py").write_text("")
-    (plugin_dir / "run.py").write_text("""
-from fastapi import APIRouter, Request
-PLUGIN_INFO = {
-    "version": "1.0.0",
-    "author": "test",
-    "Api_prefix": "/app/fake",
-    "tag_for_identified": ["fake"],
-}
-router = APIRouter(prefix="/fake", tags=["fake"])
-class Plugin:
-    def __init__(self):
-        super().__init__()
-""")
-    
-    validator = PluginValidator()
-    result = validator.validate(str(plugin_dir))
-    assert result.is_valid is True
 
-def test_rejette_plugin_sans_plugin_info(tmp_path):
-    """Un plugin sans PLUGIN_INFO doit être rejeté."""
-    plugin_dir = tmp_path / "bad_plugin"
-    plugin_dir.mkdir()
-    (plugin_dir / "__init__.py").write_text("")
-    (plugin_dir / "run.py").write_text("""
-from fastapi import APIRouter
-router = APIRouter()
-""")
-    
-    validator = PluginValidator()
-    result = validator.validate(str(plugin_dir))
-    assert result.is_valid is False
-    assert "PLUGIN_INFO" in result.error
+@pytest.mark.asyncio
+async def test_database_service(xcore_app):
+    """Test database operations."""
+    db = xcore_app.services.get("db")
+
+    with db.session() as session:
+        # Create test table
+        session.execute("""
+            CREATE TABLE test_table (
+                id INTEGER PRIMARY KEY,
+                name TEXT
+            )
+        """)
+        session.commit()
+
+        # Insert data
+        session.execute(
+            "INSERT INTO test_table (name) VALUES (:name)",
+            {"name": "test"}
+        )
+        session.commit()
+
+        # Query data
+        result = session.execute("SELECT * FROM test_table")
+        rows = result.fetchall()
+        assert len(rows) == 1
+        assert rows[0]["name"] == "test"
+
+
+@pytest.mark.asyncio
+async def test_cache_service(xcore_app):
+    """Test cache operations."""
+    cache = xcore_app.services.get("cache")
+
+    # Set value
+    await cache.set("test_key", "test_value", ttl=60)
+
+    # Get value
+    value = await cache.get("test_key")
+    assert value == "test_value"
+
+    # Check exists
+    exists = await cache.exists("test_key")
+    assert exists is True
+
+    # Delete
+    await cache.delete("test_key")
+    value = await cache.get("test_key")
+    assert value is None
+
+
+@pytest.mark.asyncio
+async def test_cache_get_or_set(xcore_app):
+    """Test cache get_or_set pattern."""
+    cache = xcore_app.services.get("cache")
+
+    call_count = 0
+
+    async def expensive_operation():
+        nonlocal call_count
+        call_count += 1
+        return {"data": "expensive"}
+
+    # First call - should execute
+    result = await cache.get_or_set(
+        "test_expensive",
+        factory=expensive_operation,
+        ttl=60
+    )
+    assert result["data"] == "expensive"
+    assert call_count == 1
+
+    # Second call - should use cache
+    result = await cache.get_or_set(
+        "test_expensive",
+        factory=expensive_operation,
+        ttl=60
+    )
+    assert result["data"] == "expensive"
+    assert call_count == 1  # Not incremented
 ```
 
----
-
-## Tests d'authentification
+### Testing Events
 
 ```python
-# tests/test_services/test_auth.py
+# tests/test_events.py
+import pytest
+import asyncio
 
-def test_login_succes(client):
-    response = client.post("/auth/login", json={
-        "email": "user@example.com",
-        "password": "password"
-    })
-    assert response.status_code == 200
-    assert "access_token" in response.json()
 
-def test_login_mauvais_mot_de_passe(client):
-    response = client.post("/auth/login", json={
-        "email": "user@example.com",
-        "password": "mauvais"
-    })
-    assert response.status_code == 401
+@pytest.mark.asyncio
+async def test_event_emit_and_receive(xcore_app):
+    """Test event emission and handling."""
+    events = xcore_app.events
+    received = []
 
-def test_route_protegee_sans_token(client):
-    response = client.get("/auth/me")
-    assert response.status_code == 401
+    @events.on("test.event")
+    async def handler(event):
+        received.append(event.data)
 
-def test_route_protegee_avec_token(client, auth_headers):
-    response = client.get("/auth/me", headers=auth_headers)
-    assert response.status_code == 200
+    # Emit event
+    await events.emit("test.event", {"message": "hello"})
+
+    # Wait for handlers
+    await asyncio.sleep(0.1)
+
+    assert len(received) == 1
+    assert received[0]["message"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_event_priority(xcore_app):
+    """Test event handler priority."""
+    events = xcore_app.events
+    order = []
+
+    @events.on("priority.test", priority=10)
+    async def handler_low(event):
+        order.append("low")
+
+    @events.on("priority.test", priority=100)
+    async def handler_high(event):
+        order.append("high")
+
+    @events.on("priority.test", priority=50)
+    async def handler_medium(event):
+        order.append("medium")
+
+    await events.emit("priority.test", {})
+    await asyncio.sleep(0.1)
+
+    assert order == ["high", "medium", "low"]
+
+
+@pytest.mark.asyncio
+async def test_event_stop_propagation(xcore_app):
+    """Test event propagation stopping."""
+    events = xcore_app.events
+    called = []
+
+    @events.on("stop.test", priority=100)
+    async def handler_first(event):
+        called.append("first")
+        event.stop()
+
+    @events.on("stop.test", priority=50)
+    async def handler_second(event):
+        called.append("second")
+
+    await events.emit("stop.test", {}, gather=False)
+
+    assert called == ["first"]  # Second not called
 ```
 
----
+### Integration Tests
 
-## Bonnes pratiques
+```python
+# tests/test_integration.py
+import pytest
 
-- Chaque test doit être **indépendant** — ne jamais supposer l'état laissé par un autre test.
-- Utilisez des fixtures pour éviter la duplication.
-- Testez les cas d'erreur autant que les cas de succès.
-- Pour les plugins, testez les routes ET la logique métier séparément.
-- Évitez les tests qui font des appels réseau réels — moquez les services externes avec `pytest-mock` ou `responses`.
+
+@pytest.mark.asyncio
+async def test_full_user_workflow(xcore_app):
+    """Test complete user workflow."""
+    # Create user
+    create_result = await xcore_app.plugins.call(
+        "users",
+        "create",
+        {
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "SecurePass123"
+        }
+    )
+    assert create_result["status"] == "ok"
+    user_id = create_result["user_id"]
+
+    # Get user
+    get_result = await xcore_app.plugins.call(
+        "users",
+        "get",
+        {"user_id": user_id}
+    )
+    assert get_result["status"] == "ok"
+    assert get_result["user"]["username"] == "testuser"
+
+    # Update user
+    update_result = await xcore_app.plugins.call(
+        "users",
+        "update",
+        {
+            "user_id": user_id,
+            "full_name": "Test User"
+        }
+    )
+    assert update_result["status"] == "ok"
+    assert update_result["user"]["full_name"] == "Test User"
+
+    # Delete user
+    delete_result = await xcore_app.plugins.call(
+        "users",
+        "delete",
+        {"user_id": user_id}
+    )
+    assert delete_result["status"] == "ok"
+
+    # Verify deletion
+    get_result = await xcore_app.plugins.call(
+        "users",
+        "get",
+        {"user_id": user_id}
+    )
+    assert get_result["status"] == "error"
+```
+
+## Mocking
+
+### Mock Services
+
+```python
+# tests/test_with_mocks.py
+import pytest
+from unittest.mock import AsyncMock, MagicMock
+
+
+@pytest.fixture
+def mock_db():
+    """Create mock database."""
+    db = MagicMock()
+    db.session.return_value.__enter__ = MagicMock()
+    db.session.return_value.__exit__ = MagicMock()
+    return db
+
+
+@pytest.fixture
+def mock_cache():
+    """Create mock cache."""
+    cache = AsyncMock()
+    cache.get.return_value = None
+    cache.set.return_value = None
+    return cache
+
+
+@pytest.mark.asyncio
+async def test_with_mocks(mock_db, mock_cache):
+    """Test with mocked services."""
+    from my_plugin import Plugin
+
+    plugin = Plugin()
+    plugin.ctx = MagicMock()
+    plugin.ctx.services.get.side_effect = lambda name: {
+        "db": mock_db,
+        "cache": mock_cache
+    }.get(name)
+
+    # Test plugin logic
+    result = await plugin.handle("get_user", {"user_id": "123"})
+
+    # Verify mocks called
+    mock_db.session.assert_called()
+```
+
+### Mock External APIs
+
+```python
+import pytest
+import respx
+from httpx import Response
+
+
+@pytest.mark.asyncio
+@respx.mock
+def test_external_api_call():
+    """Test with mocked external API."""
+    # Mock the API
+    route = respx.post("https://api.example.com/data").mock(
+        return_value=Response(200, json={"status": "ok"})
+    )
+
+    # Call your code that makes the request
+    result = await your_function_that_calls_api()
+
+    # Verify request was made
+    assert route.called
+    assert result["status"] == "ok"
+```
+
+## Running Tests
+
+### Command Line
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=xcore --cov-report=html
+
+# Run specific test file
+poetry run pytest tests/test_my_plugin.py
+
+# Run specific test
+poetry run pytest tests/test_my_plugin.py::test_ping
+
+# Run with verbose output
+poetry run pytest -v
+
+# Run with debug
+poetry run pytest --log-cli-level=DEBUG
+
+# Run in parallel
+poetry run pytest -n auto
+
+# Run failed tests only
+poetry run pytest --lf
+
+# Run with watch mode
+poetry run ptw
+```
+
+### Makefile Targets
+
+```makefile
+# Makefile
+test:
+	poetry run pytest
+
+test-coverage:
+	poetry run pytest --cov=xcore --cov-report=html --cov-report=term
+
+test-watch:
+	poetry run ptw
+```
+
+## Test Data
+
+### Fixtures
+
+```python
+# tests/fixtures.py
+import pytest
+
+
+@pytest.fixture
+def sample_user():
+    return {
+        "id": "user123",
+        "username": "testuser",
+        "email": "test@example.com",
+        "created_at": "2024-01-01T00:00:00"
+    }
+
+
+@pytest.fixture
+def sample_items():
+    return [
+        {"id": "1", "name": "Item 1", "price": 10.99},
+        {"id": "2", "name": "Item 2", "price": 20.99},
+    ]
+```
+
+### Factories
+
+```python
+# tests/factories.py
+import factory
+
+
+class UserFactory(factory.Factory):
+    class Meta:
+        model = dict
+
+    id = factory.Sequence(lambda n: f"user{n}")
+    username = factory.Sequence(lambda n: f"user{n}")
+    email = factory.LazyAttribute(lambda o: f"{o.username}@example.com")
+    created_at = factory.Faker("iso8601")
+
+
+# Usage
+def test_with_factory():
+    user = UserFactory()
+    assert user["username"].startswith("user")
+```
+
+## Continuous Integration
+
+### GitHub Actions
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run tests
+        run: poetry run pytest --cov=xcore --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+```
+
+## Best Practices
+
+1. **Isolate Tests**: Each test should be independent
+2. **Use Fixtures**: Reuse setup code
+3. **Mock External**: Don't call real external services
+4. **Test Edge Cases**: Empty inputs, large inputs, special characters
+5. **Fast Tests**: Keep tests under 1 second each
+6. **Clear Names**: Describe what the test verifies
+
+```python
+# Good
+async def test_user_create_fails_with_duplicate_email():
+    pass
+
+# Bad
+async def test_create():
+    pass
+```
+
+## Troubleshooting Tests
+
+### Async Issues
+
+```python
+# If getting "RuntimeError: no running event loop"
+import pytest
+
+@pytest.mark.asyncio
+async def test_async():
+    pass
+```
+
+### Database Locks
+
+```python
+# Use separate databases for tests
+# integration.yaml for tests
+databases:
+  default:
+    type: sqlite
+    url: "sqlite:///:memory:"
+```
+
+### Flaky Tests
+
+```python
+import pytest
+
+@pytest.mark.flaky(reruns=3)
+async def test_sometimes_fails():
+    pass
+```

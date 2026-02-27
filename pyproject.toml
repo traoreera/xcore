@@ -7,35 +7,51 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<4.0"
-sqlalchemy = ">=2.0.41,<3.0.0"
+
+# environment
 python-dotenv = ">=1.1.0,<2.0.0"
+
+# database migration
 alembic = ">=1.16.1,<2.0.0"
-passlib = { extras = ["bcrypt"], version = ">=1.7.4,<2.0.0" }
-flake8 = ">=7.2.0,<8.0.0"
+
+# tools
 apscheduler = ">=3.11.0,<4.0.0"
-pyotp = ">=2.9.0,<3.0.0"
-pydantic = { extras = ["email"], version = ">=2.11.7,<3.0.0" }
-python-jose = ">=3.4.0,<4.0.0"
-pillow = ">=11.2.1,<13.0.0"
-qrcode = { extras = ["pil"], version = ">=8.2,<9.0" }
-paho-mqtt = ">=2.1.0,<3.0.0"
-psutil = ">=7.0.0,<8.0.0"
 rich = ">=14.0.0,<15.0.0"
-gunicorn = ">=23.0.0,<24.0.0"
-black = ">=25.1.0,<26.0.0"
 watchdog = ">=6.0.0,<7.0.0"
 markdown = ">=3.8.2,<4.0.0"
-mysql-connector-python = "^9.4.0"
+pillow = ">=11.2.1,<13.0.0"
+psutil = ">=7.0.0,<8.0.0"
+
 toml = "^0.10.2"
 uvicorn = "^0.38.0"
+
+# security
 bcrypt = "4.0.1"
+passlib = { extras = ["bcrypt"], version = ">=1.7.4,<2.0.0" }
+python-jose = ">=3.4.0,<4.0.0"
+
+
+# python
 pip = "==26.0.1"
+python = ">=3.11,<4.0"
+
+# http
 user-agents = "^2.2.0"
-jinja2 = "^3.1.6"
+
+
+# data validation
+pydantic = { extras = ["email"], version = ">=2.11.7,<3.0.0" }
 pydantic-settings = "^2.12.0"
+
+# database
 psycopg2 = "^2.9.11"
 aiosqlite = "^0.22.1"
+mysql-connector-python = "^9.4.0"
+sqlalchemy = ">=2.0.41,<3.0.0"
+fastapi = "^0.118.2"
+aiocache = "^0.12.3"
+redis = {extras = ["hiredis"], version = "^7.0.0"}
+
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.3.0"
@@ -50,18 +66,14 @@ httpx = "^0.28.1"
 faker = "^37.8.0"
 pytest-cov = "^7.0.0"
 bandit = "^1.8.6"
-fastapi = "^0.118.2"
-aiocache = "^0.12.3"
-redis = {extras = ["hiredis"], version = "^7.0.0"}
 aiohttp = "^3.13.3"
 
 
 [tool.poetry.group.docs.dependencies]
-sphinx = "^8.2.3"
-myst-parser = "^5.0.0"
-sphinx-copybutton = "^0.5.2"
-sphinx-rtd-theme = "^3.1.0"
-linkify-it-py = "^2.0.3"
+mkdocs = "^1.6.1"
+mkdocs-material = "^9.7.3"
+mkdocs-minify-plugin = "^0.8.0"
+mkdocstrings = "^1.0.3"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -73,7 +85,8 @@ max-line-length = 88
 
 
 [tool.poetry.scripts]
-migrate = "tools.migrate:main"
-dbutils = "tools.model_discovery:main"
-auto_migrate = "tools.auto_migrate:main"
-migration_utils = "tools.migration_utils:main"
+xcore = "xcore.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["xcore*"]

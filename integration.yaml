@@ -1,58 +1,189 @@
-# app env config
-env_variable:
-  inject: true
-  env_file: "extensions/.env"
+# ══════════════════════════════════════════════════════════════════
+# xcore.yaml — Configuration PRODUCTION
+# ══════════════════════════════════════════════════════════════════
+#
+# Toutes les valeurs sensibles sont lues depuis l'environnement.
+# Ne jamais committer de secrets dans ce fichier.
+#
+# Variables d'environnement requises :
+#   APP_SECRET_KEY        → clé secrète applicative (min 32 chars)
+#   PLUGIN_SECRET_KEY     → clé de signature des plugins Trusted
+#   DATABASE_URL          → ex: postgresql+psycopg2://user:pass@host:5432/db
+#   REDIS_URL             → ex: redis://:password@host:6379/0
+#
+# Variables optionnelles :
+#   SENTRY_DSN            → si observability.tracing activé
+#   SMTP_HOST / SMTP_USER / SMTP_PASSWORD  → si extension email déclarée
+#
+# Lancement :
+#   XCORE_CONFIG=xcore.yaml uvicorn app:app --workers 4
+# ══════════════════════════════════════════════════════════════════
 
-# app configuration
+
+# ── Application ───────────────────────────────────────────────
 app:
-  name: "xcore-services-extension"
-  env: "production"
+  name: my-app
+  env: production
   debug: false
+  secret_key: ${APP_SECRET_KEY}
+  dotenv: "./extensions/.env"
+  plugin_prefix: "/plugin"
+  plugin_tags:
+    - "my-app"
 
-extensions:
-  webhook:
-    enabled: true
-    service: "extensions.services.service:WebhookService"
-    env:
-      secret: "${WEBHOOK_SECRET}"
-    config:
-      timeout: 10
-      retries: 3
-      retry_delay: 2
-      secret_header: "X-Signature-256"
-      secret: "${WEBHOOK_SECRET}"
-databases:
-  default:
-    type: "sqlasync"
-    url: "${DATABASE_URL}"
-    pool_size: 20
-    max_overflow: 40
-    echo: true
+# ── Plugins ───────────────────────────────────────────────────
+plugins:
+  directory: ./plugins
 
+  # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
+  secret_key: "${PLUGIN_SECRET_KEY}"
+
+  # true = refuse tout plugin Trusted non signé
+  strict_trusted: false
+
+  # Intervalle du watcher de rechargement à chaud (secondes)
+  # Mettre à 0 pour désactiver en prod si tu gères les reloads via API
+  interval: 0
+
+  entry_point: src/main.py
+
+  # Fichiers/extensions exclus du snapshot de détection de changements
+  snapshot:
+    extensions: [".log", ".pyc", ".html", ".map", ".min.js"]
+    filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
+    hidden: true
+
+
+# ── Services ──────────────────────────────────────────────────
+services:
+
+  # ── Bases de données ────────────────────────────────────────
+  databases:
+
+    # Connexion principale (PostgreSQL)
+    default:
+      type: postgresql
+      url: "${DATABASE_URL}"
+      pool_size: 20          # connexions actives max en pool
+      max_overflow: 10       # connexions supplémentaires si pool plein
+      echo: false            # true = log chaque requête SQL (dev seulement)
+
+    # Connexion async pour les endpoints FastAPI haute charge
+    # (même BDD, driver asyncpg)
+    async_default:
+      type: sqlasync
+      url: "${DATABASE_ASYNC_URL} "  # postgresql+asyncpg://user:pass@host/db
+      echo: false
+
+    # Redis utilisé comme base de données (séparé du cache)
+    # Pratique pour les sessions, les locks distribués, pub/sub
+    redis_db:
+      type: redis
+      url: "${REDIS_URL}"
+      max_connections: 50
+
+  # ── Cache ────────────────────────────────────────────────────
   cache:
-    type: "redis"
+    backend: redis
     url: "${REDIS_URL}"
-    max_connections: 50
+    ttl: 300          # TTL par défaut en secondes
+    max_size: 10000   # ignoré en mode redis, actif en mode memory
 
-scheduler:
-  enabled: true
-  backend: "redis"
-  timezone: "Europe/Paris"
-  jobs:
-    - id: sandbox_runtimer
-      func: "backgroundtask.sandbox:service_main"
-      trigger: "interval"
-      seconds: 30
-      enabled: true
+  # ── Scheduler ────────────────────────────────────────────────
+  scheduler:
+    enabled: true
+    backend: redis      # redis = tâches persistantes, survivent au redémarrage
+    timezone: Europe/Paris
 
-logging:
-  level: "INFO"
-  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-  handlers:
-    console:
-      enabled: true
-    file:
-      enabled: true
-      path: "logs/app.log"
-      max_bytes: 52428800
-      backup_count: 10
+    # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
+    #jobs:
+    #  # Nettoyage des sessions expirées chaque nuit à 2h
+    #  - id: cleanup_sessions
+    #    func: myapp.tasks.maintenance:cleanup_sessions
+    #    trigger: cron
+    #    hour: 2
+    #    minute: 0
+    #
+    #  # Snapshot des métriques toutes les 5 minutes
+    #  - id: metrics_snapshot
+    #    func: myapp.tasks.monitoring:snapshot_metrics
+    #    trigger: interval
+    #    minutes: 5
+
+
+# ── Observabilité ─────────────────────────────────────────────
+observability:
+
+  logging:
+    level: WARNING          # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+    file: /var/log/xcore/app.log
+    max_bytes: 52428800     # 50 MB par fichier
+    backup_count: 10        # 10 fichiers de rotation = 500 MB max
+
+  metrics:
+    enabled: true
+    backend: prometheus     # memory | prometheus | statsd
+    prefix: myapp           # préfixe des métriques exposées sur /metrics
+
+  tracing:
+    enabled: false          # true si tu utilises OpenTelemetry / Jaeger
+    backend: noop           # noop | opentelemetry | jaeger
+    service_name: my-app
+    endpoint: null          # ex: http://jaeger:4317 (OTLP gRPC)
+
+
+# ── Sécurité ──────────────────────────────────────────────────
+security:
+
+  # Imports Python autorisés dans les plugins Sandboxed (whitelist AST)
+  # Les plugins Trusted ne sont pas limités par cette liste
+  allowed_imports:
+    - json
+    - re
+    - math
+    - random
+    - datetime
+    - time
+    - pathlib
+    - typing
+    - dataclasses
+    - enum
+    - functools
+    - itertools
+    - collections
+    - string
+    - hashlib
+    - base64
+    - asyncio
+    - logging
+    - uuid
+    - decimal
+    - copy
+
+  # Imports explicitement interdits (surcharge les allowed_imports)
+  forbidden_imports:
+    - os
+    - sys
+    - subprocess
+    - shutil
+    - signal
+    - ctypes
+    - socket
+    - ssl
+    - http
+    - urllib
+    - httpx
+    - requests
+    - aiohttp
+    - importlib
+    - builtins
+    - exec
+    - eval
+    - compile
+    - pickle
+
+  # Rate limit appliqué par défaut à chaque plugin non configuré
+  rate_limit_default:
+    calls: 200
+    period_seconds: 60

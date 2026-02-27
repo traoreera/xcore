@@ -1,19 +1,21 @@
 import os
+
 import yaml
+
 
 def load_config():
     with open("docgen/config.yaml") as f:
         return yaml.safe_load(f)
 
+
 def split_content(content, max_chars):
-    return [
-        content[i:i+max_chars]
-        for i in range(0, len(content), max_chars)
-    ]
+    return [content[i : i + max_chars] for i in range(0, len(content), max_chars)]
+
 
 def is_excluded(root, exclude_dirs):
     parts = root.replace("\\", "/").split("/")
     return any(part in exclude_dirs for part in parts)
+
 
 def get_module_name(path, repo_root):
     """
@@ -30,15 +32,17 @@ def get_module_name(path, repo_root):
         return None
     return "/".join(parts[:-1])
 
+
 def scan_repo(cfg=None):
     if cfg is None:
         from summarizer import load_config
+
         cfg = load_config()
 
-    repo      = cfg["project"]["repo_path"]
+    repo = cfg["project"]["repo_path"]
     max_chars = cfg["generation"]["max_file_chunk_chars"]
-    exts      = tuple(cfg["generation"]["include_extensions"])
-    exclude   = set(cfg["generation"]["exclude_dirs"])
+    exts = tuple(cfg["generation"]["include_extensions"])
+    exclude = set(cfg["generation"]["exclude_dirs"])
 
     # Fichiers a ignorer completement (configurable, defaut : __init__.py)
     ignore_files = set(cfg["generation"].get("exclude_files", ["__init__.py"]))
@@ -57,7 +61,7 @@ def scan_repo(cfg=None):
                 continue
 
             if file.endswith(exts):
-                path   = os.path.join(root, file)
+                path = os.path.join(root, file)
                 module = get_module_name(path, repo)
 
                 try:
@@ -68,11 +72,13 @@ def scan_repo(cfg=None):
                     continue
 
                 for part in split_content(content, max_chars):
-                    chunks.append({
-                        "path":     path,
-                        "module":   module,
-                        "filename": os.path.splitext(file)[0],
-                        "content":  part,
-                    })
+                    chunks.append(
+                        {
+                            "path": path,
+                            "module": module,
+                            "filename": os.path.splitext(file)[0],
+                            "content": part,
+                        }
+                    )
 
     return chunks

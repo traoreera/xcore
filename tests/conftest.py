@@ -6,7 +6,6 @@ Utilisées automatiquement par pytest dans tous les fichiers de test.
 
 import os
 import shutil
-import sys
 import tempfile
 from pathlib import Path
 from typing import Generator
@@ -50,9 +49,8 @@ def client(app: FastAPI) -> Generator:
 def db_engine():
     """Moteur SQLAlchemy en mémoire pour les tests."""
     try:
-        from sqlalchemy import create_engine
-
         from extensions.services.database import Base
+        from sqlalchemy import create_engine
 
         engine = create_engine(
             "sqlite:///:memory:",

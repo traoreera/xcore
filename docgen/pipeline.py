@@ -1,9 +1,11 @@
-from scanner import scan_repo
-from aggregator import summarize_by_file, aggregate_file_summaries
-from composer import compose_file_doc, compose_module_index, compose_root_index
-from summarizer import load_config
 import os
 from collections import defaultdict
+
+from aggregator import aggregate_file_summaries, summarize_by_file
+from composer import compose_file_doc, compose_module_index, compose_root_index
+from scanner import scan_repo
+from summarizer import load_config
+
 
 def write_file(path, content):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -11,13 +13,15 @@ def write_file(path, content):
         f.write(content)
     print(f"[WRITTEN] {path}")
 
+
 def get_all_ancestor_modules(module):
     """
     Retourne tous les niveaux intermédiaires d'un module.
     Exemple : "core/utils/parsers" → ["core", "core/utils", "core/utils/parsers"]
     """
     parts = module.split("/")
-    return ["/".join(parts[:i+1]) for i in range(len(parts))]
+    return ["/".join(parts[: i + 1]) for i in range(len(parts))]
+
 
 def main():
     cfg = load_config()
@@ -26,7 +30,9 @@ def main():
     # 1. Scanner le repo
     chunks = scan_repo(cfg)
     if not chunks:
-        print("No files found to process. Check repo_path and include_extensions in config.")
+        print(
+            "No files found to process. Check repo_path and include_extensions in config."
+        )
         return
 
     # 2. Résumer chaque fichier (avec cache)
@@ -41,14 +47,14 @@ def main():
     #   - modules_children : module_path → set de sous-modules directs
     #     (pour les README des niveaux intermédiaires)
 
-    modules_files    = defaultdict(dict)   # module -> fichiers directs
-    modules_children = defaultdict(set)    # module -> sous-modules directs
-    root_files       = {}                  # fichiers à la racine du repo
+    modules_files = defaultdict(dict)  # module -> fichiers directs
+    modules_children = defaultdict(set)  # module -> sous-modules directs
+    root_files = {}  # fichiers à la racine du repo
 
     for path, data in file_summaries.items():
-        module   = data["module"]    # ex: "core/utils" | None
+        module = data["module"]  # ex: "core/utils" | None
         filename = data["filename"]  # ex: "scanner"
-        summary  = data["summary"]
+        summary = data["summary"]
 
         # Calcul du chemin de sortie
         if module:
@@ -64,7 +70,7 @@ def main():
         if module:
             # Enregistrer le fichier dans son module direct
             modules_files[module][filename] = {
-                "summary":  summary,
+                "summary": summary,
                 "doc_path": doc_path,
             }
             # Enregistrer tous les liens parent → enfant pour les niveaux intermédiaires
@@ -72,11 +78,11 @@ def main():
             ancestors = get_all_ancestor_modules(module)
             for i in range(len(ancestors) - 1):
                 parent = ancestors[i]
-                child  = ancestors[i + 1]
+                child = ancestors[i + 1]
                 modules_children[parent].add(child)
         else:
             root_files[filename] = {
-                "summary":  summary,
+                "summary": summary,
                 "doc_path": doc_path,
             }
 
@@ -104,8 +110,7 @@ def main():
         # Sous-modules directs (enfants immédiats seulement)
         direct_children = sorted(modules_children.get(module, set()))
         child_descriptions = {
-            child: module_descriptions.get(child, "")
-            for child in direct_children
+            child: module_descriptions.get(child, "") for child in direct_children
         }
 
         index_content = compose_module_index(
@@ -128,9 +133,7 @@ def main():
     # 5. Générer le README.md racine de docs/
     #    Liste uniquement les modules de premier niveau (sans "/" dans le chemin)
     top_level_modules = {
-        mod: module_descriptions[mod]
-        for mod in sorted(all_modules)
-        if "/" not in mod
+        mod: module_descriptions[mod] for mod in sorted(all_modules) if "/" not in mod
     }
 
     root_index_path = os.path.join(docs_root, "README.md")
@@ -144,6 +147,7 @@ def main():
 
     print("\nDocumentation generated successfully.")
     print(f"Output: {docs_root}/")
+
 
 if __name__ == "__main__":
     main()
