@@ -1,4 +1,4 @@
-name: Docs – Build & Deploy
+name: Docs – Build & Deploy MkDocs
 
 on:
   push:
