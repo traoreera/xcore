@@ -37,12 +37,13 @@ _api_key_header = APIKeyHeader(
 )
 
 
-def _hash_key(key: Optional[str | bytes]) -> bytes:
-    """Hash SHA256 de la clé API."""
+def _normalize_key(key: Optional[str | bytes]) -> bytes:
+    """Normalise la clé API en bytes pour comparaison sécurisée."""
     if isinstance(key, bytes):
-        return hashlib.sha256(key.decode("utf-8").encode("utf-8")).digest()
+        # On force un encodage UTF-8 cohérent si possible
+        return key.decode("utf-8").encode("utf-8")
     else:
-        return hashlib.sha256(key.encode("utf-8")).digest()
+        return key.encode("utf-8")
 
 
 def build_router(
@@ -58,8 +59,8 @@ def build_router(
 
     tags = tags or []
 
-    # On hash une seule fois au démarrage
-    stored_hash = _hash_key(secret_key)
+    # On normalise une seule fois au démarrage
+    stored_key = _normalize_key(secret_key)
 
     async def verify_api_key(
         api_key: str | None = Security(_api_key_header),
@@ -71,10 +72,10 @@ def build_router(
                 detail="API key missing",
             )
 
-        incoming_hash = _hash_key(api_key)
+        incoming_key = _normalize_key(api_key)
 
         # Comparaison sécurisée anti timing attack
-        if not hmac.compare_digest(incoming_hash, stored_hash):
+        if not hmac.compare_digest(incoming_key, stored_key):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Unauthorized",
