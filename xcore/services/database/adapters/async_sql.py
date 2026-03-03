@@ -77,3 +77,9 @@ class AsyncSQLAdapter:
             return True, "ok"
         except Exception as e:
             return False, str(e)
+
+    @property
+    def engine(self) -> Any:
+        if self._engine is None:
+            raise RuntimeError(f"[{self.name}] Base non initialisée")
+        return self._engine

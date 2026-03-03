@@ -126,6 +126,8 @@ class Xcore:
         if app is not None:
             self._attach_router(
                 app,
+                prefix=self._config.app.plugin_prefix,
+                tags=self._config.app.plugin_tags,
             )
 
         self._booted = True
@@ -146,6 +148,8 @@ class Xcore:
     def _attach_router(
         self,
         app,
+        prefix: str | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         from .kernel.api.router import build_router
 
@@ -167,7 +171,7 @@ class Xcore:
                 # Préfixe automatique si le plugin n'a pas déjà /plugins/...
                 from fastapi import APIRouter
 
-                wrapper = APIRouter(prefix=f"/plugins/{plugin_name}")
+                wrapper = APIRouter(prefix=f"{prefix}/{plugin_name}", tags=self._config.app.plugin_tags.extend(tags))
                 wrapper.include_router(plugin_router)
                 prefixed_router = wrapper
             app.include_router(prefixed_router)
