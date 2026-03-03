@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import inspect
 import asyncio
 import functools
 import logging
@@ -181,43 +182,47 @@ class RoutedPlugin:
                 return {"status": "running"}
     """
 
-    def get_router(self) -> "Any":
-        try:
-            from fastapi import APIRouter
-        except ImportError as e:
-            raise ImportError("fastapi non installé — pip install fastapi") from e
+
+
+    def RouterIn(self):
+
+        from fastapi import APIRouter
 
         router = APIRouter()
-        for attr_name in dir(self):
+
+        for attr_name in dir(self.__class__):
             method = getattr(self.__class__, attr_name, None)
-            if method is None or not callable(method):
-                continue
+
             route_info = getattr(method, "_xcore_route", None)
             if not route_info:
                 continue
 
-            # Crée un handler lié à self (closure)
             bound = getattr(self, attr_name)
 
-            # fastapi attend une fonction, pas une méthode bound
-            import functools
+            def make_handler(fn):
+                @functools.wraps(fn)
+                async def handler(**kwargs):
+                    return (
+                        await fn(**kwargs)
+                        if inspect.iscoroutinefunction(fn)
+                        else fn(**kwargs)
+                    )
 
-            @functools.wraps(method)
-            async def _handler(*args, _fn=bound, **kwargs):
-                import inspect
+                # IMPORTANT → copie la signature SANS self
+                sig = inspect.signature(fn)
+                params = [
+                    p for name, p in sig.parameters.items()
+                    if name != "self"
+                ]
+                handler.__signature__ = sig.replace(parameters=params)
 
-                sig = inspect.signature(_fn)
-                # Retire les paramètres FastAPI non présents dans la signature
-                filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
-                return (
-                    await _fn(**filtered)
-                    if asyncio.iscoroutinefunction(_fn)
-                    else _fn(**filtered)
-                )
+                return handler
+
+            handler = make_handler(bound)
 
             router.add_api_route(
                 path=route_info["path"],
-                endpoint=_handler,
+                endpoint=handler,
                 methods=[route_info["method"]],
                 tags=route_info["tags"],
                 summary=route_info["summary"],
@@ -226,7 +231,6 @@ class RoutedPlugin:
             )
 
         return router if router.routes else None
-
 
 class AutoDispatchMixin:
     """

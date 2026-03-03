@@ -81,7 +81,7 @@ def build_router(
             )
 
     router = APIRouter(
-        prefix=prefix,
+        prefix=f"{prefix}/ipc",
         tags=tags,
         dependencies=[Depends(verify_api_key)],
         **kwargs,
