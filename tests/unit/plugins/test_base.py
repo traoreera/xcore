@@ -2,7 +2,6 @@
 Tests for plugin base classes and SDK.
 """
 
-
 import pytest
 
 from xcore.kernel.api.contract import ExecutionMode

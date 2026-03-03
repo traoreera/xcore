@@ -1,5 +1,5 @@
 """
-memory.py — Backend cache mémoire : LRU + TTL + max_size.
+Backend cache mémoire : LRU + TTL + max_size.
 Zéro dépendance externe.
 """
 

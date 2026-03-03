@@ -12,7 +12,169 @@
 ## ✨ Key Features
 
 - 🧩 **Dynamic Plugin System**: Hot-reload, load, and unload plugins at runtime without restarting the server.
-- 🛡️ **Sandboxing & Security**: Isolated execution using sub-processes with strict resource limits (CPU, Memory, Timeouts) and AST validation.
+- 🛡️ **Sandboxing & Security**:# 🧱 1. ARCHITECTURE
+
+## Isolation & découplage
+
+* [x] API séparée du scheduler
+* [x] Plugin runner dans process isolé
+* [x] Communication IPC stricte (pas import direct du core)
+* [x] Resource limits OS (CPU / RAM / file descriptors)
+* [x] Timeout kernel-level
+* [x] Event loop jamais bloquée par plugin
+
+## Stateless
+
+* [ ] API stateless
+* [ ] Sessions externalisées (Redis)
+* [ ] Configuration externalisée (env / secret manager)
+
+---
+
+# 🔐 2. SÉCURITÉ
+
+## Auth
+
+* [ ] JWT rotation automatique
+* [ ] Refresh token sécurisé
+* [ ] Expiration courte access token
+* [ ] Revocation list
+
+## Autorisation
+
+* [ ] RBAC complet
+* [ ] Scope par tenant
+* [ ] Permission par ressource
+* [ ] Policies versionnées
+
+## API Hardening
+
+* [ ] Rate limit global
+* [ ] Rate limit par tenant
+* [ ] Protection brute force
+* [ ] Validation stricte Pydantic (aucun Any sauvage)
+* [ ] CORS verrouillé
+
+## Plugin Security
+
+* [ ] Signature obligatoire plugin
+* [ ] Validation metadata stricte
+* [ ] Scan dépendances auto (CI)
+* [ ] Blocage accès FS non autorisé
+* [ ] Blocage accès réseau non autorisé
+
+---
+
+# 🧠 3. MULTI-TENANT
+
+* [ ] Isolation DB (row-level ou DB dédiée)
+* [ ] Namespace cache par tenant
+* [ ] Rate limit par tenant
+* [ ] Logs séparés par tenant
+* [ ] No data leakage possible cross-tenant
+
+---
+
+# 📊 4. OBSERVABILITÉ
+
+## Logging
+
+* [ ] Structured logging JSON
+* [ ] Correlation ID par requête
+* [ ] Logs centralisés
+
+## Metrics
+
+* [ ] Prometheus intégré
+* [ ] Métriques par plugin
+* [ ] Métriques par tenant
+
+## Tracing
+
+* [ ] OpenTelemetry activé
+* [ ] Trace distribué inter-service
+
+## Alerting
+
+* [ ] Alert CPU / RAM
+* [ ] Alert crash plugin
+* [ ] Alert latence élevée
+
+---
+
+# 🚀 5. RÉSILIENCE
+
+* [ ] Retry policy
+* [ ] Circuit breaker
+* [ ] Dead letter queue
+* [ ] Idempotency system
+* [ ] Graceful shutdown
+* [ ] Healthcheck complet (liveness + readiness)
+
+---
+
+# ⚙️ 6. PERFORMANCE & STABILITÉ
+
+## Tests
+
+* [ ] Tests unitaires >80%
+* [ ] Tests d’intégration
+* [ ] Tests de charge (k6/locust)
+* [ ] Test endurance 48–72h
+* [ ] Chaos testing
+
+## DB
+
+* [ ] Pooling correct
+* [ ] Indexation vérifiée
+* [ ] Slow query monitoring
+
+---
+
+# ☁️ 7. INFRASTRUCTURE
+
+* [ ] Docker multi-stage propre
+* [ ] Image minimale
+* [ ] Kubernetes ready
+* [ ] Autoscaling horizontal
+* [ ] Rolling update sans downtime
+* [ ] Backup automatique
+* [ ] Restore testé
+
+---
+
+# 📜 8. AUDIT & COMPLIANCE
+
+* [ ] Audit log immuable
+* [ ] Trace action admin
+* [ ] Historique permissions
+* [ ] Documentation sécurité écrite
+* [ ] Plan incident response
+* [ ] Disaster recovery documenté
+
+---
+
+# 🔥 9. VALIDATION FINALE
+
+Tu peux dire “enterprise critique” si :
+
+* [ ] Plugin ne peut pas faire tomber le core
+* [ ] Aucun tenant ne peut impacter un autre
+* [ ] Crash plugin ≠ crash système
+* [ ] 99.9% uptime mesurée
+* [ ] Reprise après crash testée
+
+---
+
+# 🎯 Score rapide
+
+Si aujourd’hui tu es honnête :
+
+* < 40% → prototype avancé
+* 40–70% → SaaS early stage
+* 70–90% → production sérieuse
+* 90%+ → critique enterprise
+ Isolated execution using sub-processes with strict resource limits (CPU, Memory, Timeouts) and AST validation.
 - 🔌 **Native Service Integration**: Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), and Task Scheduling (APScheduler).
 - 🛰️ **Event-Driven Architecture**: Powerful Event Bus and Hook system for seamless inter-plugin communication.
 - 🔐 **Signature Verification**: Ensure plugin integrity with HMAC-SHA256 signature validation.
@@ -165,5 +327,5 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ---
 
 <p align="center">
-  Built with ❤️ by <b>Xcore team's</b>
+  Built with ❤️ by <b>Eliezer Traore</b>
 </p>

@@ -72,7 +72,7 @@ class DatabaseManager(BaseService):
 
             return RedisAdapter(name, cfg)
         raise ValueError(
-            f"Type BDD inconnu : '{cfg.type}'. " f"Valeurs : {sorted(_TYPE_MAP.keys())}"
+            f"Type BDD inconnu : '{cfg.type}'. Valeurs : {sorted(_TYPE_MAP.keys())}"
         )
 
     async def shutdown(self) -> None:

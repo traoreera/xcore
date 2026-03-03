@@ -1,5 +1,5 @@
 """
-validator.py — Validation statique des blocs permissions dans les manifestes.
+--- statique des blocs permissions dans les manifestes.
 """
 
 from __future__ import annotations

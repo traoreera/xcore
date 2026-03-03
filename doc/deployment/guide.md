@@ -732,6 +732,6 @@ xcore plugin verify ./plugins/my_plugin
 
 ## Next Steps
 
-- [Monitoring Guide](monitoring.md)
+- [Monitoring Guide](../guides/monitoring.md)
 - [Security Guide](../guides/security.md)
 - [Scaling Guide](scaling.md)

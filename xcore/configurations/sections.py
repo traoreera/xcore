@@ -110,3 +110,13 @@ class SecurityConfig:
     rate_limit_default: dict[str, Any] = field(
         default_factory=lambda: {"calls": 100, "period_seconds": 60}
     )
+
+
+@dataclass
+class XcoreConfig:
+    app: AppConfig = field(default_factory=AppConfig)
+    plugins: PluginConfig = field(default_factory=PluginConfig)
+    services: ServicesConfig = field(default_factory=ServicesConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    security: SecurityConfig = field(default_factory=SecurityConfig)
+    raw: dict[str, Any] = field(default_factory=dict)

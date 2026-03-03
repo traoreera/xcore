@@ -23,6 +23,7 @@ class CacheService(BaseService):
     Service de cache unifié.
 
     Usage:
+        ```python
         cache = CacheService(config)
         await cache.init()
 
@@ -31,6 +32,7 @@ class CacheService(BaseService):
 
         await cache.delete("user:123")
         await cache.clear()
+        ```
     """
 
     name = "cache"

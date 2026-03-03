@@ -29,6 +29,7 @@ class ServiceContainer:
         self.ctx.services.get("scheduler") → SchedulerService
 
     Usage:
+        ```python
         container = ServiceContainer(config)
         await container.init()
 
@@ -36,6 +37,7 @@ class ServiceContainer:
         cache = container.get("cache")
 
         await container.shutdown()
+        ```
     """
 
     INIT_ORDER = ["database", "cache", "scheduler", "extensions"]
@@ -112,8 +114,7 @@ class ServiceContainer:
         if name in self._raw:
             return self._raw[name]
         raise KeyError(
-            f"Service '{name}' indisponible. "
-            f"Disponibles : {sorted(self._raw.keys())}"
+            f"Service '{name}' indisponible. Disponibles : {sorted(self._raw.keys())}"
         )
 
     def get_or_none(self, name: str) -> Any | None:

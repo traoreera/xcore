@@ -91,4 +91,4 @@ graph TB
 
 ## License
 
-XCore is released under the [MIT License](../LICENSE).
+XCore is released under the [MIT License](./LICENSE).

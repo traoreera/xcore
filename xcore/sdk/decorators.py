@@ -23,7 +23,11 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Type
+
+from pydantic import BaseModel, ValidationError
+
+from ..kernel.api.contract import error
 
 logger = logging.getLogger("xcore.sdk.decorators")
 
@@ -74,38 +78,33 @@ def require_service(*service_names: str):
     return decorator
 
 
-def validate_payload(**schema: type):
+def validate_payload(schema: Type[BaseModel]):
     """
-    Valide les types des champs du payload.
+    Valide un payload via un modèle Pydantic.
     Retourne {"status": "error"} si la validation échoue.
 
     Usage:
-        @validate_payload(name=str, age=int)
+        ```python
+        class CreateUserModel(BaseModel):
+            name: str
+            age: int
+
+        @validate_payload(CreateUserModel)
         async def create_user(self, payload: dict) -> dict:
             ...
+        ```
     """
 
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
-        async def wrapper(self, payload: dict, *args, **kwargs):
-            for field, expected_type in schema.items():
-                if field not in payload:
-                    from ..kernel.api.contract import error
+        async def warpper(self, payload: dict, *args, **kwargs):
+            try:
+                validate = schema(**payload)
+            except ValidationError as e:
+                return error(e.error(), "validation_error")
+            return await fn(self, validate, *args, **kwargs)
 
-                    return error(
-                        f"Champ obligatoire manquant : '{field}'", "validation_error"
-                    )
-                if not isinstance(payload[field], expected_type):
-                    from ..kernel.api.contract import error
-
-                    return error(
-                        f"'{field}' doit être de type {expected_type.__name__}, "
-                        f"reçu {type(payload[field]).__name__}",
-                        "validation_error",
-                    )
-            return await fn(self, payload, *args, **kwargs)
-
-        return wrapper
+        return warpper
 
     return decorator
 

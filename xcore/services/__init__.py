@@ -1,19 +1,21 @@
 """
-services/ — Couche d'intégration des services xcore v2.
+services/ — Integration layer for xcore v2 services.
 
-Point d'entrée : ServiceContainer
-  - Initialise, orchestre et expose tous les services
-  - Injection dans les plugins via PluginContext.services
+Entry point: ServiceContainer
+    - Initializes, orchestrates, and exposes all services
+    - - Injects services into plugins via PluginContext.services
 
-Usage:
+Use:
+    ```python
     container = ServiceContainer(config.services)
     await container.init()
 
-    db       = container.get("db")        # premier adaptateur BDD
+    db       = container.get("db")        # first database adapter
     cache    = container.get("cache")     # CacheService
     scheduler= container.get("scheduler") # SchedulerService
 
     await container.shutdown()
+    ```
 """
 
 from .base import BaseService, ServiceStatus

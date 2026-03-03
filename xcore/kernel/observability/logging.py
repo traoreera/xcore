@@ -1,5 +1,5 @@
 """
-logging.py — Configuration centralisée des logs pour xcore.
+— Xcore logging configuration.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def configure_logging(cfg: "LoggingConfig") -> None:
-    """Configure le système de logging depuis la config."""
+    """Configure logging."""
     level = getattr(logging, cfg.level.upper(), logging.INFO)
     root = logging.getLogger("xcore")
     root.setLevel(level)
@@ -35,5 +35,5 @@ def configure_logging(cfg: "LoggingConfig") -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Retourne un logger prefixé xcore."""
+    """RETURN LOGGER FOR XCORE MODULE."""
     return logging.getLogger(f"xcore.{name}" if not name.startswith("xcore") else name)

@@ -2,7 +2,6 @@
 Tests for CacheService.
 """
 
-
 import pytest
 
 from xcore.services.base import ServiceStatus

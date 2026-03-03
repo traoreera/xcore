@@ -1,11 +1,10 @@
 """
-lifecycle.py — Gestion du cycle de vie d'un plugin Trusted.
-
-Responsabilités :
-  - Importer le module Python depuis le chemin d'entrée
-  - Injecter les services dans l'instance
-  - Appeler les hooks on_load / on_reload / on_unload
-  - Propager les services exposés vers le container partagé (mems)
+— Managing the lifecycle of a Trusted plugin.
+Responsibilities:
+- Import the Python module from the input path
+- Inject the services into the instance
+- Call the on_load / on_reload / on_unload hooks
+- Distribute the exposed services to the shared container (mems)
 """
 
 from __future__ import annotations
@@ -32,19 +31,18 @@ class LoadError(Exception):
 
 class LifecycleManager:
     """
-    Gère le cycle de vie complet d'un plugin Trusted en mémoire.
-
-    Corrections v2 par rapport à v1 :
-      - mems(is_reload) distingue chargement initial et reload (fix #3 v1)
-      - Contexte riche (PluginContext) injecté plutôt que dict brut
-      - Séparation claire loader / lifecycle / supervisor
-
-    Usage:
-        lm = LifecycleManager(manifest, services=shared_dict)
+        Manages the complete lifecycle of a Trusted plugin in memory.
+        v2 fixes compared to v1:
+        - mems(is_reload) distinguishes between initial load and reload (fix #3 v1)
+        - Rich context (PluginContext) injected instead of a raw dict
+        - Clear separation between loader / lifecycle / supervisor
+        Usage:
+    ```python
+    lm = LifecycleManager(manifest, services=shared_dict)
         await lm.load()
         result = await lm.call("ping", {})
         await lm.reload()
-        await lm.unload()
+        await lm.unload()```
     """
 
     def __init__(
@@ -100,7 +98,7 @@ class LifecycleManager:
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(
-                f"[{self.manifest.name}] ✅ chargé "
+                f"[{self.manifest.name}] loaded."
                 f"(timeout={self.manifest.resources.timeout_seconds}s)"
             )
         except Exception as e:
@@ -110,7 +108,7 @@ class LifecycleManager:
     async def _do_load(self) -> None:
         entry = self.manifest.plugin_dir / self.manifest.entry_point
         if not entry.exists():
-            raise LoadError(f"Entry point introuvable : {entry}")
+            raise LoadError(f"Not found entry point: {entry}")
 
         src_dir = str(self.manifest.plugin_dir / "src")
         if src_dir not in sys.path:
@@ -120,15 +118,15 @@ class LifecycleManager:
         self._module = self._import_module(module_name, entry)
 
         if not hasattr(self._module, "Plugin"):
-            raise LoadError(f"Classe Plugin() manquante dans {entry}")
+            raise LoadError(f"class Plugin() not found in {entry}")
 
         cls = self._module.Plugin
         self._instance = self._instantiate(cls)
 
         if not isinstance(self._instance, BasePlugin):
             raise LoadError(
-                f"Plugin ne respecte pas le contrat BasePlugin "
-                f"(manque la méthode async handle(action, payload))"
+                f"the plugin not respect contrat BasePlugin "
+                f"(missing method async handle(action, payload))"
             )
 
         # Injection du contexte riche
@@ -183,7 +181,7 @@ class LifecycleManager:
 
     async def call(self, action: str, payload: dict) -> dict:
         if self._instance is None:
-            raise RuntimeError(f"[{self.manifest.name}] Plugin non chargé")
+            raise RuntimeError(f"[{self.manifest.name}] not loaded")
 
         self._sm.transition("call")
         timeout = self.manifest.resources.timeout_seconds
@@ -221,10 +219,10 @@ class LifecycleManager:
             self.mems(is_reload=True)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
-            logger.info(f"[{self.manifest.name}] 🔄 rechargé")
+            logger.info(f"[{self.manifest.name}] reloaded")
         except Exception as e:
             self._sm.transition("error")
-            raise LoadError(f"[{self.manifest.name}] Échec reload : {e}") from e
+            raise LoadError(f"[{self.manifest.name}] faild reload : {e}") from e
 
     # ── Unload ────────────────────────────────────────────────
 

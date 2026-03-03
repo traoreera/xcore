@@ -82,15 +82,23 @@ nav:
     - getting-started/quickstart.md
   - Guides:
     - guides/creating-plugins.md
+    - guides/creating-services.md
     - guides/services.md
     - guides/events.md
     - guides/security.md
+    - guides/monitoring.md
+    - guides/scaling.md
   - Reference:
+    - reference/sdk.md
     - reference/configuration.md
     - reference/api.md
+    - reference/sdk.md
   - Architecture:
     - architecture/overview.md
   - Deployment:
     - deployment/guide.md
+  - Examples:
+    - examples/basic-plugin.md
+    - examples/complete-plugin.md
 
-copyright: Copyright &copy; 2024 XCore Team
+copyright: Copyright &copy; 2023 XCore Team

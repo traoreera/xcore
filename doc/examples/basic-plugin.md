@@ -66,7 +66,7 @@ class Plugin(TrustedBase):
         print(f"📊 Total operations: {self.operations_count}")
         print("👋 Calculator plugin unloaded")
 
-    def get_router(self) -> APIRouter:
+    def routes(self) -> APIRouter:
         """Define HTTP routes."""
         router = APIRouter(
             prefix="/calc",
@@ -358,3 +358,17 @@ async def test_calculator_divide_by_zero():
 - Add expression parsing
 - Add unit conversion
 - Add memory functions (M+, M-, MR, MC)
+
+## Examples Avancés
+
+Pour des exemples plus complexes avec architecture modulaire :
+
+- **[Trusted Plugin](./trusted-plugin.md)** - Plugin avec `router.py` séparé et `.env` pour la configuration
+- **[Sandboxed Plugin](./sandboxed-plugin.md)** - Plugin isolé avec restrictions de sécurité
+
+## Exemples Avancés
+
+Pour des exemples plus complexes, voir :
+
+- **[Trusted Plugin](./trusted-plugin.md)** - Plugin avec architecture modulaire, router.py séparé, configuration .env, accès services complets
+- **[Sandboxed Plugin](./sandboxed-plugin.md)** - Plugin sécurisé avec isolation, restrictions de ressources, validation des fichiers

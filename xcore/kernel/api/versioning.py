@@ -1,5 +1,5 @@
 """
-versioning.py — Vérification de compatibilité framework/plugin.
+versioning | Contraint version verification
 """
 
 from __future__ import annotations

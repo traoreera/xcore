@@ -1,10 +1,11 @@
 """
-health.py — Système de health checks pour xcore et ses services.
+— Système for health checks.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -19,6 +20,8 @@ class HealthStatus(str, Enum):
 
 @dataclass
 class CheckResult:
+    """check result."""
+
     name: str
     status: HealthStatus
     message: str = ""
@@ -31,20 +34,26 @@ class HealthChecker:
     Registre de health checks.
 
     Usage:
+    ```python
         hc = HealthChecker()
-
         @hc.register("database")
         async def check_db():
             await db.execute("SELECT 1")
             return True, "OK"
-
         report = await hc.run_all()
+    ```
     """
 
     def __init__(self) -> None:
         self._checks: dict[str, Callable] = {}
 
     def register(self, name: str) -> Callable:
+        """
+        Decorator to register a function to be called when an event is emitted.
+        Args:
+            name (str): The name of the event to register the function for.
+        """
+
         def decorator(fn: Callable) -> Callable:
             self._checks[name] = fn
             return fn
@@ -56,7 +65,7 @@ class HealthChecker:
         for name, fn in self._checks.items():
             start = time.monotonic()
             try:
-                if asyncio.iscoroutinefunction(fn):
+                if inspect.iscoroutinefunction(fn):
                     ok, msg = await asyncio.wait_for(fn(), timeout=timeout)
                 else:
                     ok, msg = fn()

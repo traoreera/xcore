@@ -1,5 +1,5 @@
 """
-plugin_base.py — Dataclasses du manifeste plugin v2.
+— Dataclasses du manifeste plugin.
 
 PluginManifest est l'objet riche parsé par ManifestValidator.
 Il remplace le _SimpleManifest pour les usages SDK complets.
@@ -16,12 +16,20 @@ from ..kernel.api.contract import ExecutionMode
 
 @dataclass
 class RateLimitConfig:
+    """
+    rate limite configuration configuration
+    """
+
     calls: int = 100
     period_seconds: int = 60
 
 
 @dataclass
 class ResourceConfig:
+    """
+    Resource Configuration
+    """
+
     timeout_seconds: int = 10
     max_memory_mb: int = 128
     max_disk_mb: int = 50
@@ -30,6 +38,10 @@ class ResourceConfig:
 
 @dataclass
 class HealthCheckConfig:
+    """
+    healh check config
+    """
+
     enabled: bool = True
     interval_seconds: int = 30
     timeout_seconds: int = 3
@@ -37,6 +49,10 @@ class HealthCheckConfig:
 
 @dataclass
 class RetryConfig:
+    """
+    max retry for plugin
+    """
+
     max_attempts: int = 1
     backoff_seconds: float = 0.0
 
