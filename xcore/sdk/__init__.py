@@ -7,6 +7,8 @@ Import recommandé dans un plugin :
 """
 
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
+from .adapter.asyncsql import BaseAsyncRepository
+from .adapter.syncsql import BaseSyncRepository
 from .decorators import (
     AutoDispatchMixin,
     RoutedPlugin,
@@ -36,4 +38,6 @@ __all__ = [
     "route",
     "RoutedPlugin",
     "AutoDispatchMixin",
+    "BaseAsyncRepository",
+    "BaseSyncRepository",
 ]

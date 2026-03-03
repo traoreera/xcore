@@ -1,13 +1,15 @@
 """
-dispatcher.py — Pont entre EventBus et HookManager.
-
-L'EventDispatcher coordonne les deux systèmes :
-  - EventBus : événements applicatifs structurés (subscribe/emit)
-  - HookManager : hooks prioritaires avec wildcards
-
+dispatcher.py — Bridge between EventBus and HookManager.
+The EventDispatcher coordinates the two systems:
+- EventBus: structured application events (subscribe/emit)
+- HookManager: priority hooks with wildcards
 Usage:
-    dispatcher = EventDispatcher(bus, hooks)
-    dispatcher.forward("plugin.*.loaded", to_hooks=True)
+```python
+dispatcher = EventDispatcher(bus, hooks)
+dispatcher.forward("plugin.*.loaded", to_hooks=True)
+
+await dispatcher.emit("user.created", {"email": "alice@example.com"})
+```
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ class EventDispatcher:
             await self._hooks.emit(event.name, event.data)
 
     async def emit(self, event_name: str, data: dict[str, Any] | None = None) -> None:
-        """Émet simultanément sur le bus et les hooks."""
+        """Emit an event."""
         await self._bus.emit(event_name, data)
         if self._hooks:
             await self._hooks.emit(event_name, data)

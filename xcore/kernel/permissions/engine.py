@@ -1,10 +1,9 @@
 """
-engine.py — Moteur d'évaluation des permissions.
-
-Le PermissionEngine est le singleton qui :
-  1. Charge les PolicySet depuis les manifestes au démarrage
-  2. Répond aux requêtes d'autorisation à chaque appel de plugin
-  3. Émet des événements d'audit (allow/deny)
+---Permission Evaluation Engine
+The PermissionEngine is the singleton that:
+    1. Loads PolicySets from manifests at startup
+    2. Responds to authorization requests on every plugin call
+    3. Emits audit events (allow/deny)
 """
 
 from __future__ import annotations
@@ -17,23 +16,25 @@ logger = logging.getLogger("xcore.permissions.engine")
 
 
 class PermissionDenied(Exception):
-    """Levée quand une permission est refusée."""
+    """Raise when a permission check fails."""
 
 
 class PermissionEngine:
     """
-    Moteur de permissions centralisé.
+    Central engine for permission evaluation.
 
     Usage:
+    ```python
         engine = PermissionEngine()
         engine.load_from_manifest("my_plugin", manifest.permissions)
 
-        # Vérification
+        # verify
         engine.check("my_plugin", resource="db.users", action="write")
-        # → lève PermissionDenied si refusé
+        # → raise PermissionDenied if not allowed
 
-        # Test sans lever
+        # Test without lever
         ok = engine.allows("my_plugin", "db.users", "write")
+    ```
     """
 
     def __init__(self, events=None) -> None:
@@ -44,9 +45,9 @@ class PermissionEngine:
     def load_from_manifest(
         self, plugin_name: str, raw_permissions: list[dict] | None
     ) -> None:
-        """Charge les policies d'un plugin depuis son manifeste."""
+        """load policies from manifest"""
         if not raw_permissions:
-            # Sans policies déclarées → deny all (fail-closed)
+            # Sans policies déclarées → deny all (fail-closed) @/TODO: fix this
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
             logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
         else:
@@ -55,13 +56,12 @@ class PermissionEngine:
             logger.debug(f"[{plugin_name}] {len(ps.policies)} règle(s) chargée(s)")
 
     def grant_all(self, plugin_name: str) -> None:
-        """Accordé pour les plugins Trusted avec strict_trusted=False."""
+        """Grant all permissions to a plugin."""
         self._policies[plugin_name] = PolicySet.allow_all(plugin_name)
 
     def check(self, plugin_name: str, resource: str, action: str) -> None:
         """
-        Vérifie une permission. Lève PermissionDenied si refusé.
-        À appeler dans les services avant d'exécuter une opération.
+        verify permission and raise PermissionDenied if not allowed.
         """
         effect = self._evaluate(plugin_name, resource, action)
         self._audit(plugin_name, resource, action, effect)
@@ -71,7 +71,7 @@ class PermissionEngine:
             )
 
     def allows(self, plugin_name: str, resource: str, action: str) -> bool:
-        """Retourne True si autorisé, False sinon (pas d'exception)."""
+        """Returns True if the plugin is allowed to perform the action on the resource."""
         try:
             self.check(plugin_name, resource, action)
             return True

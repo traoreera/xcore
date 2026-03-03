@@ -1,21 +1,18 @@
 """
-policies.py — Modèle de politiques d'accès pour les plugins.
-
-Chaque plugin déclare dans son manifeste un bloc `permissions` :
-
-    permissions:
-      - resource: "db.*"
-        actions: ["read", "write"]
-        effect: allow
-      - resource: "cache.*"
-        actions: ["read"]
-        effect: allow
-      - resource: "os.*"
-        actions: ["*"]
-        effect: deny
-
-Les politiques sont évaluées dans l'ordre ; la première correspondance gagne.
-Sans règle → deny par défaut (fail-closed).
+--- Plugin Access Policy Template ---
+Each plugin declares a `permissions` block in its manifest:
+permissions:
+- resource: "db.*"
+actions: ["read", "write"]
+effect: allow
+- resource: "cache.*"
+actions: ["read"]
+effect: allow
+- resource: "os.*"
+actions: ["*"]
+effect: deny
+Policies are evaluated in order; the first match wins.
+No rule → default is deny (fail-closed).
 """
 
 from __future__ import annotations
@@ -68,8 +65,8 @@ class Policy:
 @dataclass
 class PolicySet:
     """
-    Ensemble ordonné de politiques pour un plugin.
-    Première correspondance gagne ; sinon → DENY.
+    Ordered set of policies for a plugin.
+    First match wins; otherwise → DENY.
     """
 
     plugin_name: str
@@ -91,7 +88,7 @@ class PolicySet:
 
     @classmethod
     def allow_all(cls, plugin_name: str) -> "PolicySet":
-        """Politique permissive — pour usage interne / tests uniquement."""
+        """Permissive policy — for internal use / testing only."""
         return cls(
             plugin_name=plugin_name,
             policies=[Policy(resource="*", actions=["*"], effect=PolicyEffect.ALLOW)],

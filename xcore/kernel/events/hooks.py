@@ -1,7 +1,6 @@
 """
-hooks.py — HookManager v2 (repris de hooks/hooks.py v1).
-Conserve toutes les fonctionnalités (wildcards, priorités, intercepteurs,
-métriques) mais intégré dans le kernel/events.
+hooks.py — HookManager v2 (taken from hooks/hooks.py v1).
+Retains all functionality (wildcards, priorities, interceptors, metrics) but integrated into the kernel/events.
 """
 
 from __future__ import annotations
@@ -28,6 +27,10 @@ class HookTimeoutError(HookError):
 
 @dataclass
 class Event:
+    """
+    Event dataclass for hooks events.
+    """
+
     name: str
     data: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -43,6 +46,8 @@ class Event:
 
 @dataclass
 class HookResult:
+    """Hooks results"""
+
     hook_name: str
     event_name: str
     result: Any = None
@@ -72,8 +77,8 @@ class InterceptorResult(Enum):
 
 class HookManager:
     """
-    Hook manager avec wildcards, priorités, intercepteurs et métriques.
-    Identique à la v1 mais relocalisé dans kernel/events.
+    Hook manager with wildcards, priorities, interceptors, and metrics.
+    Identical to v1 but relocated to kernel/events.
     """
 
     def __init__(self):
@@ -91,6 +96,15 @@ class HookManager:
         once: bool = False,
         timeout: Optional[float] = None,
     ) -> Callable:
+        """
+        Register a function to be called when an event is emitted.
+        Args:
+            event_name (str): The name of the event to register the function for.
+            func (Callable): The function to be called.
+            priority (int, optional): The priority of the function. Defaults to 50.
+            once (bool, optional): Whether the function should be called only once. Defaults to False.
+            timeout (Optional[float], optional): The timeout for the function. Defaults to None.
+        """
         if event_name not in self._hooks:
             self._hooks[event_name] = []
         hook_info = HookInfo(
@@ -116,6 +130,15 @@ class HookManager:
         once: bool = False,
         timeout: Optional[float] = None,
     ) -> Callable:
+        """
+        Decorator to register a function to be called when an event is emitted.
+        Args:
+            event_name (str): The name of the event to register the function for.
+            priority (int, optional): The priority of the function. Defaults to 50.
+            once (bool, optional): Whether the function should be called only once. Defaults to False.
+            timeout (Optional[float], optional): The timeout for the function. Defaults to None.
+        """
+
         def wrapper(func: Callable) -> Callable:
             self.register(event_name, func, priority, once, timeout)
             return func
@@ -125,9 +148,22 @@ class HookManager:
     def once(
         self, event_name: str, priority: int = 50, timeout: Optional[float] = None
     ) -> Callable:
+        """
+        Decorator to register a function to be called once when an event is emitted.
+        Args:
+            event_name (str): The name of the event to register the function for.
+            priority (int, optional): The priority of the function. Defaults to 50.
+            timeout (Optional[float], optional): The timeout for the function. Defaults to None.
+        """
         return self.on(event_name, priority=priority, once=True, timeout=timeout)
 
     def unregister(self, event_name: str, func: Callable) -> bool:
+        """
+        Unregister a function from an event.
+        Args:
+            event_name (str): The name of the event to unregister the function from.
+            func (Callable): The function to be unregistered.
+        """
         if event_name not in self._hooks:
             return False
         for i, h in enumerate(self._hooks[event_name]):
@@ -187,6 +223,13 @@ class HookManager:
     async def emit(
         self, event_name: str, data: Optional[Dict[str, Any]] = None, **kwargs
     ) -> List[HookResult]:
+        """
+        Emit an event.
+        Args:
+            event_name (str): The name of the event to emit.
+            data (Optional[Dict[str, Any]], optional): The data to pass to the event. Defaults to None.
+            **kwargs: Additional keyword arguments to pass to the event.
+        """
         event = Event(name=event_name, data={**(data or {}), **kwargs})
         matching = self._get_matching_hooks(event_name)
         if not matching:
@@ -230,9 +273,11 @@ class HookManager:
         )
 
     def get_metrics(self, event_name: str | None = None) -> Dict[str, Any]:
+        """Get metrics for an event or all events."""
         return self._metrics.get(event_name, {}) if event_name else self._metrics.copy()
 
     def list_hooks(self, event_name: str | None = None) -> Dict[str, List]:
+        """List all hooks for an event or all events."""
         if event_name:
             return {
                 p: [
@@ -251,6 +296,10 @@ class HookManager:
         }
 
     def clear(self, event_name: str | None = None) -> None:
+        """Clear the bus or a specific event.
+        Args:
+            event_name (str): The name of the event to clear.
+        """
         if event_name:
             self._hooks.pop(event_name, None)
         else:

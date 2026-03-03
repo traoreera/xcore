@@ -1,5 +1,5 @@
 """
-router.py — Router FastAPI unique pour tous les plugins.
+——— Router FastAPI unique pour tous les plugins.
 Construit dynamiquement à partir du PluginSupervisor.
 """
 
@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 
 class CallRequest(BaseModel):
-    """Requête de appel de plugin."""
+    """call request body."""
 
     payload: dict[str, Any] = Field(default_factory=dict)
 

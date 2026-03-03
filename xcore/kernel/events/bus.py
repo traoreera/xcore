@@ -1,16 +1,15 @@
 """
-bus.py — EventBus v2 : version consolidée (fusionné integration/core/events.py + hooks v1).
-
-Un seul bus pour les deux usages :
-  - Événements applicatifs (emit / subscribe) — async avec priorités
-  - Compatibilité avec le HookManager v1 (on / once / emit)
-
-Supprime le doublon EventBus présent dans integration/core/events.py et hooks/hooks.py.
+— EventBus v2: Consolidated version (merged integration/core/events.py + hooks v1).
+A single bus for both uses:
+- Application events (emit/subscribe) — asynchronous with priority
+- Compatibility with HookManager v1 (on/once/emit)
+Removes the duplicate EventBus present in integration/core/events.py and hooks/hooks.py.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -45,9 +44,10 @@ class _HandlerEntry:
 
 class EventBus:
     """
-    Bus d'événements asynchrone avec priorités et one-shot handlers.
+    Asynchronous event bus with priorities and one-shot handlers.
 
-    Usage:
+    Use:
+    ```python
         bus = EventBus()
 
         @bus.on("user.created")
@@ -56,8 +56,9 @@ class EventBus:
 
         await bus.emit("user.created", {"email": "alice@example.com"})
 
-        # Fire-and-forget depuis du code synchrone
+        # Fire-and-forgetwith sync emit
         bus.emit_sync("server.tick", {})
+    ```
     """
 
     def __init__(self) -> None:
@@ -68,7 +69,7 @@ class EventBus:
     def on(
         self, event_name: str, priority: int = 50, name: str | None = None
     ) -> Callable:
-        """Décorateur pour s'abonner à un événement."""
+        """decorator to subscribe to an event."""
 
         def decorator(fn: Callable) -> Callable:
             self.subscribe(event_name, fn, priority=priority, name=name)
@@ -120,10 +121,13 @@ class EventBus:
         gather: bool = True,
     ) -> list[Any]:
         """
-        Émet un événement.
-
-        gather=True  → handlers exécutés en parallèle (asyncio.gather)
-        gather=False → séquentiels, stop_propagation respecté
+        Issues an event.
+        `gather=True` → handlers executed in parallel (`asyncio.gather`)
+        `gather=False` → sequential, `stop_propagation` respected
+        eg:
+        ```python
+            await bus.emit("user.created", {"email": "alice@example.com"})
+        ```
         """
         event = Event(name=event_name, data=data or {}, source=source)
         handlers = list(self._handlers.get(event_name, []))
@@ -134,7 +138,7 @@ class EventBus:
         to_remove: list[_HandlerEntry] = []
 
         async def _call(entry: _HandlerEntry) -> Any:
-            if asyncio.iscoroutinefunction(entry.handler):
+            if inspect.iscoroutinefunction(entry.handler):
                 return await entry.handler(event)
             return entry.handler(event)
 
@@ -173,7 +177,7 @@ class EventBus:
         return results
 
     def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:
-        """Fire-and-forget depuis du code synchrone."""
+        """Fire-and-forget with sync emit."""
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self.emit(event_name, data))
@@ -183,14 +187,17 @@ class EventBus:
     # ── Introspection ─────────────────────────────────────────
 
     def list_events(self) -> dict[str, list[str]]:
+        """List all events and their handlers."""
         return {
             name: [e.name for e in entries] for name, entries in self._handlers.items()
         }
 
     def handler_count(self, event_name: str) -> int:
+        """Returns the number of handlers for an event."""
         return len(self._handlers.get(event_name, []))
 
     def clear(self, event_name: str | None = None) -> None:
+        """Clear the bus or a specific event."""
         if event_name:
             self._handlers.pop(event_name, None)
         else:

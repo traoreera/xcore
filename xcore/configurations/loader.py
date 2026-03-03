@@ -1,20 +1,19 @@
 """
-ConfigLoader v2 — charge xcore.yaml avec :
+ConfigLoader v2 — load xcore.yaml with :
   - substitution ${ENV_VAR}
-  - surcharges XCORE__SECTION__KEY=value
-  - valeurs par défaut sans aucun fichier (zero-config)
-  - clé secret_key auto-convertie bytes
+  - overloads XCORE__SECTION__KEY=value
+  - default values in xcore.yaml
+  - key secret_key automatically converted to bytes
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .helper import _resolve
 from .sections import (
     AppConfig,
     CacheConfig,
@@ -27,50 +26,10 @@ from .sections import (
     SecurityConfig,
     ServicesConfig,
     TracingConfig,
+    XcoreConfig,
 )
 
 logger = logging.getLogger("xcore.config")
-
-_ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
-
-
-# ─────────────────────────────────────────────────────────────
-# Résolution des variables d'environnement dans le YAML
-# ─────────────────────────────────────────────────────────────
-
-
-def _resolve(value: Any) -> Any:
-    """Remplace ${VAR} dans toute la structure YAML."""
-    if isinstance(value, str):
-
-        def _sub(m: re.Match) -> str:
-            var = m.group(1)
-            resolved = os.environ.get(var)
-            if resolved is None:
-                logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
-                return ""
-            return resolved
-
-        return _ENV_PATTERN.sub(_sub, value)
-    if isinstance(value, dict):
-        return {k: _resolve(v) for k, v in value.items()}
-    return [_resolve(v) for v in value] if isinstance(value, list) else value
-
-
-# ─────────────────────────────────────────────────────────────
-# Config globale
-# ─────────────────────────────────────────────────────────────
-
-
-@dataclass
-class XcoreConfig:
-    app: AppConfig = field(default_factory=AppConfig)
-    plugins: PluginConfig = field(default_factory=PluginConfig)
-    services: ServicesConfig = field(default_factory=ServicesConfig)
-    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
-    security: SecurityConfig = field(default_factory=SecurityConfig)
-    raw: dict[str, Any] = field(default_factory=dict)
-
 
 # ─────────────────────────────────────────────────────────────
 # Loader
@@ -81,18 +40,20 @@ class ConfigLoader:
     """
     Charge xcore.yaml (ou xcore.json) et expose une XcoreConfig typée.
 
-    Ordre de résolution :
-      1. Lecture YAML / JSON
-      2. Injection .env (si app.dotenv défini)
+    Resolution process:
+      1. Read YAML / JSON
+      2. Injection .env (if app.dotenv is definied)
       3. Substitution ${VAR}
-      4. Surcharges XCORE__SECTION__KEY depuis l'environnement
-      5. Parsing en dataclasses
+      4. Overloads de XCORE__SECTION__KEY from env
+      5. Parsing dataclasses
 
-    Aucun fichier → valeurs par défaut (zero-config).
+    no config -> default config not secure.
 
-    Usage:
+    Use:
+       ```python
         cfg = ConfigLoader.load()
         cfg = ConfigLoader.load("config/xcore.yaml")
+        ```
     """
 
     DEFAULT_PATHS = [
@@ -131,16 +92,16 @@ class ConfigLoader:
 
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
-                logger.info(f"Configuration chargée : {candidate}")
+                logger.info(f"conf loaded : {candidate}")
                 return data
             except ImportError:
-                logger.warning("pyyaml non installé — pip install pyyaml")
+                logger.warning("pyyaml no install — pip install pyyaml")
                 return {}
             except Exception as e:
-                logger.error(f"Impossible de lire {candidate} : {e}")
+                logger.error(f"error reading file {candidate} : {e}")
                 return {}
 
-        logger.info("Aucun fichier xcore.yaml trouvé — valeurs par défaut.")
+        logger.info("no conf file will not found. default config will be used.")
         return {}
 
     # ── .env ──────────────────────────────────────────────────
@@ -158,9 +119,9 @@ class ConfigLoader:
             from dotenv import load_dotenv
 
             load_dotenv(dotenv_path=path, override=False)
-            logger.info(f".env chargé : {path}")
+            logger.info(f".env loaded : {path}")
         except ImportError:
-            logger.warning("python-dotenv non installé — pip install python-dotenv")
+            logger.warning("python-dotenv not installed — pip install python-dotenv")
 
     # ── Surcharges ENV ────────────────────────────────────────
 
@@ -175,7 +136,7 @@ class ConfigLoader:
             target = raw
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
-            # Coercition de type
+            # Corecition de type
             if isinstance(value, str):
                 if value.lower() in ("true", "1", "yes"):
                     value = True
@@ -201,7 +162,7 @@ class ConfigLoader:
 
     @staticmethod
     def _parse_app(d: dict) -> AppConfig:
-        sk = d.get("secret_key", "change-me-in-production")
+        sk = d.get("secret_key", f"change-me-in-production")
         if isinstance(sk, str):
             sk = sk.encode()
         return AppConfig(
@@ -327,5 +288,4 @@ def get_config(path: str | Path | None = None) -> XcoreConfig:
 
 def reload_config(path: str | Path | None = None) -> XcoreConfig:
     global _config
-    _config = ConfigLoader.load(path)
-    return _config
+    return ConfigLoader.load(path)

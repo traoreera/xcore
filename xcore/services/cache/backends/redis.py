@@ -14,13 +14,15 @@ logger = logging.getLogger("xcore.services.cache.redis")
 class RedisCacheBackend:
     """
     Backend cache Redis.
-    Sérialise en JSON pour stocker n'importe quel type Python.
+    JSON serialization for all python type support.
 
     Usage:
+        ```python
         backend = RedisCacheBackend(url="redis://localhost:6379", ttl=300)
         await backend.connect()
         await backend.set("key", {"data": 1})
         value = await backend.get("key")
+        ```
     """
 
     def __init__(self, url: str, ttl: int = 300) -> None:

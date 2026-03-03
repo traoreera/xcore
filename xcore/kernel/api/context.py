@@ -1,9 +1,9 @@
 """
-context.py — Contexte riche injecté dans chaque plugin.
+Rich context injected into each plugin.
 
-PluginContext remplace le simple dict de services de la v1.
-Il donne accès aux services, à l'event bus, aux hooks,
-aux variables d'environnement et à la config du plugin.
+PluginContext replaces the simple services dictionary from v1.
+It provides access to services, the event bus, hooks, environment
+variables, and the plugin configuration.
 """
 
 from __future__ import annotations
@@ -15,15 +15,16 @@ from typing import Any
 @dataclass
 class PluginContext:
     """
-    Contexte injecté dans chaque plugin Trusted au moment du chargement.
+    Context injected into each Trusted plugin at load time.
 
-    Attributs:
-        name:     nom du plugin
-        services: dict partagé des services (BDD, cache, autres plugins…)
-        events:   EventBus — émettre/souscrire des événements
-        hooks:    HookManager — hooks prioritaires avec wildcards
-        env:      variables d'environnement résolues depuis plugin.yaml
-        config:   bloc `extra` du manifeste (config arbitraire du plugin)
+    Attributes:
+
+        name: plugin name
+        services: shared dictionary of services (database, cache, other plugins, etc.)
+        events: EventBus — emit/subscribe to events
+        hooks: HookManager — priority hooks with wildcards
+        env: environment variables resolved from plugin.yaml
+        config: `extra` block of the manifest (arbitrary plugin configuration)
     """
 
     name: str

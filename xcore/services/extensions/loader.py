@@ -1,5 +1,5 @@
 """
-loader.py — Chargeur de services tiers (extensions).
+Chargeur de services tiers (extensions).
 
 Permet de déclarer des services custom dans xcore.yaml :
 

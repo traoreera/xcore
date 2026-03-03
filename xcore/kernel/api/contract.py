@@ -1,5 +1,5 @@
 """
-contract.py — Contrats d'interface pour les plugins v2.
+Contrats d'interface pour les plugins v2.
 
 BasePlugin  : Protocol structurel (duck typing, pas d'héritage requis).
 TrustedBase : ABC avec injection de contexte riche.
@@ -33,15 +33,16 @@ class BasePlugin(Protocol):
 
 class TrustedBase(ABC):
     """
-    Classe de base optionnelle pour les plugins Trusted.
+    Base optional class for trusted plugins.
 
-    Fournit :
+    given the following access:
       - self.ctx           → PluginContext (services, events, hooks, env, config)
       - self.get_service() → accès typé à un service
       - Hooks de cycle de vie (on_load, on_unload, on_reload)
-      - get_router()       → expose des routes HTTP FastAPI custom (optionnel)
+      - get_router() or router()       → expose des routes HTTP FastAPI custom (optionnel)
 
-    Exemple avec routes custom :
+    eg with custom routes:
+    ```python
         from fastapi import APIRouter
         from xcore.sdk import TrustedBase, ok
 
@@ -66,9 +67,9 @@ class TrustedBase(ABC):
 
             async def handle(self, action: str, payload: dict) -> dict:
                 ...
-
-    Les routes sont montées automatiquement sur l'app FastAPI au boot
-    sous le préfixe /{plugin_prefix}/<plugin_name>/ + le préfixe déclaré dans get_router().
+        ```
+    Routes are automatically mounted on the FastAPI app at boot
+    under the prefix /{plugin_prefix}/<plugin_name>/ + the prefix declared in get_router().
     """
 
     def __init__(self) -> None:

@@ -29,6 +29,7 @@ class BaseService(ABC):
       - status()       → dict de métriques/état
 
     Usage dans une classe concrète :
+        ```python
         class MyService(BaseService):
             name = "my_service"
 
@@ -49,6 +50,7 @@ class BaseService(ABC):
 
             def status(self) -> dict:
                 return {"name": self.name, "status": self._status.value}
+        ```
     """
 
     name: str = "service"

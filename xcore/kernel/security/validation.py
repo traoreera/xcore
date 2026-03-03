@@ -42,7 +42,10 @@ class ManifestValidator:
 
     def load_and_validate(self, plugin_dir: Path):
         """Retourne un PluginManifest ou lève ManifestError."""
+        from xcore import __version__
+
         from ..api.contract import ExecutionMode  # import local pour éviter cycle
+        from ..api.versioning import check_compatibility
 
         plugin_dir = Path(plugin_dir).resolve()
         raw = self._read_raw(plugin_dir)
@@ -50,6 +53,8 @@ class ManifestValidator:
         for field_name in ("name", "version"):
             if not raw.get(field_name):
                 raise ManifestError(f"Champ obligatoire manquant : '{field_name}'")
+
+        check_compatibility(raw["framework_version"], __version__)
 
         raw_mode = raw.get("execution_mode", "legacy").lower()
         try:
@@ -96,7 +101,7 @@ class ManifestValidator:
 
     @staticmethod
     def _inject_dotenv(cfg: dict | None, plugin_dir: Path) -> None:
-        """FIX #4 v1 : gestion correcte du bloc envconfiguration."""
+        """FIX #4 v1 : gestion correction du bloc envconfiguration."""
         if not cfg or not cfg.get("inject", False):
             return
         env_file = cfg.get("env_file", ".env")

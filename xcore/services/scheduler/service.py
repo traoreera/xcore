@@ -1,36 +1,40 @@
 """
-service.py — Scheduler de tâches via APScheduler (asyncio).
+task Scheduler  with APScheduler (asyncio).
 
-Supporte : cron, interval, date (one-shot).
-Backend : memory (défaut), redis, database.
+Support : cron, interval, date (one-shot).
+Backend : memory (defaut), redis, database.
 
 Usage:
+    ```python
     scheduler = SchedulerService(config)
     await scheduler.init()
 
-    # Via décorateur
+    # with decorator
     @scheduler.cron("0 9 * * MON-FRI")
     async def morning_sync():
         await do_sync()
 
-    # Via appel direct
+    # with direct call
     scheduler.add_job(
         my_function,
         trigger="interval",
         seconds=30,
         id="my_job",
     )
+    ```
 
-    # Depuis la config YAML :
-    # services:
-    #   scheduler:
-    #     enabled: true
-    #     jobs:
-    #       - id: cleanup
-    #         func: myapp.tasks:cleanup
-    #         trigger: cron
-    #         hour: 3
-    #         minute: 0
+```yaml
+    # form a yaml configuration :
+    services:
+    scheduler:
+        enabled: true
+        jobs:
+        - id: cleanup
+            func: myapp.tasks:cleanup
+            trigger: cron
+            hour: 3
+            minute: 0
+    ```
 """
 
 from __future__ import annotations
@@ -60,7 +64,7 @@ class SchedulerService(BaseService):
             from apscheduler.jobstores.memory import MemoryJobStore
             from apscheduler.schedulers.asyncio import AsyncIOScheduler
         except ImportError:
-            logger.warning("APScheduler non installé — pip install apscheduler")
+            logger.warning("APScheduler not install — pip install apscheduler")
             self._status = ServiceStatus.DEGRADED
             return
 
@@ -73,7 +77,7 @@ class SchedulerService(BaseService):
 
                 jobstores["default"] = RedisJobStore()
             except ImportError:
-                logger.warning("apscheduler[redis] non installé — fallback memory")
+                logger.warning("apscheduler[redis] not install — fallback memory")
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
@@ -86,7 +90,7 @@ class SchedulerService(BaseService):
 
         self._scheduler.start()
         self._status = ServiceStatus.READY
-        logger.info(f"Scheduler démarré (timezone={self._config.timezone})")
+        logger.info(f"Scheduler started (timezone={self._config.timezone})")
 
     def _add_job_from_config(self, job_cfg: dict) -> None:
         try:
@@ -130,7 +134,7 @@ class SchedulerService(BaseService):
         )
 
     def cron(self, expression: str, job_id: str | None = None) -> Callable:
-        """Décorateur @scheduler.cron("0 * * * *")"""
+        """Décorator @scheduler.cron("0 * * * *")"""
 
         def decorator(fn: Callable) -> Callable:
             parts = expression.split()
@@ -153,7 +157,7 @@ class SchedulerService(BaseService):
         return decorator
 
     def interval(self, **kwargs) -> Callable:
-        """Décorateur @scheduler.interval(seconds=30)"""
+        """Décorator @scheduler.interval(seconds=30)"""
 
         def decorator(fn: Callable) -> Callable:
             self.add_job(fn, "interval", job_id=fn.__name__, **kwargs)
