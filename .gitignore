@@ -45,3 +45,4 @@ CLAUDE.md
 _build
 site
 plugins
+orchestra.db

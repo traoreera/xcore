@@ -126,10 +126,10 @@ def build_router(
     async def plugins_status() -> dict[str, Any]:
         return supervisor.status()
 
-    @router.post("/{plugin_name}/reload")
+    @router.get("/{plugin_name}/reload")
     async def reload_plugin(plugin_name: str) -> dict[str, str]:
         await supervisor.reload(plugin_name)
-        return {"status": "ok", "msg": f"Plugin '{plugin_name}' reloaded"}
+        return {}
 
     @router.post("/{plugin_name}/load")
     async def load_plugin(plugin_name: str) -> dict[str, str]:

@@ -54,16 +54,16 @@ class ManifestValidator:
             if not raw.get(field_name):
                 raise ManifestError(f"Champ obligatoire manquant : '{field_name}'")
 
-        check_compatibility(raw["framework_version"], __version__)
+        check_compatibility(raw.get("framework_version", ">=2.0"), __version__)
 
         raw_mode = raw.get("execution_mode", "legacy").lower()
         try:
             mode = ExecutionMode(raw_mode)
-        except ValueError:
+        except ValueError as e:
             raise ManifestError(
                 f"execution_mode invalide : {raw_mode!r}. "
                 f"Valeurs : {[m.value for m in ExecutionMode]}"
-            )
+            ) from e
 
         # Injection dotenv si demandé
         self._inject_dotenv(raw.get("envconfiguration"), plugin_dir)

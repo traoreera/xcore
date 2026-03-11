@@ -51,6 +51,7 @@ sqlalchemy = ">=2.0.41,<3.0.0"
 fastapi = "^0.118.2"
 aiocache = "^0.12.3"
 redis = {extras = ["hiredis"], version = "^7.0.0"}
+pyyaml = "^6.0.3"
 
 
 [tool.poetry.group.dev.dependencies]

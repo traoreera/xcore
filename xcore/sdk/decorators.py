@@ -102,7 +102,7 @@ def validate_payload(schema: Type[BaseModel]):
             try:
                 validate = schema(**payload)
             except ValidationError as e:
-                return error(e.error(), "validation_error")
+                return error(e.errors(), "validation_error")
             return await fn(self, validate, *args, **kwargs)
 
         return warpper
