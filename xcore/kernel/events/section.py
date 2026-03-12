@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from enum import Enum
-from typing import Any, Callable, NamedTuple, Optional
+from typing import Any, Callable, NamedTuple, Optional, Dict
 
 
 from dataclasses import dataclass, field
@@ -9,19 +9,18 @@ from typing import Any
 
 @dataclass
 class Event:
-    """Évent struct for handlers."""
-
     name: str
-    data: dict[str, Any] = field(default_factory=dict)
+    payload: dict
     source: str | None = None
     propagate: bool = True
-    cancelled: bool = False
 
-    def stop(self) -> None:
+    # compat legacy
+    metadata: dict | None = None
+    stop_propagation: bool = False
+
+    def stop(self):
         self.propagate = False
-
-    def cancel(self) -> None:
-        self.cancelled = True
+        self.stop_propagation = True
 
 
 @dataclass

@@ -95,9 +95,30 @@ class PluginDependency:
     def __eq__(self, other: object) -> bool:
         if isinstance(other, PluginDependency):
             return self.name == other.name
-        if isinstance(other, str):
-            return self.name == other
-        return False
+        return self.name == other if isinstance(other, str) else False
+    @classmethod
+    def from_raw(cls, raw: str | dict) -> "PluginDependency":
+        """
+        Convertit un élément YAML de `requires` en PluginDependency.
+
+        Formats supportés:
+            - "plugin_name"
+            - {name: plugin_name}
+            - {name: plugin_name, version: ">=1.0,<2.0"}
+        """
+
+        if isinstance(raw, str):
+            return cls(name=raw, version_constraint="*")
+
+        if isinstance(raw, dict):
+            name = raw.get("name")
+            if not name:
+                raise ValueError("Plugin dependency requires a 'name' field")
+
+            version = raw.get("version", "*")
+            return cls(name=name, version_constraint=version)
+
+        raise TypeError(f"Invalid dependency format: {raw}")
 
 
 class VersionConstraint:
@@ -127,7 +148,11 @@ class VersionConstraint:
     def _to_tuple(self, version: str) -> tuple[int, ...]:
         """Convertit '1.2.3' en (1, 2, 3)."""
         parts = version.lstrip("vV").split(".")
-        return tuple(int(p) for p in parts if p.isdigit())
+        nums = [int(p) for p in parts if p.isdigit()]
+        while len(nums) < 3:
+            nums.append(0)
+        return tuple(nums)
+    
 
     def matches(self, version: str) -> bool:
         """Vérifie si 'version' satisfait cette contrainte."""
@@ -146,13 +171,13 @@ class VersionConstraint:
                 return False
             if op == "<" and not (target < spec):
                 return False
-            if op == "^":  # Compatible avec version (semver caret)
+            if op == "^":
                 # ^1.2.3 := >=1.2.3,<2.0.0
                 if not (target >= spec):
                     return False
                 if target[0] != spec[0]:
                     return False
-            if op == "~":  # Approximativement équivalent (semver tilde)
+            elif op == "~":
                 # ~1.2.3 := >=1.2.3,<1.3.0
                 if not (target >= spec):
                     return False

@@ -100,7 +100,7 @@ class EventBus:
         """
         Issues an event.
         `gather=True` → handlers executed in parallel (`asyncio.gather`)
-        `gather=False` → sequential, `stop_propagation` respected
+        `gather=False` → sequential, `propagate` respected
         eg:
         ```python
             await bus.emit("user.created", {"email": "alice@example.com"})
