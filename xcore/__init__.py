@@ -21,7 +21,7 @@ from .__version__ import __version__
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
-from .kernel.observability.logging import get_logger
+from .kernel.observability.logging import get_logger, configure_logging
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor
@@ -96,6 +96,8 @@ class Xcore:
 
     async def boot(self, app=None) -> "Xcore":
         """Démarre tous les sous-systèmes dans le bon ordre."""
+
+        configure_logging(self._config.observability.logging)
         if self._booted:
             return self
 
@@ -162,6 +164,7 @@ class Xcore:
         system_router = build_router(
             supervisor=self.plugins,
             secret_key=self._config.app.secret_key,
+            server_key=self._config.app.server_key,
             prefix=self._config.app.plugin_prefix,
             tags=(self._config.app.plugin_tags or []) + (tags or []),
         )
@@ -186,7 +189,7 @@ class Xcore:
             n_routes = len(getattr(plugin_router, "routes", []))
             self._logger.info(
                 f"[{plugin_name}] 🌐 {n_routes} route(s) montée(s) "
-                f"sous /plugins/{plugin_name}"
+                f"sous {wrapper.prefix}"
             )
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI
