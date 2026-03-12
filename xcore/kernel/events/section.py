@@ -10,8 +10,9 @@ from typing import Any
 @dataclass
 class Event:
     name: str
-    payload: dict
+    payload: dict = field(default_factory=dict)
     source: str | None = None
+    data: dict = field(default_factory=dict)
 
     propagate: bool = True
     cancelled: bool = False

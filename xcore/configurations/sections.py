@@ -17,6 +17,8 @@ class AppConfig:
     secret_key: bytes = b"change-me-in-production"
     plugin_prefix: str = "/plugin"
     plugin_tags: list[str] = field(default_factory=list)
+    server_key: bytes | None = None
+    server_key_iterations: int = None
 
 
 @dataclass

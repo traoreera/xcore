@@ -37,17 +37,42 @@ _api_key_header = APIKeyHeader(
 )
 
 
-def _hash_key(key: Optional[str | bytes]) -> bytes:
-    """Hash SHA256 de la clé API."""
-    if isinstance(key, bytes):
-        return hashlib.sha256(key.decode("utf-8").encode("utf-8")).digest()
+import hashlib
+from typing import Optional
+
+
+def _hash_key(
+    key: Optional[str | bytes],
+    server_key: Optional[str | bytes],
+    server_key_iterations: int = 100000,
+) -> bytes:
+
+    if key is None:
+        key_bytes = b""
+    elif isinstance(key, bytes):
+        key_bytes = key
     else:
-        return hashlib.sha256(key.encode("utf-8")).digest()
+        key_bytes = key.encode("utf-8")
+
+    if server_key is None:
+        raise ValueError("server_key cannot be None")
+
+    if isinstance(server_key, str):
+        server_key = server_key.encode("utf-8")
+
+    return hashlib.pbkdf2_hmac(
+        hash_name="sha256",
+        password=key_bytes,
+        salt=server_key,
+        iterations=server_key_iterations,
+    )
 
 
 def build_router(
     supervisor,
-    secret_key: str,  # ← on passe en str, pas bytes
+    secret_key: bytes,  # ← on passe en str, pas bytes
+    server_key: bytes,
+    server_key_iterations:int = 100000,
     prefix: str = "",
     tags: list[str] | None = None,
     **kwargs,
@@ -59,7 +84,7 @@ def build_router(
     tags = tags or []
 
     # On hash une seule fois au démarrage
-    stored_hash = _hash_key(secret_key)
+    stored_hash = _hash_key(secret_key, server_key, server_key_iterations)
 
     async def verify_api_key(
         api_key: str | None = Security(_api_key_header),
@@ -71,7 +96,7 @@ def build_router(
                 detail="API key missing",
             )
 
-        incoming_hash = _hash_key(api_key)
+        incoming_hash = _hash_key(api_key, server_key, server_key_iterations)
 
         # Comparaison sécurisée anti timing attack
         if not hmac.compare_digest(incoming_hash, stored_hash):

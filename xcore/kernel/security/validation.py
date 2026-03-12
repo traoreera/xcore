@@ -232,6 +232,9 @@ DEFAULT_ALLOWED = {
     "base64",
     "asyncio",
     "logging",
+    "__future__",
+    "xcore",
+    "xcore.sdk.*",
 }
 
 
@@ -298,6 +301,7 @@ class ASTScanner:
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
+            path=path
         )
         visitor.visit(tree)
         for e in visitor.errors:
@@ -309,22 +313,23 @@ class ASTScanner:
 
 
 class _ImportVisitor(ast.NodeVisitor):
-    def __init__(self, forbidden, allowed, filename):
+    def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
         self.filename = filename
         self.errors: list[str] = []
         self.warnings: list[str] = []
+        self.path:Path  = path
 
     def _check(self, module: str, lineno: int) -> None:
         root = module.split(".")[0]
         if root in self.forbidden:
             self.errors.append(
-                f"{self.filename}:{lineno}: import interdit : {module!r}"
+                f"{self.path}:{lineno}: import interdit : {module!r}"
             )
         elif root not in self.allowed:
             self.warnings.append(
-                f"{self.filename}:{lineno}: import non whitelisté : {module!r}"
+                f"{self.path}:{lineno}: import non whitelisté : {module!r}"
             )
 
     def visit_Import(self, node: ast.Import) -> None:
