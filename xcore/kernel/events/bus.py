@@ -6,40 +6,17 @@ A single bus for both uses:
 Removes the duplicate EventBus present in integration/core/events.py and hooks/hooks.py.
 """
 
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
-from dataclasses import dataclass, field
 from typing import Any, Callable
+from .section  import Event, _HandlerEntry
 
 logger = logging.getLogger("xcore.events.bus")
-
-
-@dataclass
-class Event:
-    """Événement structuré passé aux handlers."""
-
-    name: str
-    data: dict[str, Any] = field(default_factory=dict)
-    source: str | None = None
-    propagate: bool = True
-    cancelled: bool = False
-
-    def stop(self) -> None:
-        self.propagate = False
-
-    def cancel(self) -> None:
-        self.cancelled = True
-
-
-@dataclass
-class _HandlerEntry:
-    handler: Callable
-    priority: int = 50
-    once: bool = False
-    name: str = ""
 
 
 class EventBus:
@@ -169,11 +146,8 @@ class EventBus:
 
         for entry in to_remove:
             if event_name in self._handlers:
-                try:
+                with contextlib.suppress(ValueError):
                     self._handlers[event_name].remove(entry)
-                except ValueError:
-                    pass
-
         return results
 
     def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:

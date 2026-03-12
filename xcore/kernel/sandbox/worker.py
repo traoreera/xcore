@@ -104,11 +104,16 @@ class FilesystemGuard:
         return False
 
     def install(self) -> None:
-        """Installe le guard en remplaçant builtins.open et pathlib.Path.open."""
+        """Installe le guard en remplaçant builtins.open, os.open, io.open, etc."""
         import builtins
+        import os
+        import io
 
         guard = self
         _real_open = builtins.open
+        _real_os_open = os.open
+        _real_io_open = io.open
+        _real_fileio = io.FileIO
 
         def _guarded_open(file, mode="r", *args, **kwargs):
             # Autoriser stdin/stdout/stderr (int file descriptors)
@@ -123,6 +128,30 @@ class FilesystemGuard:
 
         builtins.open = _guarded_open
 
+        # Patch os.open (accès syscall direct)
+        def _guarded_os_open(path, flags, mode=0o777, *, dir_fd=None):
+            if not guard.is_allowed(path):
+                raise PermissionError(
+                    f"[sandbox] Accès fichier refusé (os.open) : '{path}'"
+                )
+            return _real_os_open(path, flags, mode, dir_fd=dir_fd)
+
+        os.open = _guarded_os_open
+
+        # Patch io.open (alias de builtins.open mais peut être importé directement)
+        io.open = _guarded_open
+
+        # Patch io.FileIO (classe de bas niveau pour les fichiers binaires)
+        class _GuardedFileIO(_real_fileio):
+            def __init__(self, file, *args, **kwargs):
+                if isinstance(file, (str, os.PathLike)) and not guard.is_allowed(file):
+                    raise PermissionError(
+                        f"[sandbox] Accès fichier refusé (FileIO) : '{file}'"
+                    )
+                super().__init__(file, *args, **kwargs)
+
+        io.FileIO = _GuardedFileIO
+
         # Patch pathlib.Path.open également
         from pathlib import Path as _Path
         _real_path_open = _Path.open
@@ -136,6 +165,19 @@ class FilesystemGuard:
             return _real_path_open(self_path, mode, *args, **kwargs)
 
         _Path.open = _guarded_path_open
+
+        # Bloquer ctypes (accès direct à la mémoire/libc)
+        try:
+            import ctypes
+            ctypes._real_load_library = ctypes.CDLL if hasattr(ctypes, 'CDLL') else None
+
+            def _blocked_ctypes(*args, **kwargs):
+                raise PermissionError("[sandbox] ctypes interdit dans le sandbox")
+
+            ctypes.CDLL = _blocked_ctypes
+            ctypes.cdll = _blocked_ctypes
+        except ImportError:
+            pass
 
         logger.debug(
             f"FilesystemGuard installé — "

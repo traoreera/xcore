@@ -10,10 +10,8 @@ import fnmatch
 import inspect
 import logging
 import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
-
+from typing import Any, Callable, Dict, List,Optional, Tuple
+from .section import Event, HookResult, HookInfo, InterceptorResult
 logger = logging.getLogger("xcore.events.hooks")
 
 
@@ -23,56 +21,6 @@ class HookError(Exception):
 
 class HookTimeoutError(HookError):
     pass
-
-
-@dataclass
-class Event:
-    """
-    Event dataclass for hooks events.
-    """
-
-    name: str
-    data: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    cancelled: bool = False
-    stop_propagation: bool = False
-
-    def cancel(self) -> None:
-        self.cancelled = True
-
-    def stop(self) -> None:
-        self.stop_propagation = True
-
-
-@dataclass
-class HookResult:
-    """Hooks results"""
-
-    hook_name: str
-    event_name: str
-    result: Any = None
-    error: Optional[Exception] = None
-    execution_time_ms: float = 0.0
-    cancelled: bool = False
-    skipped: bool = False
-
-    @property
-    def success(self) -> bool:
-        return self.error is None and not self.cancelled and not self.skipped
-
-
-class HookInfo(NamedTuple):
-    func: Callable
-    priority: int
-    once: bool
-    timeout: Optional[float]
-    created_at: float
-
-
-class InterceptorResult(Enum):
-    CONTINUE = "continue"
-    SKIP = "skip"
-    CANCEL = "cancel"
 
 
 class HookManager:

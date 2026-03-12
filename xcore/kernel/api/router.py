@@ -53,7 +53,7 @@ def build_router(
     **kwargs,
 ) -> APIRouter:
     """
-    Construit le router en capturant le supervisor.
+    Build the router by capturing the supervisor.
     """
 
     tags = tags or []
@@ -126,10 +126,10 @@ def build_router(
     async def plugins_status() -> dict[str, Any]:
         return supervisor.status()
 
-    @router.get("/{plugin_name}/reload")
+    @router.post("/{plugin_name}/reload")
     async def reload_plugin(plugin_name: str) -> dict[str, str]:
         await supervisor.reload(plugin_name)
-        return {}
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' reloaded"}
 
     @router.post("/{plugin_name}/load")
     async def load_plugin(plugin_name: str) -> dict[str, str]:

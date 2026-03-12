@@ -39,8 +39,8 @@ class PluginContext:
         svc = self.services.get(name)
         if svc is None:
             raise KeyError(
-                f"[{self.name}] Service '{name}' indisponible. "
-                f"Disponibles : {sorted(self.services.keys())}"
+                f"[{self.name}] Service '{name}' unavailable. "
+                f"available : {sorted(self.services.keys())}"
             )
         return svc
 

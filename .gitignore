@@ -46,3 +46,6 @@ _build
 site
 plugins
 orchestra.db
+analyse.md
+.coverage
+coverage.*

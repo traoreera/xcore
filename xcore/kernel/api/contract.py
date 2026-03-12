@@ -1,10 +1,8 @@
 """
-Contrats d'interface pour les plugins v2.
-
-BasePlugin  : Protocol structurel (duck typing, pas d'héritage requis).
-TrustedBase : ABC avec injection de contexte riche.
-ExecutionMode : enum des modes d'exécution.
-"""
+Interface contracts for v2 plugins.
+BasePlugin: Structural protocol (duck typing, no inheritance required).
+TrustedBase: ABC with rich context injection.
+ExecutionMode: Enum of execution modes."""
 
 from __future__ import annotations
 
@@ -22,10 +20,9 @@ class ExecutionMode(str, Enum):
 @runtime_checkable
 class BasePlugin(Protocol):
     """
-    Contrat minimal. Duck typing — pas besoin d'hériter.
-
-    Le plugin doit exposer :
-        async def handle(self, action: str, payload: dict) -> dict
+    Minimal contract. Duck typing — no need for inheritance.
+    The plugin must expose:
+    async def handle(self, action: str, payload: dict) -> dict
     """
 
     async def handle(self, action: str, payload: dict) -> dict: ...
@@ -76,14 +73,14 @@ class TrustedBase(ABC):
         self.ctx: Any = None  # injecté par LifecycleManager._inject_context()
 
     async def _inject_context(self, ctx: Any) -> None:
-        """Appelé par le framework — ne pas overrider sauf raison valable."""
+        """Called by the framework — do not override unless there is a valid reason."""
         self.ctx = ctx
         # Rétro-compatibilité v1 : expose _services directement
         self._services = ctx.services if ctx else {}
 
     def get_service(self, name: str) -> Any:
         if self.ctx is None:
-            raise RuntimeError("Contexte non injecté — plugin non encore chargé.")
+            raise RuntimeError("Context not injected — plugin not yet loaded.")
         svc = self.ctx.services.get(name)
         if svc is None:
             raise KeyError(
@@ -94,21 +91,19 @@ class TrustedBase(ABC):
 
     def get_router(self) -> "Any | None":
         """
-        Override cette méthode pour exposer des routes HTTP FastAPI custom.
+        Override this method to expose custom FastAPI HTTP routes.
+        Returns an APIRouter or None (default = no custom routes).
+        The router is automatically mounted under /plugins/<name>/<your_prefix>.
 
-        Retourne un APIRouter ou None (défaut = pas de routes custom).
-        Le router est monté automatiquement sous /plugins/<name>/<ton_prefix>.
-
-        Exemple:
-            def get_router(self):
-                from fastapi import APIRouter
-                router = APIRouter(prefix="/items", tags=["items"])
-
-                @router.get("/")
-                async def list_items():
-                    return [...]
-
-                return router
+        Example:
+        ```python
+        def get_router(self):
+            from fastapi import APIRouter
+            router = APIRouter(prefix="/items", tags=["items"])
+            @router.get("/")
+            async def list_items():
+            return router
+        ```
         """
         return None
 
@@ -125,12 +120,12 @@ class TrustedBase(ABC):
 
 
 def ok(data: dict | None = None, **kwargs) -> dict:
-    """Construit une réponse succès."""
+    """Build success response"""
     return {"status": "ok", **(data or {}), **kwargs}
 
 
 def error(msg: str, code: str | None = None, **kwargs) -> dict:
-    """Construit une réponse erreur."""
+    """Build error response."""
     r = {"status": "error", "msg": msg}
     if code:
         r["code"] = code

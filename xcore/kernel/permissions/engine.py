@@ -47,7 +47,6 @@ class PermissionEngine:
     ) -> None:
         """load policies from manifest"""
         if not raw_permissions:
-            # Sans policies déclarées → deny all (fail-closed) @/TODO: fix this
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
             logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
         else:
@@ -102,9 +101,7 @@ class PermissionEngine:
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
         log = (
-            self._audit_log
-            if not plugin_name
-            else [e for e in self._audit_log if e["plugin"] == plugin_name]
+            [e for e in self._audit_log if e["plugin"] == plugin_name] if plugin_name else self._audit_log
         )
         return log[-limit:]
 

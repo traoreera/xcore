@@ -74,6 +74,9 @@ class PluginSupervisor:
         # Chargement des permissions pour chaque plugin chargé
         self._load_permissions(report["loaded"])
 
+        # Enregistrement des rate limits
+        self._register_rate_limits(report["loaded"])
+
         # Enregistrement dans le registry si disponible
         if self._registry:
             for name in report["loaded"]:
@@ -81,6 +84,25 @@ class PluginSupervisor:
 
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
+
+    def _register_rate_limits(self, plugin_names: list[str]) -> None:
+        """Enregistre les rate limits de chaque plugin dans le RateLimiterRegistry."""
+        from ..sandbox.limits import RateLimitConfig as LimitsRateLimitConfig
+
+        for name in plugin_names:
+            try:
+                handler = self._loader.get(name)
+                manifest = getattr(handler, "manifest", None)
+                if manifest and hasattr(manifest, "resources"):
+                    rl = manifest.resources.rate_limit
+                    config = LimitsRateLimitConfig(
+                        calls=rl.calls,
+                        period_seconds=rl.period_seconds,
+                    )
+                    self._rate.register(name, config)
+                    logger.debug(f"[{name}] Rate limit : {rl.calls}/{rl.period_seconds}s")
+            except Exception as e:
+                logger.error(f"[{name}] Erreur enregistrement rate limit : {e}")
 
     def _load_permissions(self, plugin_names: list[str]) -> None:
         """Charge les policies de chaque plugin dans le PermissionEngine."""
@@ -186,6 +208,7 @@ class PluginSupervisor:
         if self._loader:
             await self._loader.load(plugin_name)
             self._load_permissions([plugin_name])
+            self._register_rate_limits([plugin_name])
 
     async def reload(self, plugin_name: str) -> None:
         if self._loader:

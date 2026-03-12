@@ -1,26 +1,3 @@
-# ══════════════════════════════════════════════════════════════════
-# xcore.yaml — Configuration PRODUCTION
-# ══════════════════════════════════════════════════════════════════
-#
-# Toutes les valeurs sensibles sont lues depuis l'environnement.
-# Ne jamais committer de secrets dans ce fichier.
-#
-# Variables d'environnement requises :
-#   APP_SECRET_KEY        → clé secrète applicative (min 32 chars)
-#   PLUGIN_SECRET_KEY     → clé de signature des plugins Trusted
-#   DATABASE_URL          → ex: postgresql+psycopg2://user:pass@host:5432/db
-#   REDIS_URL             → ex: redis://:password@host:6379/0
-#
-# Variables optionnelles :
-#   SENTRY_DSN            → si observability.tracing activé
-#   SMTP_HOST / SMTP_USER / SMTP_PASSWORD  → si extension email déclarée
-#
-# Lancement :
-#   XCORE_CONFIG=xcore.yaml uvicorn app:app --workers 4
-# ══════════════════════════════════════════════════════════════════
-
-
-# ── Application ───────────────────────────────────────────────
 app:
   name: my-app
   env: production
@@ -115,9 +92,10 @@ services:
 observability:
 
   logging:
-    level: WARNING          # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    enabled: true
+    level: DEBUG          # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
-    file: /var/log/xcore/app.log
+    file: /app.log
     max_bytes: 52428800     # 50 MB par fichier
     backup_count: 10        # 10 fichiers de rotation = 500 MB max
 
@@ -187,3 +165,10 @@ security:
   rate_limit_default:
     calls: 200
     period_seconds: 60
+
+
+marketplace:
+  url: http://localhost:8000/marketplace
+  api_key: ${XCORE_MARKETPLACE_KEY}
+  timeout: 10
+  cache_ttl: 300

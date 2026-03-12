@@ -1,6 +1,7 @@
-from .bus import Event, EventBus
+from .bus import EventBus
+from .section import Event, HookResult
 from .dispatcher import EventDispatcher
-from .hooks import HookManager, HookResult, HookTimeoutError
+from .hooks import HookManager, HookTimeoutError
 
 __all__ = [
     "EventBus",
