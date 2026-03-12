@@ -36,4 +36,4 @@ def configure_logging(cfg: "LoggingConfig") -> None:
 
 def get_logger(name: str) -> logging.Logger:
     """RETURN LOGGER FOR XCORE MODULE."""
-    return logging.getLogger(f"xcore.{name}" if not name.startswith("xcore") else name)
+    return logging.getLogger(name if name.startswith("xcore") else f"xcore.{name}")

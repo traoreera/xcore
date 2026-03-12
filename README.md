@@ -6,7 +6,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.118+-green.svg)](https://fastapi.tiangolo.com/)
 
 **XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
-S## 🏗️ Architecture Overview
+
+## 🏗️ Architecture Overview
 
 XCore follows a "minimal core" philosophy where most features are provided via plugins or shared services.
 
@@ -52,6 +53,10 @@ flowchart TB
    ```bash
    make run-dev
    ```
+### or use pip to install and use it
+    ```bash
+        uv add https://github.com/traoreera/xcore
+    ```
 
 ---
 
@@ -151,5 +156,5 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ---
 
 <p align="center">
-  Built with ❤️ by <b>Eliezer Traore</b>
+  Built with ❤️ by <b>Xcore team's</b>
 </p>

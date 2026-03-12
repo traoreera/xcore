@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from xcore.sdk.plugin_base import PluginDependency
+
 # ─────────────────────────────────────────────────────────────
 # Manifest
 # ─────────────────────────────────────────────────────────────
@@ -71,9 +73,17 @@ class ManifestValidator:
         # Résolution des ${VAR}
         resolved_env = {k: _resolve_env(v) for k, v in raw.get("env", {}).items()}
 
-        requires = raw.get("requires", []) or []
-        if not isinstance(requires, list):
+        # Parse des dépendances avec version
+        requires_raw = raw.get("requires", []) or []
+        if not isinstance(requires_raw, list):
             raise ManifestError("'requires' doit être une liste")
+
+        requires = []
+        for dep in requires_raw:
+            try:
+                requires.append(PluginDependency.from_raw(dep))
+            except ValueError as e:
+                raise ManifestError(f"Dépendance invalide: {e}") from e
 
         return _build_manifest(raw, mode, resolved_env, requires, plugin_dir)
 
@@ -133,7 +143,7 @@ def _build_manifest(
 class _SimpleManifest:
     """Manifeste minimal quand le SDK complet n'est pas disponible."""
 
-    def __init__(self, raw, mode, env, requires, plugin_dir):
+    def __init__(self, raw, mode, env, requires: list, plugin_dir):
         self.name = str(raw["name"])
         self.version = str(raw["version"])
         self.execution_mode = mode
@@ -143,7 +153,11 @@ class _SimpleManifest:
         self.entry_point = raw.get("entry_point", "src/main.py")
         self.allowed_imports = raw.get("allowed_imports", [])
         self.env = env
-        self.requires = requires
+        # Convertit les dépendances en PluginDependency si ce sont des strings
+        self.requires = [
+            dep if isinstance(dep, PluginDependency) else PluginDependency.from_raw(dep)
+            for dep in requires
+        ]
         self.plugin_dir = plugin_dir
         self.extra = {}
 

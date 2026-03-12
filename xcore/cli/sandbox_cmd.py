@@ -1,0 +1,254 @@
+"""
+sandbox_cmd.py — Handlers des commandes `xcore sandbox *`.
+
+xcore sandbox run     <name>   → Lance un plugin en mode sandboxed isolé
+xcore sandbox limits  <name>   → Affiche les limites ressources déclarées
+xcore sandbox network <name>   → Affiche la politique réseau
+xcore sandbox fs      <name>   → Affiche la politique filesystem
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def _load_config(args):
+    from xcore.configurations.loader import ConfigLoader
+    return ConfigLoader.load(getattr(args, "config", None))
+
+
+def _load_manifest(plugin_dir: Path):
+    from xcore.kernel.security.validation import ManifestValidator
+    return ManifestValidator().load_and_validate(plugin_dir)
+
+
+async def handle_sandbox(args) -> None:
+    sub = getattr(args, "subcommand", None)
+    dispatch = {
+        "run":     _sandbox_run,
+        "limits":  _sandbox_limits,
+        "network": _sandbox_network,
+        "fs":      _sandbox_fs,
+    }
+    handler = dispatch.get(sub)
+    if handler:
+        await handler(args)
+    else:
+        print("Usage : xcore sandbox <run|limits|network|fs> <plugin_name>")
+
+
+# ── run ───────────────────────────────────────────────────────
+
+async def _sandbox_run(args) -> None:
+    """
+    Lance un plugin en mode sandbox isolé (subprocess) et attend un appel ping
+    pour confirmer qu'il est opérationnel.
+    """
+    cfg = _load_config(args)
+    name = args.name
+    plugin_dir = Path(cfg.plugins.directory) / name
+
+    if not plugin_dir.is_dir():
+        print(f"❌  Plugin '{name}' introuvable : {plugin_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        manifest = _load_manifest(plugin_dir)
+    except Exception as e:
+        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        sys.exit(1)
+
+    from xcore.kernel.sandbox.process_manager import SandboxConfig, SandboxProcessManager
+
+    print(f"🚀  Lancement sandbox : {name}")
+    print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
+    print(f"    timeout     : {manifest.resources.timeout_seconds}s")
+
+    config = SandboxConfig(
+        timeout=manifest.resources.timeout_seconds,
+        max_restarts=manifest.runtime.retry.max_attempts,
+        startup_timeout=5.0,
+    )
+    mgr = SandboxProcessManager(manifest, config)
+
+    try:
+        await mgr.start()
+        status = mgr.status()
+        print(f"✅  Sandbox démarré")
+        print(f"    PID   : {status['pid']}")
+        print(f"    État  : {status['state']}")
+        print(f"    Disque: {status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB")
+
+        # Ping de confirmation
+        from xcore.kernel.sandbox.ipc import IPCChannel
+        resp = await mgr._channel.call("ping", {})
+        if resp.success:
+            print(f"✅  Ping OK — plugin opérationnel")
+        else:
+            print(f"⚠️   Ping échoué : {resp.data}")
+
+    except Exception as e:
+        print(f"❌  Échec démarrage sandbox : {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        await mgr.stop()
+        print(f"🛑  Sandbox arrêté.")
+
+
+# ── limits ────────────────────────────────────────────────────
+
+async def _sandbox_limits(args) -> None:
+    """Affiche les limites ressources déclarées dans le manifeste."""
+    cfg = _load_config(args)
+    name = args.name
+    plugin_dir = Path(cfg.plugins.directory) / name
+
+    if not plugin_dir.is_dir():
+        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        manifest = _load_manifest(plugin_dir)
+    except Exception as e:
+        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        sys.exit(1)
+
+    r = manifest.resources
+    rt = manifest.runtime
+
+    print(f"\n{'='*45}")
+    print(f"  Limites ressources : {name}")
+    print(f"{'='*45}")
+    print(f"  Mémoire max      : {r.max_memory_mb} MB")
+    print(f"  Disque max       : {r.max_disk_mb} MB")
+    print(f"  Timeout appel    : {r.timeout_seconds} s")
+    print(f"  Rate limit       : {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s")
+    print(f"\n  Runtime :")
+    print(f"  Health check     : {'activé' if rt.health_check.enabled else 'désactivé'}")
+    if rt.health_check.enabled:
+        print(f"    intervalle     : {rt.health_check.interval_seconds}s")
+        print(f"    timeout        : {rt.health_check.timeout_seconds}s")
+    print(f"  Retry            : {rt.retry.max_attempts} tentative(s)")
+    if rt.retry.max_attempts > 1:
+        print(f"    backoff        : {rt.retry.backoff_seconds}s")
+    print(f"{'='*45}\n")
+
+    # Vérifie le disque actuel si le plugin est installé
+    data_dir = plugin_dir / "data"
+    if data_dir.exists():
+        from xcore.kernel.sandbox.isolation import DiskWatcher
+        watcher = DiskWatcher(data_dir, r.max_disk_mb)
+        stats = watcher.stats()
+        symbol = "✅" if stats["ok"] else "❌"
+        print(f"  Disque actuel    : {stats['used_mb']}MB / {stats['max_mb']}MB ({stats['used_pct']}%) {symbol}")
+
+
+# ── network ───────────────────────────────────────────────────
+
+async def _sandbox_network(args) -> None:
+    """
+    Affiche la politique réseau du plugin.
+    Note : le blocage réseau actif nécessite un OS supportant les namespaces
+    (Linux uniquement). Cette commande affiche l'état déclaré et détecte
+    si le plugin tente des imports réseau via l'AST scan.
+    """
+    cfg = _load_config(args)
+    name = args.name
+    plugin_dir = Path(cfg.plugins.directory) / name
+
+    if not plugin_dir.is_dir():
+        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        manifest = _load_manifest(plugin_dir)
+    except Exception as e:
+        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n{'='*45}")
+    print(f"  Politique réseau : {name}")
+    print(f"{'='*45}")
+
+    # Imports réseau interdits par défaut dans le scanner AST
+    NETWORK_IMPORTS = {
+        "socket", "ssl", "http", "urllib", "httpx",
+        "requests", "aiohttp", "websockets",
+    }
+
+    from xcore.kernel.security.validation import ASTScanner
+    scanner = ASTScanner()
+    result = scanner.scan(plugin_dir, whitelist=manifest.allowed_imports)
+
+    # Vérifie si des imports réseau sont dans la whitelist du plugin
+    allowed_network = [i for i in manifest.allowed_imports if i in NETWORK_IMPORTS]
+    blocked_by_ast = [
+        e for e in result.errors
+        if any(net in e for net in NETWORK_IMPORTS)
+    ]
+
+    if allowed_network:
+        print(f"  ⚠️   Imports réseau autorisés (whitelist) : {allowed_network}")
+    else:
+        print(f"  ✅  Aucun import réseau autorisé")
+
+    if blocked_by_ast:
+        print(f"  ❌  Imports réseau détectés et bloqués par AST scan :")
+        for b in blocked_by_ast:
+            print(f"       {b}")
+    else:
+        print(f"  ✅  Aucun import réseau détecté dans le code")
+
+    print(f"\n  Note : isolation réseau OS (namespaces) — Linux uniquement.")
+    print(f"  Pour une isolation complète, utilisez un conteneur Docker.")
+    print(f"{'='*45}\n")
+
+
+# ── fs ────────────────────────────────────────────────────────
+
+async def _sandbox_fs(args) -> None:
+    """Affiche et valide la politique filesystem du plugin."""
+    cfg = _load_config(args)
+    name = args.name
+    plugin_dir = Path(cfg.plugins.directory) / name
+
+    if not plugin_dir.is_dir():
+        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        manifest = _load_manifest(plugin_dir)
+    except Exception as e:
+        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        sys.exit(1)
+
+    fs = manifest.filesystem
+
+    print(f"\n{'='*45}")
+    print(f"  Politique filesystem : {name}")
+    print(f"{'='*45}")
+
+    print(f"\n  Chemins autorisés :")
+    for p in fs.allowed_paths:
+        abs_path = plugin_dir / p
+        exists = "✅" if abs_path.exists() else "⚠️  (inexistant)"
+        print(f"    ✅  {p}  {exists}")
+
+    print(f"\n  Chemins bloqués :")
+    for p in fs.denied_paths:
+        print(f"    ❌  {p}")
+
+    print(f"\n  Comportement : fail-closed")
+    print("  Tout chemin hors de 'allowed' est refusé,")
+    print("  même si non listé dans 'denied'.")
+
+    # Vérifie si le dossier data/ existe, le créer si nécessaire
+    data_dir = plugin_dir / "data"
+    if not data_dir.exists():
+        create = input(f"\n  ⚠️   Le dossier data/ n'existe pas. Créer ? [y/N] ").strip().lower()
+        if create == "y":
+            data_dir.mkdir(parents=True)
+            print(f"  ✅  {data_dir} créé.")
+
+    print(f"{'='*45}\n")

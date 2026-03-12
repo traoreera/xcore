@@ -103,7 +103,7 @@ def validate_payload(schema: Type[BaseModel]):
                 validate = schema(**payload)
             except ValidationError as e:
                 return error(e.errors(), "validation_error")
-            return await fn(self, validate, *args, **kwargs)
+            return await fn(self, validate, *args, **kwargs) # FIXME: validation if you want dict or pydantic model's returnning
 
         return warpper
 

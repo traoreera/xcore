@@ -1,5 +1,5 @@
 """
-versioning | Contraint version verification
+versioning | Contraint version verify
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ class APIVersion:
 
 def check_compatibility(framework_version_expr: str, core_version: str) -> bool:
     """
-    Vérifie la compatibilité selon l'expression du manifeste.
-    Exemples : ">=1.0", ">=1.0,<3.0", "==2.0"
+    verify plugin required version on yaml manifest.
+    Examples : ">=1.0", ">=1.0,<3.0", "==2.0"
     """
     core = APIVersion.parse(core_version)
     for part in framework_version_expr.split(","):

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
 from ...kernel.security.validation import ManifestValidator
+from ...sdk.plugin_base import PluginDependency
 from ..sandbox.process_manager import SandboxProcessManager
 from .lifecycle import LifecycleManager, LoadError
 from .state_machine import PluginState
@@ -100,13 +101,31 @@ class PluginLoader:
             }
 
         resolved: set[str] = set()
+        resolved_versions: dict[str, str] = {}  # name -> version
         remaining = list(ordered)
 
         while remaining:
-            wave = [m for m in remaining if all(dep in resolved for dep in m.requires)]
+            wave = []
+            for m in remaining:
+                deps_ok = True
+                for dep in m.requires:
+                    if dep.name not in resolved:
+                        deps_ok = False
+                        break
+                    # Vérifie la contrainte de version
+                    if not dep.is_compatible(resolved_versions.get(dep.name, "1.0")):
+                        logger.error(
+                            f"[{m.name}] Dépendance '{dep.name}' version "
+                            f"{resolved_versions[dep.name]} incompatible avec {dep.version_constraint}"
+                        )
+                        deps_ok = False
+                        break
+                if deps_ok:
+                    wave.append(m)
+
             if not wave:
                 stuck = [m.name for m in remaining]
-                logger.error(f"Chargement bloqué (dépendances manquantes) : {stuck}")
+                logger.error(f"Chargement bloqué (dépendances manquantes ou incompatibles) : {stuck}")
                 failed.extend(stuck)
                 break
 
@@ -118,10 +137,12 @@ class PluginLoader:
             )
 
             wave_loaded = []
-            for name, ok in results:
+            for manifest, ok in results:
+                name = manifest.name
                 if ok:
                     loaded.append(name)
                     resolved.add(name)
+                    resolved_versions[name] = manifest.version
                     wave_loaded.append(name)
                 else:
                     failed.append(name)
@@ -129,7 +150,7 @@ class PluginLoader:
                     cascade = [
                         m.name
                         for m in remaining
-                        if name in m.requires and m.name not in failed
+                        if any(dep.name == name for dep in m.requires) and m.name not in failed
                     ]
                     if cascade:
                         logger.error(f"[{name}] Cascade : {cascade}")
@@ -149,13 +170,13 @@ class PluginLoader:
         )
         return {"loaded": loaded, "failed": failed, "skipped": skipped}
 
-    async def _try_load(self, manifest) -> tuple[str, bool]:
+    async def _try_load(self, manifest) -> tuple[Any, bool]:
         try:
             await self._activate(manifest)
-            return manifest.name, True
+            return manifest, True
         except Exception as e:
             logger.error(f"[{manifest.name}] Échec activation : {e}")
-            return manifest.name, False
+            return manifest, False
 
     async def _activate(self, manifest) -> None:
         from ...kernel.api.contract import ExecutionMode  # évite import circulaire

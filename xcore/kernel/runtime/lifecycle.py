@@ -15,6 +15,7 @@ import inspect
 import logging
 import sys
 import time
+import types
 from pathlib import Path
 from typing import Any
 
@@ -110,12 +111,20 @@ class LifecycleManager:
         if not entry.exists():
             raise LoadError(f"Not found entry point: {entry}")
 
+        # Isolation namespace : utilise un nom de module unique par plugin
+        # pour éviter les conflits entre plugins ayant des fichiers du même nom
         src_dir = str(self.manifest.plugin_dir / "src")
-        if src_dir not in sys.path:
-            sys.path.insert(0, src_dir)
-
         module_name = f"xcore_plugin_{self.manifest.name}"
-        self._module = self._import_module(module_name, entry)
+        package_name = module_name
+
+        # Crée un package namespace virtuel pour isoler le plugin
+        if package_name not in sys.modules:
+            sys.modules[package_name] = types.ModuleType(package_name)
+            sys.modules[package_name].__path__ = [src_dir]
+
+        # N'ajoute pas src_dir à sys.path global pour éviter les conflits
+        # Le module est importé via son package namespace isolé
+        self._module = self._import_module(f"{module_name}.main", entry)
 
         if not hasattr(self._module, "Plugin"):
             raise LoadError(f"class Plugin() not found in {entry}")
@@ -124,10 +133,7 @@ class LifecycleManager:
         self._instance = self._instantiate(cls)
 
         if not isinstance(self._instance, BasePlugin):
-            raise LoadError(
-                f"the plugin not respect contrat BasePlugin "
-                f"(missing method async handle(action, payload))"
-            )
+            raise LoadError('the plugin not respect contrat BasePlugin (missing method async handle(action, payload))')
 
         # Injection du contexte riche
         ctx = PluginContext(
@@ -240,10 +246,13 @@ class LifecycleManager:
         if self._instance and hasattr(self._instance, "on_unload"):
             await self._instance.on_unload()
         module_name = f"xcore_plugin_{self.manifest.name}"
+        # Nettoie le module principal et le package namespace
+        sys.modules.pop(f"{module_name}.main", None)
         sys.modules.pop(module_name, None)
-        src_dir = str(self.manifest.plugin_dir / "src")
-        if src_dir in sys.path:
-            sys.path.remove(src_dir)
+        # Nettoie aussi tous les sous-modules du plugin
+        for mod_name in list(sys.modules.keys()):
+            if mod_name.startswith(f"{module_name}."):
+                sys.modules.pop(mod_name, None)
         self._instance = None
         self._module = None
 
@@ -294,14 +303,12 @@ class LifecycleManager:
                     f"[{self.manifest.name}] 🔄 services mis à jour : "
                     f"{sorted(instance_services.keys())}"
                 )
-        else:
-            new_keys = set(instance_services.keys()) - set(self._services.keys())
-            if new_keys:
-                for k in new_keys:
-                    self._services[k] = instance_services[k]
-                logger.info(
-                    f"[{self.manifest.name}] 📦 nouveaux services : {sorted(new_keys)}"
-                )
+        elif new_keys := set(instance_services.keys()) - set(self._services.keys()):
+            for k in new_keys:
+                self._services[k] = instance_services[k]
+            logger.info(
+                f"[{self.manifest.name}] 📦 nouveaux services : {sorted(new_keys)}"
+            )
 
         return self._services
 

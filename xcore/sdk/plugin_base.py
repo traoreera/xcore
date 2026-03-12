@@ -70,6 +70,98 @@ class FilesystemConfig:
 
 
 @dataclass
+class PluginDependency:
+    """
+    Dépendance d'un plugin vers un autre avec contrainte de version.
+
+    Format YAML supporté:
+        requires:
+          - other_plugin                    # version="*" (n'importe quelle version)
+          - name: other_plugin
+            version: ">=2.0,<3.0"           # contrainte semver
+    """
+    name: str
+    version_constraint: str = "*"  # * pour tout, ou >=2.0,<3.0 etc.
+
+    def is_compatible(self, version: str) -> bool:
+        """Vérifie si une version satisfait la contrainte."""
+        if self.version_constraint == "*":
+            return True
+        return VersionConstraint(self.version_constraint).matches(version)
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, PluginDependency):
+            return self.name == other.name
+        if isinstance(other, str):
+            return self.name == other
+        return False
+
+
+class VersionConstraint:
+    """Parse et évalue une contrainte de version semver."""
+
+    def __init__(self, constraint: str) -> None:
+        self._raw = constraint.strip()
+        self._specs = self._parse(self._raw)
+
+    def _parse(self, constraint: str) -> list[tuple[str, tuple[int, ...]]]:
+        """Parse une contrainte comme '>=2.0,<3.0' en liste de specs."""
+        specs = []
+        parts = [p.strip() for p in constraint.split(",")]
+
+        for part in parts:
+            for op in (">=", "<=", ">", "<", "==", "!=", "^", "~"):
+                if part.startswith(op):
+                    version_str = part[len(op):].strip()
+                    version = self._to_tuple(version_str)
+                    specs.append((op, version))
+                    break
+            else:
+                # Pas d'opérateur = égalité exacte
+                specs.append(("==", self._to_tuple(part)))
+        return specs
+
+    def _to_tuple(self, version: str) -> tuple[int, ...]:
+        """Convertit '1.2.3' en (1, 2, 3)."""
+        parts = version.lstrip("vV").split(".")
+        return tuple(int(p) for p in parts if p.isdigit())
+
+    def matches(self, version: str) -> bool:
+        """Vérifie si 'version' satisfait cette contrainte."""
+        target = self._to_tuple(version)
+
+        for op, spec in self._specs:
+            if op == "==" and target != spec:
+                return False
+            if op == "!=" and target == spec:
+                return False
+            if op == ">=" and not (target >= spec):
+                return False
+            if op == ">" and not (target > spec):
+                return False
+            if op == "<=" and not (target <= spec):
+                return False
+            if op == "<" and not (target < spec):
+                return False
+            if op == "^":  # Compatible avec version (semver caret)
+                # ^1.2.3 := >=1.2.3,<2.0.0
+                if not (target >= spec):
+                    return False
+                if target[0] != spec[0]:
+                    return False
+            if op == "~":  # Approximativement équivalent (semver tilde)
+                # ~1.2.3 := >=1.2.3,<1.3.0
+                if not (target >= spec):
+                    return False
+                if len(spec) >= 2 and target[0:2] != spec[0:2]:
+                    return False
+        return True
+
+
+@dataclass
 class PluginManifest:
     """
     Représentation complète et typée d'un manifeste plugin.yaml.
@@ -90,7 +182,7 @@ class PluginManifest:
     execution_mode: ExecutionMode = ExecutionMode.LEGACY
 
     # Dépendances et imports
-    requires: list[str] = field(default_factory=list)
+    requires: list[PluginDependency] = field(default_factory=list)
     allowed_imports: list[str] = field(default_factory=list)
     permissions: list[dict] = field(default_factory=list)
 
@@ -111,7 +203,7 @@ class PluginManifest:
         raw: dict[str, Any],
         mode: ExecutionMode,
         resolved_env: dict[str, str],
-        requires: list[str],
+        requires: list[PluginDependency],
         plugin_dir: Path,
     ) -> "PluginManifest":
         res_raw = raw.get("resources", {})

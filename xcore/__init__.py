@@ -2,7 +2,8 @@
 xcore v2 — Framework modulaire plugin-first avec intégration de services.
 
 Quickstart:
-    from xcore import Xcore
+    ```python
+        from xcore import Xcore
 
     app = Xcore()
     await app.boot()
@@ -13,6 +14,7 @@ Quickstart:
     # Accès aux services intégrés
     db    = app.services.get("db")
     cache = app.services.get("cache")
+    ```
 """
 
 from .__version__ import __version__
@@ -99,6 +101,9 @@ class Xcore:
 
         self._logger.info(f"━━━ xcore v{__version__} démarrage ━━━")
 
+        # 0. Validation clés secrètes en production
+        self._validate_secret_keys()
+
         # 1. Services (BDD, cache, scheduler)
         from .services import ServiceContainer
 
@@ -171,7 +176,10 @@ class Xcore:
                 # Préfixe automatique si le plugin n'a pas déjà /plugins/...
                 from fastapi import APIRouter
 
-                wrapper = APIRouter(prefix=f"{prefix}/{plugin_name}", tags=self._config.app.plugin_tags.extend(tags))
+                wrapper = APIRouter(
+                    prefix=f"{prefix}/{plugin_name}",
+                    tags=(self._config.app.plugin_tags or []) + (tags or []),
+                )
                 wrapper.include_router(plugin_router)
                 prefixed_router = wrapper
             app.include_router(prefixed_router)
@@ -182,6 +190,22 @@ class Xcore:
             )
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI
+
+    def _validate_secret_keys(self) -> None:
+        """Bloque le démarrage en production si les clés secrètes sont celles par défaut."""
+        if self._config.app.env != "production":
+            return
+        default_key = b"change-me-in-production"
+        if self._config.app.secret_key == default_key:
+            raise RuntimeError(
+                "SECRET_KEY par défaut détecté en production ! "
+                "Configurez app.secret_key dans votre xcore.yaml"
+            )
+        if self._config.plugins.secret_key == default_key:
+            raise RuntimeError(
+                "PLUGIN_SECRET_KEY par défaut détecté en production ! "
+                "Configurez plugins.secret_key dans votre xcore.yaml"
+            )
 
     def __repr__(self) -> str:
         status = "booted" if self._booted else "idle"
