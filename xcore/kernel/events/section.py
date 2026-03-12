@@ -12,16 +12,23 @@ class Event:
     name: str
     payload: dict
     source: str | None = None
+
     propagate: bool = True
+    cancelled: bool = False
 
     # compat legacy
     metadata: dict | None = None
     stop_propagation: bool = False
 
     def stop(self):
+        """Stop propagation of the event."""
         self.propagate = False
         self.stop_propagation = True
 
+    def cancel(self):
+        """Cancel the event entirely."""
+        self.cancelled = True
+        self.stop()
 
 @dataclass
 class _HandlerEntry:
