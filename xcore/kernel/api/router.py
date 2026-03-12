@@ -14,6 +14,11 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 
+# PBKDF2 configuration for API key hashing
+_API_KEY_PBKDF2_SALT = b"xcore-router-api-key-salt"
+_API_KEY_PBKDF2_ITERATIONS = 100_000
+
+
 class CallRequest(BaseModel):
     """call request body."""
 
@@ -38,11 +43,19 @@ _api_key_header = APIKeyHeader(
 
 
 def _hash_key(key: Optional[str | bytes]) -> bytes:
-    """Hash SHA256 de la clé API."""
-    if isinstance(key, bytes):
-        return hashlib.sha256(key.decode("utf-8").encode("utf-8")).digest()
+    """Derive a hash of the API key using a computationally expensive KDF (PBKDF2)."""
+    if key is None:
+        key_bytes = b""
+    elif isinstance(key, bytes):
+        key_bytes = key
     else:
-        return hashlib.sha256(key.encode("utf-8")).digest()
+        key_bytes = key.encode("utf-8")
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        key_bytes,
+        _API_KEY_PBKDF2_SALT,
+        _API_KEY_PBKDF2_ITERATIONS,
+    )
 
 
 def build_router(
