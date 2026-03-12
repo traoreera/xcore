@@ -4,6 +4,7 @@ worker.py — Subprocess sandboxed : point d'entrée isolé.
 Lancé par SandboxProcessManager comme subprocess séparé.
 Lit des commandes JSON sur stdin, répond sur stdout.
 Limite mémoire appliquée au démarrage via RLIMIT_AS.
+Filesystem policy appliquée via FilesystemGuard.
 """
 
 from __future__ import annotations
@@ -38,6 +39,125 @@ def _apply_memory_limit() -> None:
         logger.warning(f"Impossible d'appliquer RLIMIT_AS : {e}")
 
 
+class FilesystemGuard:
+    """
+    Applique la politique filesystem déclarée dans le manifeste.
+
+    allowed_paths : seuls ces chemins (relatifs au plugin_dir) sont accessibles.
+    denied_paths  : ces chemins sont explicitement bloqués, même si dans allowed.
+
+    Fonctionne en monkey-patching les builtins open() et pathlib.Path dans
+    le sous-processus, de façon à intercepter tout accès fichier du plugin.
+
+    Logique d'évaluation (premier match gagne) :
+        1. Si le chemin est dans denied_paths  → BLOQUÉ
+        2. Si le chemin est dans allowed_paths → AUTORISÉ
+        3. Sinon                               → BLOQUÉ (fail-closed)
+    """
+
+    def __init__(
+        self,
+        plugin_dir: Path,
+        allowed_paths: list[str],
+        denied_paths: list[str],
+    ) -> None:
+        self._plugin_dir = plugin_dir.resolve()
+        self._allowed = [
+            (self._plugin_dir / p).resolve() for p in (allowed_paths or ["data/"])
+        ]
+        self._denied = [
+            (self._plugin_dir / p).resolve() for p in (denied_paths or ["src/"])
+        ]
+        self._original_open = builtins_open  # sauvegarde avant patch
+
+    def _resolve(self, path_arg) -> Path:
+        """Résout un chemin en absolu depuis le cwd (plugin_dir)."""
+        p = Path(path_arg)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        return p.resolve()
+
+    def is_allowed(self, path_arg) -> bool:
+        """Retourne True si le chemin est autorisé selon la policy."""
+        try:
+            target = self._resolve(path_arg)
+        except Exception:
+            return False
+
+        # 1. Vérifie denied en premier
+        for denied in self._denied:
+            try:
+                target.relative_to(denied)
+                return False  # dans un chemin denied → bloqué
+            except ValueError:
+                pass
+
+        # 2. Vérifie allowed
+        for allowed in self._allowed:
+            try:
+                target.relative_to(allowed)
+                return True  # dans un chemin allowed → autorisé
+            except ValueError:
+                pass
+
+        # 3. Fail-closed
+        return False
+
+    def install(self) -> None:
+        """Installe le guard en remplaçant builtins.open et pathlib.Path.open."""
+        import builtins
+
+        guard = self
+        _real_open = builtins.open
+
+        def _guarded_open(file, mode="r", *args, **kwargs):
+            # Autoriser stdin/stdout/stderr (int file descriptors)
+            if isinstance(file, int):
+                return _real_open(file, mode, *args, **kwargs)
+            if not guard.is_allowed(file):
+                raise PermissionError(
+                    f"[sandbox] Accès fichier refusé : '{file}'. "
+                    f"Chemins autorisés : {[str(p) for p in guard._allowed]}"
+                )
+            return _real_open(file, mode, *args, **kwargs)
+
+        builtins.open = _guarded_open
+
+        # Patch pathlib.Path.open également
+        from pathlib import Path as _Path
+        _real_path_open = _Path.open
+
+        def _guarded_path_open(self_path, mode="r", *args, **kwargs):
+            if not guard.is_allowed(self_path):
+                raise PermissionError(
+                    f"[sandbox] Accès fichier refusé : '{self_path}'. "
+                    f"Chemins autorisés : {[str(p) for p in guard._allowed]}"
+                )
+            return _real_path_open(self_path, mode, *args, **kwargs)
+
+        _Path.open = _guarded_path_open
+
+        logger.debug(
+            f"FilesystemGuard installé — "
+            f"allowed={[str(p) for p in self._allowed]}, "
+            f"denied={[str(p) for p in self._denied]}"
+        )
+
+    def uninstall(self) -> None:
+        """Restaure les builtins originaux (utile pour les tests)."""
+        import builtins
+        from pathlib import Path as _Path
+
+        builtins.open = self._original_open
+        # Note : Path.open ne peut pas être restauré facilement sans référence,
+        # mais le subprocess se termine de toute façon après usage.
+
+
+# Capture de builtins.open AVANT tout patch
+import builtins as _builtins_module
+builtins_open = _builtins_module.open
+
+
 def _load_plugin(plugin_dir: Path):
     """Charge la classe Plugin depuis src/main.py."""
     entry = plugin_dir / "src" / "main.py"
@@ -61,10 +181,49 @@ def _load_plugin(plugin_dir: Path):
     return module.Plugin()
 
 
+def _load_filesystem_config(plugin_dir: Path) -> tuple[list[str], list[str]]:
+    """
+    Lit allowed_paths et denied_paths depuis le manifeste du plugin.
+    Retourne les valeurs par défaut si le manifeste est absent ou incomplet.
+    """
+    default_allowed = ["data/"]
+    default_denied = ["src/"]
+
+    for fname in ("plugin.yaml", "plugin.json"):
+        manifest_path = plugin_dir / fname
+        if not manifest_path.exists():
+            continue
+        try:
+            if fname.endswith(".yaml"):
+                import yaml
+                with open(manifest_path, encoding="utf-8") as f:
+                    raw = yaml.safe_load(f) or {}
+            else:
+                import json as _json
+                with open(manifest_path, encoding="utf-8") as f:
+                    raw = _json.load(f)
+
+            fs = raw.get("filesystem", {})
+            allowed = fs.get("allowed_paths", default_allowed)
+            denied = fs.get("denied_paths", default_denied)
+            return allowed, denied
+        except Exception as e:
+            logger.warning(f"Impossible de lire la filesystem config : {e}")
+
+    return default_allowed, default_denied
+
+
 async def _run(plugin_dir: Path) -> None:
+    # 1. Lecture de la filesystem policy AVANT le chargement du plugin
+    allowed_paths, denied_paths = _load_filesystem_config(plugin_dir)
+
+    # 2. Installation du guard filesystem
+    guard = FilesystemGuard(plugin_dir, allowed_paths, denied_paths)
+    guard.install()
+
+    # 3. Chargement du plugin (sous protection du guard)
     plugin = _load_plugin(plugin_dir)
 
-    # Initialisation du plugin si supportée
     if hasattr(plugin, "on_load"):
         await plugin.on_load()
 
@@ -72,9 +231,16 @@ async def _run(plugin_dir: Path) -> None:
     protocol = asyncio.StreamReaderProtocol(reader)
     loop = asyncio.get_event_loop()
 
-    # Connecte stdin/stdout à asyncio
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-    transport, _ = await loop.connect_write_pipe(asyncio.BaseProtocol, sys.stdout)
+
+    # Utilisation d'un protocole concret pour stdout
+    class _StdoutProtocol(asyncio.BaseProtocol):
+        def connection_made(self, transport):
+            pass
+        def connection_lost(self, exc):
+            pass
+
+    transport, _ = await loop.connect_write_pipe(_StdoutProtocol, sys.stdout)
 
     logger.info("Worker prêt — écoute sur stdin")
 
@@ -111,6 +277,14 @@ async def _run(plugin_dir: Path) -> None:
                     else {"status": "ok", "result": result}
                 )
 
+        except PermissionError as e:
+            # Violation filesystem policy — log + réponse d'erreur sans crash
+            logger.error(f"[sandbox] Violation filesystem : {e}")
+            response = {
+                "status": "error",
+                "msg": str(e),
+                "code": "filesystem_denied",
+            }
         except json.JSONDecodeError as e:
             response = {
                 "status": "error",

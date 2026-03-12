@@ -1,7 +1,7 @@
 """
 supervisor.py — Orchestrateur haut niveau du système de plugins.
 
-Agrège : PluginLoader + rate limiter + retry + routing appels.
+Agrège : PluginLoader + PermissionEngine + rate limiter + retry + routing appels.
 C'est lui qu'expose Xcore via xcore.plugins.
 """
 
@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
-from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
+from ..permissions.engine import PermissionDenied, PermissionEngine
+from ..sandbox.limits import RateLimitExceeded, RateLimiterRegistry
 from .loader import PluginLoader
 
 logger = logging.getLogger("xcore.runtime.supervisor")
@@ -48,12 +49,12 @@ class PluginSupervisor:
         self._hooks = hooks
         self._registry = registry
         self._rate = RateLimiterRegistry()
+        self._permissions = PermissionEngine(events=events)
 
         self._loader: PluginLoader | None = None
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
-        # Le container de services est un dict partagé par référence
         svc_dict = (
             self._services.as_dict() if hasattr(self._services, "as_dict") else {}
         )
@@ -70,37 +71,80 @@ class PluginSupervisor:
             f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
         )
 
+        # Chargement des permissions pour chaque plugin chargé
+        self._load_permissions(report["loaded"])
+
         # Enregistrement dans le registry si disponible
         if self._registry:
             for name in report["loaded"]:
                 self._registry.register(name, self._loader.get(name))
 
-        # Émettre l'événement de démarrage
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
 
+    def _load_permissions(self, plugin_names: list[str]) -> None:
+        """Charge les policies de chaque plugin dans le PermissionEngine."""
+        for name in plugin_names:
+            try:
+                handler = self._loader.get(name)
+                manifest = getattr(handler, "manifest", None)
+                raw_permissions = getattr(manifest, "permissions", None)
+                self._permissions.load_from_manifest(name, raw_permissions)
+                logger.debug(f"[{name}] Permissions chargées")
+            except Exception as e:
+                logger.error(f"[{name}] Erreur chargement permissions : {e}")
+                # Fail-closed : si on ne peut pas charger, deny all
+                self._permissions.load_from_manifest(name, None)
+
     # ── Appel ─────────────────────────────────────────────────
 
-    async def call(self, plugin_name: str, action: str, payload: dict) -> dict:
+    async def call(
+        self,
+        plugin_name: str,
+        action: str,
+        payload: dict,
+        *,
+        resource: str | None = None,
+    ) -> dict:
         """
         Route un appel vers le plugin approprié.
 
-        Applique :
-          - Rate limiting
-          - Retry (selon manifest)
-          - Gestion d'erreur standardisée
+        Applique dans l'ordre :
+          1. Rate limiting
+          2. Vérification permissions (resource = action par défaut)
+          3. Retry + gestion d'erreur standardisée
+
+        Args:
+            plugin_name: nom du plugin cible
+            action: action à exécuter
+            payload: données de l'appel
+            resource: ressource ciblée pour la vérification de permission.
+                      Si absent, utilise "action.<action>" comme ressource.
         """
         if self._loader is None:
             return self._err("Supervisor non démarré", "not_ready")
 
+        # 1. Rate limiting
         try:
             await self._rate.check(plugin_name)
         except RateLimitExceeded as e:
             return self._err(str(e), "rate_limit_exceeded")
 
+        # 2. Plugin existe ?
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
 
+        # 3. Vérification des permissions
+        # La ressource par défaut est "action.<action>" ce qui permet aux plugins
+        # de déclarer : resource: "action.*" effect: allow
+        effective_resource = resource or f"action.{action}"
+        try:
+            self._permissions.check(plugin_name, effective_resource, "execute")
+        except PermissionDenied as e:
+            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
+            return self._err(str(e), "permission_denied")
+
+        # 4. Appel avec retry
         handler = self._loader.get(plugin_name)
         return await self._call_with_retry(plugin_name, handler, action, payload)
 
@@ -141,10 +185,13 @@ class PluginSupervisor:
     async def load(self, plugin_name: str) -> None:
         if self._loader:
             await self._loader.load(plugin_name)
+            self._load_permissions([plugin_name])
 
     async def reload(self, plugin_name: str) -> None:
         if self._loader:
             await self._loader.reload(plugin_name)
+            # Rechargement des permissions après reload (le manifeste peut avoir changé)
+            self._load_permissions([plugin_name])
             if self._events:
                 await self._events.emit(f"plugin.{plugin_name}.reloaded", {})
 
@@ -166,11 +213,15 @@ class PluginSupervisor:
         return self._loader.all_names() if self._loader else []
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
-        """
-        Délègue au loader la collecte des APIRouter exposés par les plugins.
-        Appelé par Xcore._attach_router() après le boot.
-        """
         return self._loader.collect_plugin_routers() if self._loader else []
+
+    def permissions_status(self) -> dict:
+        """Expose l'état du moteur de permissions (audit log + policies)."""
+        return self._permissions.status()
+
+    def permissions_audit(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
+        """Retourne le journal d'audit des permissions."""
+        return self._permissions.audit_log(plugin_name, limit)
 
     # ── Arrêt ─────────────────────────────────────────────────
 

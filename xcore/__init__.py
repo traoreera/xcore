@@ -158,7 +158,7 @@ class Xcore:
             supervisor=self.plugins,
             secret_key=self._config.app.secret_key,
             prefix=self._config.app.plugin_prefix,
-            tags=self._config.app.plugin_tags,
+            tags=(self._config.app.plugin_tags or []) + (tags or []),
         )
         app.include_router(system_router)
 
