@@ -19,8 +19,10 @@ class Event:
     stop_propagation: bool = False
 
     def stop(self):
-        self.propagate = False
+        self.propagate = True
         self.stop_propagation = True
+    def cancel(self):
+        self.cancelled = True
 
 
 @dataclass

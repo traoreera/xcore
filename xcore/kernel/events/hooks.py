@@ -187,7 +187,7 @@ class HookManager:
         to_remove: List[Tuple[str, Callable]] = []
 
         for pattern, hook_info in matching:
-            if event.propagate:
+            if event.stop_propagation:
                 break
             result = await self._execute_single_hook(hook_info, event, pattern)
             results.append(result)
