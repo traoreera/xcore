@@ -228,7 +228,7 @@ class LifecycleManager:
             logger.info(f"[{self.manifest.name}] reloaded")
         except Exception as e:
             self._sm.transition("error")
-            raise LoadError(f"[{self.manifest.name}] faild reload : {e}") from e
+            raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
 
     # ── Unload ────────────────────────────────────────────────
 
