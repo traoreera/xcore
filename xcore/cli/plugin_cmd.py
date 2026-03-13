@@ -196,7 +196,10 @@ async def _install_from_zip(name: str, url: str, dest: Path) -> None:
             # Détecte un sous-dossier racine dans le zip
             members = zf.namelist()
             prefix = members[0].split("/")[0] + "/" if "/" in members[0] else ""
-            dest.mkdir(parents=True, exist_ok=True)
+
+            dest_resolved = dest.resolve()
+            dest_resolved.mkdir(parents=True, exist_ok=True)
+
             for member in members:
                 stripped = (
                     member[len(prefix) :]
@@ -205,7 +208,13 @@ async def _install_from_zip(name: str, url: str, dest: Path) -> None:
                 )
                 if not stripped:
                     continue
-                target = dest / stripped
+
+                # Protection Zip Slip: ensure target is within dest
+                target = (dest_resolved / stripped).resolve()
+                if not target.is_relative_to(dest_resolved):
+                    print(f"⚠️  Tentative de Zip Slip ignorée : {member}")
+                    continue
+
                 if member.endswith("/"):
                     target.mkdir(parents=True, exist_ok=True)
                 else:

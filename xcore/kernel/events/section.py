@@ -33,6 +33,7 @@ class Event:
 @dataclass
 class _HandlerEntry:
     handler: Callable
+    is_async: bool = False
     priority: int = 50
     once: bool = False
     name: str = ""
