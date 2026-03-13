@@ -12,6 +12,12 @@ from __future__ import annotations
 
 import sys
 
+from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
+
+console = Console()
+
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
@@ -126,44 +132,40 @@ async def _mkt_search(args) -> None:
 async def _mkt_show(args) -> None:
     client, cfg = _get_client(args)
     name = args.name
-    print(f"🔍  Récupération des détails : '{name}'...")
-
-    try:
-        plugin = await client.get_plugin(name)
-        versions = await client.get_versions(name)
-    except Exception as e:
-        print(f"❌  Erreur marketplace : {e}", file=sys.stderr)
-        sys.exit(1)
+    with console.status(f"[bold green]🔍 Récupération de [white]{escape(name)}[/]..."):
+        try:
+            plugin = await client.get_plugin(name)
+            versions = await client.get_versions(name)
+        except Exception as e:
+            console.print(f"[bold red]❌ Erreur marketplace :[/] {escape(str(e))}", file=sys.stderr)
+            sys.exit(1)
 
     if not plugin:
-        print(f"❌  Plugin '{name}' introuvable sur le marketplace.")
+        console.print(f"[bold red]❌ Plugin '{escape(name)}' introuvable.[/]", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{'='*55}")
-    print(f"  📦  {plugin.get('name')}  v{plugin.get('version', '?')}")
-    print(f"{'='*55}")
-    print(f"  Auteur      : {plugin.get('author', '?')}")
-    print(f"  Description : {plugin.get('description', '?')}")
-    print(f"  Mode        : {plugin.get('execution_mode', 'legacy')}")
-    print(f"  Licence     : {plugin.get('license', '?')}")
-    print(f"  Note        : {_stars(plugin.get('rating', 0))}  ({plugin.get('rating_count', 0)} votes)")
-    print(f"  Téléch.     : {plugin.get('downloads', 0):,}")
-    print(f"  Dépôt       : {plugin.get('repository', '?')}")
-
+    info = [
+        f"[bold cyan]Auteur      :[/][magenta] {escape(str(plugin.get('author', '?')))}[/]",
+        f"[bold cyan]Description :[/] {escape(str(plugin.get('description', '?')))}",
+        f"[bold cyan]Mode        :[/][yellow] {escape(str(plugin.get('execution_mode', 'legacy')))}[/]",
+        f"[bold cyan]Licence     :[/][green] {escape(str(plugin.get('license', '?')))}[/]",
+        f"[bold cyan]Note        :[/][bold yellow] {_stars(plugin.get('rating', 0))}[/] ({plugin.get('rating_count', 0)} votes)",
+        f"[bold cyan]Téléch.     :[/][bold] {plugin.get('downloads', 0):,}[/]",
+        f"[bold cyan]Dépôt       :[/][blue] {escape(str(plugin.get('repository', '?')))}[/]",
+    ]
     if plugin.get("requires"):
-        print(f"  Dépendances : {', '.join(plugin['requires'])}")
+        info.append(f"[bold cyan]Dépendances :[/] {escape(', '.join(plugin['requires']))}")
 
+    content = "\n".join(info)
     if versions:
-        print(f"\n  Versions disponibles ({len(versions)}) :")
+        content += "\n\n[bold white]Versions disponibles :[/]\n"
         for v in versions[:5]:
-            tag = " ← latest" if v.get("latest") else ""
-            print(f"    {v.get('version', '?'):12}  {v.get('released_at', '?')}{tag}")
-        if len(versions) > 5:
-            print(f"    ... et {len(versions) - 5} autre(s)")
+            tag = " [bold green]← latest[/]" if v.get("latest") else ""
+            content += f"  {escape(str(v.get('version', '?'))):12} {escape(str(v.get('released_at', '?')))}{tag}\n"
 
-    print(f"\n  Pour installer :")
-    print(f"    xcore plugin install {name}")
-    print(f"{'='*55}\n")
+    content += f"\n[italic grey70]Pour installer :[/]\n  [bold]xcore plugin install {escape(name)}[/]"
+    title = f"[bold green]📦 {escape(plugin.get('name', name))} v{escape(str(plugin.get('version', '?')))}[/]"
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── rate ──────────────────────────────────────────────────────
