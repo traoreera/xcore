@@ -75,6 +75,7 @@ class EventBus:
             self._handlers[event_name] = []
         entry = _HandlerEntry(
             handler=handler,
+            is_async=inspect.iscoroutinefunction(handler),
             priority=priority,
             once=once,
             name=name or getattr(handler, "__name__", str(handler)),
@@ -114,15 +115,17 @@ class EventBus:
         results: list[Any] = []
         to_remove: list[_HandlerEntry] = []
 
-        async def _call(entry: _HandlerEntry) -> Any:
-            if inspect.iscoroutinefunction(entry.handler):
-                return await entry.handler(event)
-            return entry.handler(event)
-
         if gather:
-            raw = await asyncio.gather(
-                *[_call(e) for e in handlers], return_exceptions=True
-            )
+            # Wrap synchronous handlers in coroutines only when gathering
+            async def _call_sync(h, e):
+                return h(e)
+
+            tasks = [
+                entry.handler(event) if entry.is_async else _call_sync(entry.handler, event)
+                for entry in handlers
+            ]
+
+            raw = await asyncio.gather(*tasks, return_exceptions=True)
             for entry, result in zip(handlers, raw):
                 if isinstance(result, Exception):
                     logger.error(
@@ -137,7 +140,10 @@ class EventBus:
                 if not event.propagate or event.cancelled:
                     break
                 try:
-                    result = await _call(entry)
+                    if entry.is_async:
+                        result = await entry.handler(event)
+                    else:
+                        result = entry.handler(event)
                     results.append(result)
                 except Exception as e:
                     logger.error(f"Handler '{entry.name}' erreur : {e}")
