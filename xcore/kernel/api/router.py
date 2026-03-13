@@ -37,10 +37,6 @@ _api_key_header = APIKeyHeader(
 )
 
 
-import hashlib
-from typing import Optional
-
-
 def _hash_key(
     key: Optional[str | bytes],
     server_key: Optional[str | bytes],
@@ -72,7 +68,7 @@ def build_router(
     supervisor,
     secret_key: bytes,  # ← on passe en str, pas bytes
     server_key: bytes,
-    server_key_iterations:int = 100000,
+    server_key_iterations: int = 100000,
     prefix: str = "",
     tags: list[str] | None = None,
     **kwargs,

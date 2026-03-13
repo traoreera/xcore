@@ -21,11 +21,13 @@ console = Console()
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
+
     return ConfigLoader.load(getattr(args, "config", None))
 
 
 def _get_client(args):
     from xcore.marketplace import MarketplaceClient
+
     cfg = _load_config(args)
     return MarketplaceClient(cfg), cfg
 
@@ -33,11 +35,11 @@ def _get_client(args):
 async def handle_marketplace(args) -> None:
     sub = getattr(args, "subcommand", None)
     dispatch = {
-        "list":     _mkt_list,
+        "list": _mkt_list,
         "trending": _mkt_trending,
-        "search":   _mkt_search,
-        "show":     _mkt_show,
-        "rate":     _mkt_rate,
+        "search": _mkt_search,
+        "show": _mkt_show,
+        "rate": _mkt_rate,
     }
     handler = dispatch.get(sub)
     if handler:
@@ -47,6 +49,7 @@ async def handle_marketplace(args) -> None:
 
 
 # ── list ──────────────────────────────────────────────────────
+
 
 async def _mkt_list(args) -> None:
     client, _ = _get_client(args)
@@ -75,6 +78,7 @@ async def _mkt_list(args) -> None:
 
 # ── trending ──────────────────────────────────────────────────
 
+
 async def _mkt_trending(args) -> None:
     client, _ = _get_client(args)
     print("🔥  Plugins populaires...")
@@ -95,10 +99,13 @@ async def _mkt_trending(args) -> None:
         downloads = p.get("downloads", 0)
         rating = p.get("rating", 0)
         desc = p.get("description", "")
-        print(f"  {i:>2}. {name:<25} v{version:<8} {_stars(rating)}  ⬇ {downloads:,}  {desc}")
+        print(
+            f"  {i:>2}. {name:<25} v{version:<8} {_stars(rating)}  ⬇ {downloads:,}  {desc}"
+        )
 
 
 # ── search ────────────────────────────────────────────────────
+
 
 async def _mkt_search(args) -> None:
     client, _ = _get_client(args)
@@ -128,6 +135,7 @@ async def _mkt_search(args) -> None:
 
 
 # ── show ──────────────────────────────────────────────────────
+
 
 async def _mkt_show(args) -> None:
     client, cfg = _get_client(args)
@@ -170,6 +178,7 @@ async def _mkt_show(args) -> None:
 
 # ── rate ──────────────────────────────────────────────────────
 
+
 async def _mkt_rate(args) -> None:
     client, _ = _get_client(args)
     name = args.name
@@ -180,13 +189,16 @@ async def _mkt_rate(args) -> None:
         result = await client.rate_plugin(name, score)
         new_rating = result.get("new_rating", "?")
         total = result.get("rating_count", "?")
-        print(f"✅  Note enregistrée. Nouvelle moyenne : {new_rating}/5 ({total} votes)")
+        print(
+            f"✅  Note enregistrée. Nouvelle moyenne : {new_rating}/5 ({total} votes)"
+        )
     except Exception as e:
         print(f"❌  Erreur : {e}", file=sys.stderr)
         sys.exit(1)
 
 
 # ── helpers ───────────────────────────────────────────────────
+
 
 def _stars(rating: float) -> str:
     """Convertit une note 0-5 en étoiles ASCII."""

@@ -301,7 +301,7 @@ class ASTScanner:
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
-            path=path
+            path=path,
         )
         visitor.visit(tree)
         for e in visitor.errors:
@@ -319,14 +319,12 @@ class _ImportVisitor(ast.NodeVisitor):
         self.filename = filename
         self.errors: list[str] = []
         self.warnings: list[str] = []
-        self.path:Path  = path
+        self.path: Path = path
 
     def _check(self, module: str, lineno: int) -> None:
         root = module.split(".")[0]
         if root in self.forbidden:
-            self.errors.append(
-                f"{self.path}:{lineno}: import interdit : {module!r}"
-            )
+            self.errors.append(f"{self.path}:{lineno}: import interdit : {module!r}")
         elif root not in self.allowed:
             self.warnings.append(
                 f"{self.path}:{lineno}: import non whitelisté : {module!r}"

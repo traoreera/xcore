@@ -31,7 +31,6 @@ Commandes:
 from __future__ import annotations
 
 import asyncio
-import sys
 
 
 def main() -> None:
@@ -53,19 +52,43 @@ def main() -> None:
     plugin_sub.add_parser("list", help="Liste les plugins installés")
     plugin_sub.add_parser("health", help="Health check de tous les plugins")
 
-    load_p = plugin_sub.add_parser("load", help="Charge un plugin sur le serveur en cours")
+    load_p = plugin_sub.add_parser(
+        "load", help="Charge un plugin sur le serveur en cours"
+    )
     load_p.add_argument("name")
-    load_p.add_argument("--host", default=None, help="Host du serveur (défaut: 127.0.0.1)")
-    load_p.add_argument("--port", type=int, default=None, help="Port du serveur (défaut: 8000)")
-    load_p.add_argument("--path", default=None, help="Préfixe du router ex: /app ou /plugin (défaut: plugin_prefix config)")
-    load_p.add_argument("--key", default=None, help="API key (défaut: secret_key config)")
+    load_p.add_argument(
+        "--host", default=None, help="Host du serveur (défaut: 127.0.0.1)"
+    )
+    load_p.add_argument(
+        "--port", type=int, default=None, help="Port du serveur (défaut: 8000)"
+    )
+    load_p.add_argument(
+        "--path",
+        default=None,
+        help="Préfixe du router ex: /app ou /plugin (défaut: plugin_prefix config)",
+    )
+    load_p.add_argument(
+        "--key", default=None, help="API key (défaut: secret_key config)"
+    )
 
-    reload_p = plugin_sub.add_parser("reload", help="Recharge un plugin sur le serveur en cours")
+    reload_p = plugin_sub.add_parser(
+        "reload", help="Recharge un plugin sur le serveur en cours"
+    )
     reload_p.add_argument("name")
-    reload_p.add_argument("--host", default=None, help="Host du serveur (défaut: 127.0.0.1)")
-    reload_p.add_argument("--port", type=int, default=None, help="Port du serveur (défaut: 8000)")
-    reload_p.add_argument("--path", default=None, help="Préfixe du router ex: /app ou /plugin (défaut: plugin_prefix config)")
-    reload_p.add_argument("--key", default=None, help="API key (défaut: secret_key config)")
+    reload_p.add_argument(
+        "--host", default=None, help="Host du serveur (défaut: 127.0.0.1)"
+    )
+    reload_p.add_argument(
+        "--port", type=int, default=None, help="Port du serveur (défaut: 8000)"
+    )
+    reload_p.add_argument(
+        "--path",
+        default=None,
+        help="Préfixe du router ex: /app ou /plugin (défaut: plugin_prefix config)",
+    )
+    reload_p.add_argument(
+        "--key", default=None, help="API key (défaut: secret_key config)"
+    )
 
     install_p = plugin_sub.add_parser("install", help="Installe un plugin")
     install_p.add_argument("name", help="Nom du plugin ou URL")
@@ -91,7 +114,9 @@ def main() -> None:
     verify_p.add_argument("path")
     verify_p.add_argument("--key", default=None)
 
-    validate_p = plugin_sub.add_parser("validate", help="Valide le manifeste d'un plugin")
+    validate_p = plugin_sub.add_parser(
+        "validate", help="Valide le manifeste d'un plugin"
+    )
     validate_p.add_argument("path")
 
     # ── sandbox ───────────────────────────────────────────────
@@ -101,13 +126,19 @@ def main() -> None:
     sb_run = sandbox_sub.add_parser("run", help="Lance un plugin en mode sandbox isolé")
     sb_run.add_argument("name", help="Nom du plugin")
 
-    sb_limits = sandbox_sub.add_parser("limits", help="Affiche les limites ressources d'un plugin")
+    sb_limits = sandbox_sub.add_parser(
+        "limits", help="Affiche les limites ressources d'un plugin"
+    )
     sb_limits.add_argument("name")
 
-    sb_network = sandbox_sub.add_parser("network", help="Affiche la politique réseau d'un plugin")
+    sb_network = sandbox_sub.add_parser(
+        "network", help="Affiche la politique réseau d'un plugin"
+    )
     sb_network.add_argument("name")
 
-    sb_fs = sandbox_sub.add_parser("fs", help="Affiche la politique filesystem d'un plugin")
+    sb_fs = sandbox_sub.add_parser(
+        "fs", help="Affiche la politique filesystem d'un plugin"
+    )
     sb_fs.add_argument("name")
 
     # ── marketplace ───────────────────────────────────────────
@@ -138,27 +169,33 @@ def main() -> None:
 
     if args.version:
         from xcore import __version__
+
         print(f"xcore v{__version__}")
         return
 
     if args.command == "plugin":
         from .plugin_cmd import handle_plugin
+
         asyncio.run(handle_plugin(args))
 
     elif args.command == "sandbox":
         from .sandbox_cmd import handle_sandbox
+
         asyncio.run(handle_sandbox(args))
 
     elif args.command == "marketplace":
         from .marketplace_cmd import handle_marketplace
+
         asyncio.run(handle_marketplace(args))
 
     elif args.command == "services":
         from .plugin_cmd import handle_services
+
         asyncio.run(handle_services(args))
 
     elif args.command == "health":
         from .plugin_cmd import handle_health
+
         asyncio.run(handle_health(args))
 
     else:

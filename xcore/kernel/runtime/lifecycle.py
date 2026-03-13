@@ -133,7 +133,9 @@ class LifecycleManager:
         self._instance = self._instantiate(cls)
 
         if not isinstance(self._instance, BasePlugin):
-            raise LoadError('the plugin not respect contrat BasePlugin (missing method async handle(action, payload))')
+            raise LoadError(
+                "the plugin not respect contrat BasePlugin (missing method async handle(action, payload))"
+            )
 
         # Injection du contexte riche
         ctx = PluginContext(
@@ -206,6 +208,7 @@ class LifecycleManager:
             }
         except Exception:
             self._sm.transition("error")
+            self._sm.transition("reset")
             raise
 
         return (

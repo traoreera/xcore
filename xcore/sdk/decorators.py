@@ -20,11 +20,10 @@ Usage:
 
 from __future__ import annotations
 
-import inspect
-import asyncio
 import functools
+import inspect
 import logging
-from typing import Any, Callable, Type
+from typing import Callable, Type
 
 from pydantic import BaseModel, ValidationError
 
@@ -103,7 +102,8 @@ def validate_payload(schema: Type[BaseModel]):
                 validate = schema(**payload)
             except ValidationError as e:
                 return error(e.errors(), "validation_error")
-            return await fn(self, validate, *args, **kwargs) # FIXME: validation if you want dict or pydantic model's returnning
+            # FIXME: validation if you want dict or pydantic model's returnning
+            return await fn(self, validate, *args, **kwargs)
 
         return warpper
 
@@ -182,8 +182,6 @@ class RoutedPlugin:
                 return {"status": "running"}
     """
 
-
-
     def RouterIn(self):
 
         from fastapi import APIRouter
@@ -210,10 +208,7 @@ class RoutedPlugin:
 
                 # IMPORTANT → copie la signature SANS self
                 sig = inspect.signature(fn)
-                params = [
-                    p for name, p in sig.parameters.items()
-                    if name != "self"
-                ]
+                params = [p for name, p in sig.parameters.items() if name != "self"]
                 handler.__signature__ = sig.replace(parameters=params)
 
                 return handler
@@ -231,6 +226,7 @@ class RoutedPlugin:
             )
 
         return router if router.routes else None
+
 
 class AutoDispatchMixin:
     """

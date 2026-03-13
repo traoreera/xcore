@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
 from ..permissions.engine import PermissionDenied, PermissionEngine
-from ..sandbox.limits import RateLimitExceeded, RateLimiterRegistry
+from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
 from .loader import PluginLoader
 
 logger = logging.getLogger("xcore.runtime.supervisor")
@@ -100,7 +100,9 @@ class PluginSupervisor:
                         period_seconds=rl.period_seconds,
                     )
                     self._rate.register(name, config)
-                    logger.debug(f"[{name}] Rate limit : {rl.calls}/{rl.period_seconds}s")
+                    logger.debug(
+                        f"[{name}] Rate limit : {rl.calls}/{rl.period_seconds}s"
+                    )
             except Exception as e:
                 logger.error(f"[{name}] Erreur enregistrement rate limit : {e}")
 
@@ -242,7 +244,9 @@ class PluginSupervisor:
         """Expose l'état du moteur de permissions (audit log + policies)."""
         return self._permissions.status()
 
-    def permissions_audit(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
+    def permissions_audit(
+        self, plugin_name: str | None = None, limit: int = 100
+    ) -> list[dict]:
         """Retourne le journal d'audit des permissions."""
         return self._permissions.audit_log(plugin_name, limit)
 
