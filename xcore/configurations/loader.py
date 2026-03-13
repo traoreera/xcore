@@ -70,10 +70,12 @@ class ConfigLoader:
             try:
                 if suffix in (".yaml", ".yml"):
                     import yaml
+
                     with open(candidate, encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                 else:
                     import json
+
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
                 logger.info(f"conf loaded : {candidate}")
@@ -98,6 +100,7 @@ class ConfigLoader:
             return
         try:
             from dotenv import load_dotenv
+
             load_dotenv(dotenv_path=path, override=False)
             logger.info(f".env loaded : {path}")
         except ImportError:
@@ -109,7 +112,7 @@ class ConfigLoader:
         for key, value in os.environ.items():
             if not key.startswith(prefix):
                 continue
-            parts = key[len(prefix):].lower().split("__")
+            parts = key[len(prefix) :].lower().split("__")
             target = raw
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
@@ -162,11 +165,14 @@ class ConfigLoader:
             strict_trusted=d.get("strict_trusted", True),
             interval=d.get("interval", 2),
             entry_point=d.get("entry_point", "src/main.py"),
-            snapshot=d.get("snapshot", {
-                "extensions": [".log", ".pyc", ".html"],
-                "filenames": ["__pycache__", "__init__.py", ".env"],
-                "hidden": True,
-            }),
+            snapshot=d.get(
+                "snapshot",
+                {
+                    "extensions": [".log", ".pyc", ".html"],
+                    "filenames": ["__pycache__", "__init__.py", ".env"],
+                    "hidden": True,
+                },
+            ),
         )
 
     @classmethod
@@ -213,7 +219,9 @@ class ConfigLoader:
         return ObservabilityConfig(
             logging=LoggingConfig(
                 level=lg.get("level", "INFO"),
-                format=lg.get("format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"),
+                format=lg.get(
+                    "format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+                ),
                 file=lg.get("file"),
                 max_bytes=lg.get("max_bytes", 10_485_760),
                 backup_count=lg.get("backup_count", 5),
@@ -236,7 +244,9 @@ class ConfigLoader:
         return SecurityConfig(
             allowed_imports=d.get("allowed_imports", []),
             forbidden_imports=d.get("forbidden_imports", []),
-            rate_limit_default=d.get("rate_limit_default", {"calls": 100, "period_seconds": 60}),
+            rate_limit_default=d.get(
+                "rate_limit_default", {"calls": 100, "period_seconds": 60}
+            ),
         )
 
     @staticmethod

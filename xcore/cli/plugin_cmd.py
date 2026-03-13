@@ -12,31 +12,35 @@ from pathlib import Path
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
+
     return ConfigLoader.load(getattr(args, "config", None))
 
 
 async def handle_plugin(args) -> None:
     sub = getattr(args, "subcommand", None)
     dispatch = {
-        "list":     _plugin_list,
-        "health":   _plugin_health,
-        "load":     _plugin_load,
-        "reload":   _plugin_reload,
-        "install":  _plugin_install,
-        "remove":   _plugin_remove,
-        "info":     _plugin_info,
-        "sign":     _plugin_sign,
-        "verify":   _plugin_verify,
+        "list": _plugin_list,
+        "health": _plugin_health,
+        "load": _plugin_load,
+        "reload": _plugin_reload,
+        "install": _plugin_install,
+        "remove": _plugin_remove,
+        "info": _plugin_info,
+        "sign": _plugin_sign,
+        "verify": _plugin_verify,
         "validate": _plugin_validate,
     }
     handler = dispatch.get(sub)
     if handler:
         await handler(args)
     else:
-        print("Usage : xcore plugin <list|health|install|remove|info|load|reload|sign|verify|validate>")
+        print(
+            "Usage : xcore plugin <list|health|install|remove|info|load|reload|sign|verify|validate>"
+        )
 
 
 # ── list ──────────────────────────────────────────────────────
+
 
 async def _plugin_list(args) -> None:
     cfg = _load_config(args)
@@ -45,7 +49,8 @@ async def _plugin_list(args) -> None:
         print(f"Dossier plugins introuvable : {plugin_dir}")
         return
     plugins = sorted(
-        d.name for d in plugin_dir.iterdir()
+        d.name
+        for d in plugin_dir.iterdir()
         if d.is_dir() and not d.name.startswith("_")
     )
     if not plugins:
@@ -57,6 +62,7 @@ async def _plugin_list(args) -> None:
         if manifest_path.exists():
             try:
                 import yaml
+
                 with open(manifest_path) as f:
                     m = yaml.safe_load(f) or {}
                 version = m.get("version", "?")
@@ -71,6 +77,7 @@ async def _plugin_list(args) -> None:
 
 # ── health ────────────────────────────────────────────────────
 
+
 async def _plugin_health(args) -> None:
     cfg = _load_config(args)
     plugin_dir = Path(cfg.plugins.directory)
@@ -79,8 +86,7 @@ async def _plugin_health(args) -> None:
         return
 
     plugins = sorted(
-        d for d in plugin_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
+        d for d in plugin_dir.iterdir() if d.is_dir() and not d.name.startswith("_")
     )
     if not plugins:
         print("Aucun plugin trouvé.")
@@ -89,8 +95,8 @@ async def _plugin_health(args) -> None:
     print(f"{'Plugin':<30} {'Mode':<12} {'Sig':<6} {'AST':<6} {'Manifest'}")
     print("─" * 70)
 
-    from xcore.kernel.security.validation import ASTScanner, ManifestValidator
     from xcore.kernel.security.signature import is_signed
+    from xcore.kernel.security.validation import ASTScanner, ManifestValidator
 
     for plugin_dir_entry in plugins:
         name = plugin_dir_entry.name
@@ -115,6 +121,7 @@ async def _plugin_health(args) -> None:
 
 # ── install ───────────────────────────────────────────────────
 
+
 async def _plugin_install(args) -> None:
     cfg = _load_config(args)
     source = getattr(args, "source", "marketplace")
@@ -127,7 +134,9 @@ async def _plugin_install(args) -> None:
 
     if dest.exists():
         print(f"❌  Plugin '{name}' déjà installé dans {dest}")
-        print(f"    Pour mettre à jour : xcore plugin remove {name} && xcore plugin install {name}")
+        print(
+            f"    Pour mettre à jour : xcore plugin remove {name} && xcore plugin install {name}"
+        )
         sys.exit(1)
 
     if source == "git" or (url and url.endswith(".git")):
@@ -142,6 +151,7 @@ async def _plugin_install(args) -> None:
     else:
         # marketplace
         from xcore.marketplace import MarketplaceClient
+
         client = MarketplaceClient(cfg)
         await _install_from_marketplace(client, name, dest, cfg)
 
@@ -153,9 +163,14 @@ async def _plugin_install(args) -> None:
 
 async def _install_from_git(name: str, url: str, dest: Path) -> None:
     import asyncio
+
     print(f"📦  Clonage git : {url}")
     proc = await asyncio.create_subprocess_exec(
-        "git", "clone", "--depth=1", url, str(dest),
+        "git",
+        "clone",
+        "--depth=1",
+        url,
+        str(dest),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -168,20 +183,26 @@ async def _install_from_git(name: str, url: str, dest: Path) -> None:
 async def _install_from_zip(name: str, url: str, dest: Path) -> None:
     import asyncio
     import io
-    import zipfile
     import urllib.request
+    import zipfile
 
     print(f"📦  Téléchargement : {url}")
     try:
         loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: urllib.request.urlopen(url).read())
+        data = await loop.run_in_executor(
+            None, lambda: urllib.request.urlopen(url).read()
+        )
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             # Détecte un sous-dossier racine dans le zip
             members = zf.namelist()
             prefix = members[0].split("/")[0] + "/" if "/" in members[0] else ""
             dest.mkdir(parents=True, exist_ok=True)
             for member in members:
-                stripped = member[len(prefix):] if prefix and member.startswith(prefix) else member
+                stripped = (
+                    member[len(prefix) :]
+                    if prefix and member.startswith(prefix)
+                    else member
+                )
                 if not stripped:
                     continue
                 target = dest / stripped
@@ -205,7 +226,9 @@ async def _install_from_marketplace(client, name: str, dest: Path, cfg) -> None:
     download_url = plugin.get("download_url")
     source_type = plugin.get("source_type", "zip")
 
-    print(f"📦  Plugin trouvé : v{plugin.get('version', '?')} — {plugin.get('description', '')}")
+    print(
+        f"📦  Plugin trouvé : v{plugin.get('version', '?')} — {plugin.get('description', '')}"
+    )
 
     if source_type == "git":
         await _install_from_git(name, download_url, dest)
@@ -248,6 +271,7 @@ async def _auto_sign(plugin_dir: Path, cfg) -> None:
 
 # ── remove ────────────────────────────────────────────────────
 
+
 async def _plugin_remove(args) -> None:
     cfg = _load_config(args)
     name = args.name
@@ -268,6 +292,7 @@ async def _plugin_remove(args) -> None:
 
 # ── info ──────────────────────────────────────────────────────
 
+
 async def _plugin_info(args) -> None:
     cfg = _load_config(args)
     name = args.name
@@ -277,8 +302,8 @@ async def _plugin_info(args) -> None:
         print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
         sys.exit(1)
 
-    from xcore.kernel.security.validation import ManifestValidator
     from xcore.kernel.security.signature import is_signed
+    from xcore.kernel.security.validation import ManifestValidator
 
     try:
         validator = ManifestValidator()
@@ -304,7 +329,9 @@ async def _plugin_info(args) -> None:
     print(f"    timeout     : {manifest.resources.timeout_seconds}s")
     print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
     print(f"    disque max  : {manifest.resources.max_disk_mb}MB")
-    print(f"    rate limit  : {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s")
+    print(
+        f"    rate limit  : {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s"
+    )
     if manifest.permissions:
         print(f"\n  Permissions ({len(manifest.permissions)}) :")
         for p in manifest.permissions:
@@ -316,8 +343,10 @@ async def _plugin_info(args) -> None:
 
 # ── sign / verify / validate ──────────────────────────────────
 
+
 async def _plugin_validate(args) -> None:
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
     if not path.exists():
         print(f"❌  Dossier introuvable : {path}", file=sys.stderr)
@@ -325,7 +354,9 @@ async def _plugin_validate(args) -> None:
     try:
         v = ManifestValidator()
         manifest = v.load_and_validate(path)
-        print(f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]")
+        print(
+            f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+        )
     except Exception as e:
         print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
         sys.exit(1)
@@ -334,6 +365,7 @@ async def _plugin_validate(args) -> None:
 async def _plugin_sign(args) -> None:
     from xcore.kernel.security.signature import sign_plugin
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
     key = (args.key or "change-me").encode()
     manifest = ManifestValidator().load_and_validate(path)
@@ -344,6 +376,7 @@ async def _plugin_sign(args) -> None:
 async def _plugin_verify(args) -> None:
     from xcore.kernel.security.signature import SignatureError, verify_plugin
     from xcore.kernel.security.validation import ManifestValidator
+
     path = Path(args.path)
     key = (args.key or "change-me").encode()
     manifest = ManifestValidator().load_and_validate(path)
@@ -392,7 +425,7 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
     # --path : l'utilisateur donne /app ou /plugin, on complète avec /ipc/{name}/{action}
     cli_path = getattr(args, "path", None)
     base_path = cli_path or cfg.app.plugin_prefix
-    base_path = "/" + base_path.strip("/")   # normalise les slashes
+    base_path = "/" + base_path.strip("/")  # normalise les slashes
 
     url = f"http://{host}:{port}{base_path}/ipc/{name}/{action}"
 
@@ -454,11 +487,13 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
 
 # ── services / health globaux ─────────────────────────────────
 
+
 async def handle_services(args) -> None:
     sub = getattr(args, "subcommand", None)
     if sub == "status":
         cfg = _load_config(args)
         from xcore.services import ServiceContainer
+
         container = ServiceContainer(cfg.services)
         await container.init()
         status = container.status()
@@ -469,6 +504,7 @@ async def handle_services(args) -> None:
 async def handle_health(args) -> None:
     cfg = _load_config(args)
     from xcore.services import ServiceContainer
+
     container = ServiceContainer(cfg.services)
     await container.init()
     health = await container.health()

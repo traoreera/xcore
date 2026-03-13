@@ -49,3 +49,4 @@ orchestra.db
 analyse.md
 .coverage
 coverage.*
+integration.yaml

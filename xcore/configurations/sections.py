@@ -125,6 +125,7 @@ class MarketplaceConfig:
           timeout: 10
           cache_ttl: 300
     """
+
     url: str = "https://marketplace.xcore.dev"
     api_key: str = ""
     timeout: int = 10

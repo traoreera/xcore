@@ -125,7 +125,9 @@ class PluginLoader:
 
             if not wave:
                 stuck = [m.name for m in remaining]
-                logger.error(f"Chargement bloqué (dépendances manquantes ou incompatibles) : {stuck}")
+                logger.error(
+                    f"Chargement bloqué (dépendances manquantes ou incompatibles) : {stuck}"
+                )
                 failed.extend(stuck)
                 break
 
@@ -150,7 +152,8 @@ class PluginLoader:
                     cascade = [
                         m.name
                         for m in remaining
-                        if any(dep.name == name for dep in m.requires) and m.name not in failed
+                        if any(dep.name == name for dep in m.requires)
+                        and m.name not in failed
                     ]
                     if cascade:
                         logger.error(f"[{name}] Cascade : {cascade}")

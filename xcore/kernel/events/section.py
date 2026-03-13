@@ -1,11 +1,9 @@
-
 from __future__ import annotations
-from enum import Enum
-from typing import Any, Callable, NamedTuple, Optional, Dict
-
 
 from dataclasses import dataclass, field
-from typing import Any
+from enum import Enum
+from typing import Any, Callable, NamedTuple, Optional
+
 
 @dataclass
 class Event:
@@ -30,6 +28,7 @@ class Event:
         """Cancel the event entirely."""
         self.cancelled = True
         self.stop()
+
 
 @dataclass
 class _HandlerEntry:

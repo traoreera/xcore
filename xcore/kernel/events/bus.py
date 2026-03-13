@@ -6,7 +6,6 @@ A single bus for both uses:
 Removes the duplicate EventBus present in integration/core/events.py and hooks/hooks.py.
 """
 
-
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,8 @@ import contextlib
 import inspect
 import logging
 from typing import Any, Callable
-from .section  import Event, _HandlerEntry
+
+from .section import Event, _HandlerEntry
 
 logger = logging.getLogger("xcore.events.bus")
 

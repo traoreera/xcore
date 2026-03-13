@@ -101,7 +101,9 @@ class PermissionEngine:
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
         log = (
-            [e for e in self._audit_log if e["plugin"] == plugin_name] if plugin_name else self._audit_log
+            [e for e in self._audit_log if e["plugin"] == plugin_name]
+            if plugin_name
+            else self._audit_log
         )
         return log[-limit:]
 

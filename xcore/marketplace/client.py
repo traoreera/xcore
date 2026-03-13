@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger("xcore.marketplace.client")
@@ -68,7 +68,9 @@ class MarketplaceClient:
 
     async def list_plugins(self, page: int = 1, per_page: int = 20) -> list[dict]:
         """Liste tous les plugins du marketplace."""
-        return await self._get(f"/plugins?page={page}&per_page={per_page}", cache_key="list")
+        return await self._get(
+            f"/plugins?page={page}&per_page={per_page}", cache_key="list"
+        )
 
     async def trending(self, limit: int = 10) -> list[dict]:
         """Retourne les plugins populaires."""
@@ -88,7 +90,9 @@ class MarketplaceClient:
 
     async def get_versions(self, name: str) -> list[dict]:
         """Retourne toutes les versions disponibles d'un plugin."""
-        return await self._get(f"/plugins/{name}/versions", cache_key=f"versions_{name}")
+        return await self._get(
+            f"/plugins/{name}/versions", cache_key=f"versions_{name}"
+        )
 
     async def rate_plugin(self, name: str, score: int) -> dict:
         """Note un plugin (score entre 1 et 5)."""
@@ -118,6 +122,7 @@ class MarketplaceClient:
 
     async def _post(self, path: str, body: dict) -> Any:
         import asyncio
+
         url = self._base_url + path
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: self._http_post(url, body))
@@ -136,10 +141,14 @@ class MarketplaceClient:
 
     def _http_post(self, url: str, body: dict) -> Any:
         data = json.dumps(body).encode("utf-8")
-        req = Request(url, data=data, headers={
-            **self._headers(),
-            "Content-Type": "application/json",
-        })
+        req = Request(
+            url,
+            data=data,
+            headers={
+                **self._headers(),
+                "Content-Type": "application/json",
+            },
+        )
         try:
             with urlopen(req, timeout=self._timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))

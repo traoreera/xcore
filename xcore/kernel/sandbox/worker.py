@@ -10,6 +10,7 @@ Filesystem policy appliquée via FilesystemGuard.
 from __future__ import annotations
 
 import asyncio
+import builtins as _builtins_module
 import importlib.util
 import json
 import logging
@@ -106,13 +107,13 @@ class FilesystemGuard:
     def install(self) -> None:
         """Installe le guard en remplaçant builtins.open, os.open, io.open, etc."""
         import builtins
-        import os
         import io
+        import os
 
         guard = self
         _real_open = builtins.open
         _real_os_open = os.open
-        _real_io_open = io.open
+        io.open
         _real_fileio = io.FileIO
 
         def _guarded_open(file, mode="r", *args, **kwargs):
@@ -154,6 +155,7 @@ class FilesystemGuard:
 
         # Patch pathlib.Path.open également
         from pathlib import Path as _Path
+
         _real_path_open = _Path.open
 
         def _guarded_path_open(self_path, mode="r", *args, **kwargs):
@@ -169,7 +171,8 @@ class FilesystemGuard:
         # Bloquer ctypes (accès direct à la mémoire/libc)
         try:
             import ctypes
-            ctypes._real_load_library = ctypes.CDLL if hasattr(ctypes, 'CDLL') else None
+
+            ctypes._real_load_library = ctypes.CDLL if hasattr(ctypes, "CDLL") else None
 
             def _blocked_ctypes(*args, **kwargs):
                 raise PermissionError("[sandbox] ctypes interdit dans le sandbox")
@@ -188,7 +191,6 @@ class FilesystemGuard:
     def uninstall(self) -> None:
         """Restaure les builtins originaux (utile pour les tests)."""
         import builtins
-        from pathlib import Path as _Path
 
         builtins.open = self._original_open
         # Note : Path.open ne peut pas être restauré facilement sans référence,
@@ -196,7 +198,6 @@ class FilesystemGuard:
 
 
 # Capture de builtins.open AVANT tout patch
-import builtins as _builtins_module
 builtins_open = _builtins_module.open
 
 
@@ -238,10 +239,12 @@ def _load_filesystem_config(plugin_dir: Path) -> tuple[list[str], list[str]]:
         try:
             if fname.endswith(".yaml"):
                 import yaml
+
                 with open(manifest_path, encoding="utf-8") as f:
                     raw = yaml.safe_load(f) or {}
             else:
                 import json as _json
+
                 with open(manifest_path, encoding="utf-8") as f:
                     raw = _json.load(f)
 
@@ -279,6 +282,7 @@ async def _run(plugin_dir: Path) -> None:
     class _StdoutProtocol(asyncio.BaseProtocol):
         def connection_made(self, transport):
             pass
+
         def connection_lost(self, exc):
             pass
 

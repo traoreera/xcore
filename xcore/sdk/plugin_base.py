@@ -80,6 +80,7 @@ class PluginDependency:
           - name: other_plugin
             version: ">=2.0,<3.0"           # contrainte semver
     """
+
     name: str
     version_constraint: str = "*"  # * pour tout, ou >=2.0,<3.0 etc.
 
@@ -96,6 +97,7 @@ class PluginDependency:
         if isinstance(other, PluginDependency):
             return self.name == other.name
         return self.name == other if isinstance(other, str) else False
+
     @classmethod
     def from_raw(cls, raw: str | dict) -> "PluginDependency":
         """
@@ -136,7 +138,7 @@ class VersionConstraint:
         for part in parts:
             for op in (">=", "<=", ">", "<", "==", "!=", "^", "~"):
                 if part.startswith(op):
-                    version_str = part[len(op):].strip()
+                    version_str = part[len(op) :].strip()
                     version = self._to_tuple(version_str)
                     specs.append((op, version))
                     break
@@ -152,7 +154,6 @@ class VersionConstraint:
         while len(nums) < 3:
             nums.append(0)
         return tuple(nums)
-    
 
     def matches(self, version: str) -> bool:
         """Vérifie si 'version' satisfait cette contrainte."""
