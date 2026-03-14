@@ -58,6 +58,7 @@ class HookResult:
 
 class HookInfo(NamedTuple):
     func: Callable
+    is_async: bool
     priority: int
     once: bool
     timeout: Optional[float]
