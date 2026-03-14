@@ -11,6 +11,7 @@ Responsabilités :
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -308,42 +309,47 @@ class PluginLoader:
                 )
 
     # ── Tri topologique (Kahn) ────────────────────────────────
-
     @staticmethod
     def _topo_sort(manifests: list) -> list:
-        from collections import deque
 
         by_name = {m.name: m for m in manifests}
         in_degree = {m.name: 0 for m in manifests}
-        dependents: dict[str, list[str]] = {m.name: [] for m in manifests}
+        dependents = {m.name: [] for m in manifests}
 
         for m in manifests:
             for dep in m.requires:
                 if dep not in by_name:
                     raise ValueError(
-                        f"[{m.name}] Dépendance introuvable : '{dep}'. "
-                        f"Disponibles : {sorted(by_name.keys())}"
+                        f"[{m.name}] Missing dependency '{dep}'"
                     )
+
                 dependents[dep].append(m.name)
                 in_degree[m.name] += 1
 
-        queue: deque[str] = deque(
-            sorted(name for name, deg in in_degree.items() if deg == 0)
-        )
+        queue = deque(name for name, deg in in_degree.items() if deg == 0)
+
         result = []
+        visited = set()
+
         while queue:
             name = queue.popleft()
+            visited.add(name)
+
             result.append(by_name[name])
-            for dep_name in sorted(dependents[name]):
-                in_degree[dep_name] -= 1
-                if in_degree[dep_name] == 0:
-                    queue.append(dep_name)
+
+            for child in dependents[name]:
+                in_degree[child] -= 1
+
+                if in_degree[child] == 0:
+                    queue.append(child)
 
         if len(result) != len(manifests):
-            remaining = [
-                m.name for m in manifests if m.name not in {s.name for s in result}
-            ]
-            raise ValueError(f"Dépendances circulaires détectées : {remaining}")
+
+            remaining = [m.name for m in manifests if m.name not in visited]
+
+            raise ValueError(
+                f"Circular dependency detected: {remaining}"
+            )
 
         return result
 

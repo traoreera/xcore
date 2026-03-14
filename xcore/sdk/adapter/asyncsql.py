@@ -39,7 +39,7 @@ class BaseAsyncRepository(ABC, Generic[T]):
         await session.commit()
         return result.rowcount > 0
 
-    async def update_c9(self, session: AsyncSession, data) -> Optional[T]:
+    async def update_c9(self, session: AsyncSession, data) -> List[T]:
         stmt = update(self.model).values(**data)
         response = await session.execute(stmt)
         await session.commit()

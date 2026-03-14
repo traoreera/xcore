@@ -213,12 +213,12 @@ init: ## Initialiser le projet (permissions scripts + install + démarrage dev)
 # 🚀 Lancement de l'application
 # ============================================================
 
-run-dev: ## Lancer en mode développement (reload automatique)
+dev: ## Lancer en mode développement (reload automatique)
 	@echo "🚀 Lancement en mode développement..."
 	@$(MAKE) clean
 	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-run-st: ## Lancer en mode production / statique (sans reload)
+st: ## Lancer en mode production / statique (sans reload)
 	@echo "🚀 Lancement en mode statique..."
 	@$(MAKE) clean
 	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8000

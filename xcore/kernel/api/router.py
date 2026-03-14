@@ -66,7 +66,7 @@ def _hash_key(
 
 def build_router(
     supervisor,
-    secret_key: bytes,  # ← on passe en str, pas bytes
+    secret_key: bytes,
     server_key: bytes,
     server_key_iterations: int = 100000,
     prefix: str = "",

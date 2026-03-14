@@ -47,11 +47,13 @@ class DatabaseManager(BaseService):
             try:
                 await adapter.connect()
                 self.adapters[name] = adapter
-                logger.info(f"[database:{name}] ✅ {cfg.type} → {cfg.url[:40]}…")
+                logger.info(f"[database:{name}] ✅ {cfg.type} connecté")
             except Exception as e:
                 logger.error(f"[database:{name}] ❌ connexion échouée : {e}")
                 # Ne bloque pas les autres connexions
-        self._status = ServiceStatus.READY
+                
+        self._status = ServiceStatus.READY if self.adapters else ServiceStatus.DEGRADED
+
 
     def _build_adapter(self, name: str, cfg: "DatabaseConfig"):
         kind = _TYPE_MAP.get(cfg.type.lower())

@@ -1,22 +1,46 @@
 """
-container.py — Conteneur de services avec injection de dépendances et cycle de vie.
+container.py — Conteneur de services avec injection de dépendances, cycle de vie,
+               et typage fort sur get().
 
 Ordre d'init : database → cache → scheduler → extensions
 Ordre de shutdown : inverse (extensions → scheduler → cache → database)
+
+Typage :
+    container.get("db")        → AsyncSQLAdapter  (inféré par l'IDE/mypy)
+    container.get("cache")     → CacheService
+    container.get("scheduler") → SchedulerService
+    container.get("myname")    → Any  (connexion nommée ou extension)
+
+    Pour un type précis sur une clé custom :
+        container.get_as("mydb", AsyncSQLAdapter)
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, overload
+
+# Literal dispo Python 3.8+, sinon typing_extensions
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from ..configurations.sections import ServicesConfig
+    from .cache.service import CacheService
+    from .database.adapters.async_sql import AsyncSQLAdapter
+    from .database.adapters.mongodb import MongoDBAdapter
+    from .database.adapters.redis import RedisAdapter
+    from .database.adapters.sql import SQLAdapter
+    from .scheduler.service import SchedulerService
 
 from .base import BaseService, ServiceStatus
 
 logger = logging.getLogger("xcore.services.container")
+
+T = TypeVar("T")
 
 
 class ServiceContainer:
@@ -24,20 +48,19 @@ class ServiceContainer:
     Conteneur centralisé de tous les services xcore.
 
     Les plugins accèdent aux services via :
-        self.ctx.services.get("db")     → DatabaseManager
-        self.ctx.services.get("cache")  → CacheService
-        self.ctx.services.get("scheduler") → SchedulerService
+        self.ctx.services.get("db")          → AsyncSQLAdapter  ✓ typé
+        self.ctx.services.get("cache")       → CacheService      ✓ typé
+        self.ctx.services.get("scheduler")   → SchedulerService  ✓ typé
+        self.ctx.services.get_as("mydb", AsyncSQLAdapter)        ✓ typé custom
 
-    Usage:
-        ```python
+    Usage :
         container = ServiceContainer(config)
         await container.init()
 
-        db    = container.get("db")
-        cache = container.get("cache")
+        db    = container.get("db")       # type: AsyncSQLAdapter
+        cache = container.get("cache")    # type: CacheService
 
         await container.shutdown()
-        ```
     """
 
     INIT_ORDER = ["database", "cache", "scheduler", "extensions"]
@@ -45,7 +68,7 @@ class ServiceContainer:
     def __init__(self, config: "ServicesConfig") -> None:
         self._config = config
         self._services: dict[str, BaseService] = {}
-        self._raw: dict[str, Any] = {}  # dict exposé aux plugins
+        self._raw: dict[str, Any] = {}
 
     async def init(self) -> None:
         """Initialise tous les services dans l'ordre."""
@@ -65,7 +88,6 @@ class ServiceContainer:
         mgr = DatabaseManager(self._config.databases)
         await mgr.init()
         self._services["database"] = mgr
-        # Expose chaque connexion nommée ET un alias "db" pour la première
         for name, adapter in mgr.adapters.items():
             self._raw[name] = adapter
         if mgr.adapters:
@@ -107,17 +129,66 @@ class ServiceContainer:
             self._raw[f"ext.{name}"] = ext
         logger.info(f"Extensions : {list(loader.extensions.keys())}")
 
-    # ── Accès ─────────────────────────────────────────────────
+    # ── Accès typé ────────────────────────────────────────────
 
-    def get(self, name: str) -> Any:
-        """Retourne un service par nom. KeyError si absent."""
+    # Les overloads enseignent à mypy/Pylance le type de retour
+    # selon la valeur littérale de `name`.
+    # L'implémentation réelle (dernier overload) reste Any pour les clés dynamiques.
+
+    @overload
+    def get(self, name: "Literal['db']") -> "AsyncSQLAdapter": ...          # noqa: F811
+
+    @overload
+    def get(self, name: "Literal['cache']") -> "CacheService": ...          # noqa: F811
+
+    @overload
+    def get(self, name: "Literal['scheduler']") -> "SchedulerService": ...  # noqa: F811
+
+    @overload
+    def get(self, name: str) -> Any: ...                                     # noqa: F811
+
+    def get(self, name: str) -> T:
+        """
+        Retourne un service par nom.
+
+        Clés connues et typées :
+            "db"          → AsyncSQLAdapter   (ou SQLAdapter selon config)
+            "cache"       → CacheService
+            "scheduler"   → SchedulerService
+            "<nom_db>"    → adaptateur nommé (AsyncSQLAdapter / SQLAdapter / MongoDB…)
+            "ext.<nom>"   → extension custom
+
+        Lève KeyError avec message clair si absent.
+        """
         if name in self._raw:
+            T = type(self._raw[name])
             return self._raw[name]
         raise KeyError(
-            f"Service '{name}' indisponible. Disponibles : {sorted(self._raw.keys())}"
+            f"Service '{name}' indisponible.\n"
+            f"  Disponibles : {sorted(self._raw.keys())}\n"
+            f"  Conseil : vérifiez le nom exact dans votre xcore.yaml → databases / services."
         )
 
+    def get_as(self, name: str, type_: type[T]) -> T:
+        """
+        Variante fortement typée pour les connexions nommées ou extensions.
+
+        Usage :
+            analytics = container.get_as("analytics", AsyncSQLAdapter)
+            mongo     = container.get_as("mongo", MongoDBAdapter)
+
+        Lève TypeError si le type réel ne correspond pas.
+        """
+        svc = self.get(name)
+        if not isinstance(svc, type_):
+            raise TypeError(
+                f"Service '{name}' est de type {type(svc).__name__!r}, "
+                f"attendu {type_.__name__!r}."
+            )
+        return svc
+
     def get_or_none(self, name: str) -> Any | None:
+        """Retourne None si absent, sans lever d'exception."""
         return self._raw.get(name)
 
     def has(self, name: str) -> bool:
