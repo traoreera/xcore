@@ -9,6 +9,11 @@ import shutil
 import sys
 from pathlib import Path
 
+from rich.console import Console
+from rich.table import Table
+
+console = Console()
+
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
@@ -46,7 +51,7 @@ async def _plugin_list(args) -> None:
     cfg = _load_config(args)
     plugin_dir = Path(cfg.plugins.directory)
     if not plugin_dir.exists():
-        print(f"Dossier plugins introuvable : {plugin_dir}")
+        console.print(f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
         return
     plugins = sorted(
         d.name
@@ -54,9 +59,15 @@ async def _plugin_list(args) -> None:
         if d.is_dir() and not d.name.startswith("_")
     )
     if not plugins:
-        print("Aucun plugin trouvé.")
+        console.print("[yellow]Aucun plugin trouvé.[/]")
         return
-    print(f"Plugins dans {plugin_dir} ({len(plugins)}) :")
+
+    table = Table(title=f"Plugins dans {plugin_dir} ({len(plugins)})")
+    table.add_column("Nom", style="cyan", no_wrap=True)
+    table.add_column("Version", style="magenta")
+    table.add_column("Mode", style="green")
+    table.add_column("Description", style="white")
+
     for p in plugins:
         manifest_path = plugin_dir / p / "plugin.yaml"
         if manifest_path.exists():
@@ -68,11 +79,13 @@ async def _plugin_list(args) -> None:
                 version = m.get("version", "?")
                 mode = m.get("execution_mode", "legacy")
                 desc = m.get("description", "")
-                print(f"  {p:30s}  v{version:10s}  [{mode:10s}]  {desc}")
+                table.add_row(p, f"v{version}", mode, desc)
             except Exception:
-                print(f"  {p}")
+                table.add_row(p, "[red]?[/]", "[red]?[/]", "[red]Erreur de lecture[/]")
         else:
-            print(f"  {p}")
+            table.add_row(p, "[grey70]?[/]", "[grey70]?[/]", "[italic grey70]Manifeste manquant[/]")
+
+    console.print(table)
 
 
 # ── health ────────────────────────────────────────────────────
@@ -82,18 +95,23 @@ async def _plugin_health(args) -> None:
     cfg = _load_config(args)
     plugin_dir = Path(cfg.plugins.directory)
     if not plugin_dir.exists():
-        print(f"❌  Dossier plugins introuvable : {plugin_dir}")
+        console.print(f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
         return
 
     plugins = sorted(
         d for d in plugin_dir.iterdir() if d.is_dir() and not d.name.startswith("_")
     )
     if not plugins:
-        print("Aucun plugin trouvé.")
+        console.print("[yellow]Aucun plugin trouvé.[/]")
         return
 
-    print(f"{'Plugin':<30} {'Mode':<12} {'Sig':<6} {'AST':<6} {'Manifest'}")
-    print("─" * 70)
+    table = Table(title="Health Check des Plugins")
+    table.add_column("Plugin", style="cyan", no_wrap=True)
+    table.add_column("Mode", justify="center")
+    table.add_column("Sig", justify="center")
+    table.add_column("AST", justify="center")
+    table.add_column("Manifest", justify="center")
+    table.add_column("Status", style="dim")
 
     from xcore.kernel.security.signature import is_signed
     from xcore.kernel.security.validation import ASTScanner, ManifestValidator
@@ -113,10 +131,12 @@ async def _plugin_health(args) -> None:
             ast_ok = "✅" if result.passed else "❌"
 
             mode = manifest.execution_mode.value
-            print(f"  {name:<28} {mode:<12} {signed:<6} {ast_ok:<6} ✅")
+            table.add_row(name, mode, signed, ast_ok, "✅", "[green]OK[/]")
 
         except Exception as e:
-            print(f"  {name:<28} {'?':<12} {'?':<6} {'?':<6} ❌  {e}")
+            table.add_row(name, "[red]?[/]", "[red]?[/]", "[red]?[/]", "❌", f"[red]Erreur: {e}[/]")
+
+    console.print(table)
 
 
 # ── install ───────────────────────────────────────────────────
