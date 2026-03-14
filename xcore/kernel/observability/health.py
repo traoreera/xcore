@@ -45,7 +45,7 @@ class HealthChecker:
     """
 
     def __init__(self) -> None:
-        self._checks: dict[str, Callable] = {}
+        self._checks: dict[str, tuple[Callable, bool]] = {}
 
     def register(self, name: str) -> Callable:
         """
@@ -55,17 +55,17 @@ class HealthChecker:
         """
 
         def decorator(fn: Callable) -> Callable:
-            self._checks[name] = fn
+            self._checks[name] = (fn, inspect.iscoroutinefunction(fn))
             return fn
 
         return decorator
 
     async def run_all(self, timeout: float = 5.0) -> dict[str, Any]:
         results: list[CheckResult] = []
-        for name, fn in self._checks.items():
+        for name, (fn, is_async) in self._checks.items():
             start = time.monotonic()
             try:
-                if inspect.iscoroutinefunction(fn):
+                if is_async:
                     ok, msg = await asyncio.wait_for(fn(), timeout=timeout)
                 else:
                     ok, msg = fn()
