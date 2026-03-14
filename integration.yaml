@@ -51,7 +51,7 @@ services:
     # (même BDD, driver asyncpg)
     async_default:
       type: sqlasync
-      url: "${DATABASE_ASYNC_URL} "  # postgresql+asyncpg://user:pass@host/db
+      url: "${DATABASE_ASYNC_URL}"  # postgresql+asyncpg://user:pass@host/db
       echo: false
 
     # Redis utilisé comme base de données (séparé du cache)

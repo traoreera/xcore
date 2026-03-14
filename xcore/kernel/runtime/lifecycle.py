@@ -208,7 +208,6 @@ class LifecycleManager:
             }
         except Exception:
             self._sm.transition("error")
-            self._sm.transition("reset")
             raise
 
         return (
