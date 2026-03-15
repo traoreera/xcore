@@ -180,6 +180,9 @@ def run_command(cmd):
         bad_code = """
 def unsafe_eval(code):
     return eval(code)
+
+def unsafe_exec(code):
+    exec(code)
 """
         (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
 
@@ -187,6 +190,24 @@ def unsafe_eval(code):
 
         assert result.passed is False
         assert any("eval" in err for err in result.errors)
+        assert any("exec" in err for err in result.errors)
+
+    def test_scan_forbidden_builtins(self, scanner, temp_plugin_dir):
+        """Test scanning code with forbidden built-ins."""
+        bad_code = """
+def unsafe_getattr(obj, name):
+    return getattr(obj, name)
+
+def unsafe_breakpoint():
+    breakpoint()
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("getattr" in err for err in result.errors)
+        assert any("breakpoint" in err for err in result.errors)
 
     def test_scan_dunder_import(self, scanner, temp_plugin_dir):
         """Test scanning code with __import__."""
