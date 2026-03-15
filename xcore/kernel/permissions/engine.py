@@ -41,11 +41,14 @@ class PermissionEngine:
         self._policies: dict[str, PolicySet] = {}
         self._events = events
         self._audit_log: list[dict] = []
+        # Cache for permission checks: (plugin_name, resource, action) -> PolicyEffect
+        self._cache: dict[tuple[str, str, str], PolicyEffect] = {}
 
     def load_from_manifest(
         self, plugin_name: str, raw_permissions: list[dict] | None
     ) -> None:
         """load policies from manifest"""
+        self._cache.clear()  # Invalidate cache on policy change
         if not raw_permissions:
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
             logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
@@ -56,6 +59,7 @@ class PermissionEngine:
 
     def grant_all(self, plugin_name: str) -> None:
         """Grant all permissions to a plugin."""
+        self._cache.clear()  # Invalidate cache on policy change
         self._policies[plugin_name] = PolicySet.allow_all(plugin_name)
 
     def check(self, plugin_name: str, resource: str, action: str) -> None:
@@ -78,11 +82,20 @@ class PermissionEngine:
             return False
 
     def _evaluate(self, plugin_name: str, resource: str, action: str) -> PolicyEffect:
+        # Check cache first
+        cache_key = (plugin_name, resource, action)
+        if (effect := self._cache.get(cache_key)) is not None:
+            return effect
+
         ps = self._policies.get(plugin_name)
         if ps is None:
             logger.warning(f"[{plugin_name}] Aucune policy chargée → DENY")
             return PolicyEffect.DENY
-        return ps.evaluate(resource, action)
+
+        effect = ps.evaluate(resource, action)
+        # Store in cache
+        self._cache[cache_key] = effect
+        return effect
 
     def _audit(
         self, plugin_name: str, resource: str, action: str, effect: PolicyEffect
