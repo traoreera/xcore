@@ -7,3 +7,8 @@
 **Vulnerability:** The `ManifestValidator._inject_dotenv` method allowed loading `.env` files from outside the plugin directory via the `env_file` manifest parameter.
 **Learning:** Even when using `Path` objects, concatenating a base directory with a user-provided relative path containing `..` can escape the intended directory if not explicitly validated after resolution.
 **Prevention:** Always use `.resolve()` on the final path and verify it stays within the intended base directory using `.is_relative_to(base_dir.resolve())`.
+
+## 2026-03-14 - Bypass of AST-based Security Controls via Built-ins
+**Vulnerability:** The `ASTScanner` was configured to forbid dangerous modules but failed to block direct calls to dangerous built-in functions like `eval()` and `exec()`, allowing sandboxed plugins to execute arbitrary code.
+**Learning:** Checking only `Import` and `ImportFrom` nodes in an AST scanner is insufficient for Python sandboxing. Dangerous built-ins can be called directly without an explicit import.
+**Prevention:** Extend `ast.NodeVisitor` to override `visit_Call` and check `node.func.id` against a comprehensive list of forbidden built-in functions (e.g., `eval`, `exec`, `getattr`, `__import__`).
