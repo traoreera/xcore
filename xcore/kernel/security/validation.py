@@ -212,12 +212,21 @@ DEFAULT_FORBIDDEN = {
     "dis",
     "tempfile",
     "glob",
-    "exec",
-    "eval",
-    "compile",
     "pickle",
     "shelve",
     "marshal",
+}
+
+FORBIDDEN_CALLS = {
+    "eval",
+    "exec",
+    "compile",
+    "getattr",
+    "setattr",
+    "delattr",
+    "hasattr",
+    "breakpoint",
+    "__import__",
 }
 
 DEFAULT_ALLOWED = {
@@ -304,7 +313,7 @@ class ASTScanner:
             result.add_error(f"{path.name}: lecture : {e}")
             return
 
-        visitor = _ImportVisitor(
+        visitor = _SecurityVisitor(
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
@@ -319,7 +328,7 @@ class ASTScanner:
             result.add_warning(w)
 
 
-class _ImportVisitor(ast.NodeVisitor):
+class _SecurityVisitor(ast.NodeVisitor):
     def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
@@ -346,8 +355,10 @@ class _ImportVisitor(ast.NodeVisitor):
             self._check(node.module, node.lineno)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-            self.errors.append(
-                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
-            )
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+            if func_name in FORBIDDEN_CALLS:
+                self.errors.append(
+                    f"{self.path}:{node.lineno}: appel interdit : {func_name}()"
+                )
         self.generic_visit(node)

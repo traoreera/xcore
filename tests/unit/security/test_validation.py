@@ -201,6 +201,23 @@ def dynamic_import(module):
         assert result.passed is False
         assert any("__import__" in err for err in result.errors)
 
+    def test_scan_forbidden_builtins(self, scanner, temp_plugin_dir):
+        """Test scanning code with forbidden built-ins like getattr/setattr."""
+        bad_code = """
+def unsafe_access(obj, attr):
+    return getattr(obj, attr)
+
+def unsafe_mutation(obj, attr, val):
+    setattr(obj, attr, val)
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("getattr" in err for err in result.errors)
+        assert any("setattr" in err for err in result.errors)
+
     def test_scan_syntax_error(self, scanner, temp_plugin_dir):
         """Test scanning code with syntax error."""
         bad_code = """
