@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
+error_console = Console(stderr=True)
 
 
 def _load_config(args):
@@ -119,6 +120,8 @@ async def _mkt_trending(args) -> None:
         )
     console.print(table)
 
+    console.print(table)
+
 
 # ── search ────────────────────────────────────────────────────
 
@@ -161,16 +164,18 @@ async def _mkt_search(args) -> None:
 async def _mkt_show(args) -> None:
     client, cfg = _get_client(args)
     name = args.name
-    with console.status(f"[bold green]🔍 Récupération de [white]{escape(name)}[/]..."):
+    with console.status(
+        f"[bold green]🔍 Récupération de [white]{escape(name)}[/]...[/]"
+    ):
         try:
             plugin = await client.get_plugin(name)
             versions = await client.get_versions(name)
         except Exception as e:
-            console.print(f"[bold red]❌ Erreur marketplace :[/] {escape(str(e))}", file=sys.stderr)
+            error_console.print(f"[bold red]❌ Erreur marketplace :[/] {escape(str(e))}")
             sys.exit(1)
 
     if not plugin:
-        console.print(f"[bold red]❌ Plugin '{escape(name)}' introuvable.[/]", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Plugin '{escape(name)}' introuvable.[/]")
         sys.exit(1)
 
     info = [
@@ -214,7 +219,7 @@ async def _mkt_rate(args) -> None:
             f"✅  Note enregistrée. Nouvelle moyenne : {new_rating}/5 ({total} votes)"
         )
     except Exception as e:
-        print(f"❌  Erreur : {e}", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Erreur :[/] {escape(str(e))}")
         sys.exit(1)
 
 
