@@ -69,9 +69,9 @@ async def _mkt_list(args) -> None:
         return
 
     table = Table(title=f"Catalogue Marketplace ({len(plugins)} plugins)")
-    table.add_column("Nom", style="cyan", no_wrap=True)
-    table.add_column("Version", style="magenta")
-    table.add_column("Auteur", style="green")
+    table.add_column("Nom", style="cyan", no_wrap=True, max_width=32, overflow="ellipsis")
+    table.add_column("Version", style="magenta", max_width=16, overflow="ellipsis")
+    table.add_column("Auteur", style="green", max_width=24, overflow="ellipsis")
     table.add_column("Note", style="yellow")
     table.add_column("Description", style="white")
 
