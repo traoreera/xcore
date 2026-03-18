@@ -304,7 +304,7 @@ class ASTScanner:
             result.add_error(f"{path.name}: lecture : {e}")
             return
 
-        visitor = _ImportVisitor(
+        visitor = _SecurityVisitor(
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
@@ -319,7 +319,35 @@ class ASTScanner:
             result.add_warning(w)
 
 
-class _ImportVisitor(ast.NodeVisitor):
+class _SecurityVisitor(ast.NodeVisitor):
+    # Fonctions natives dangereuses à bloquer totalement
+    FORBIDDEN_BUILTINS = frozenset(
+        {
+            "eval",
+            "exec",
+            "compile",
+            "getattr",
+            "setattr",
+            "delattr",
+            "hasattr",
+            "breakpoint",
+            "globals",
+            "locals",
+            "__import__",
+        }
+    )
+
+    # Attributs dunders sensibles à bloquer
+    FORBIDDEN_ATTRS = frozenset(
+        {
+            "__globals__",
+            "__subclasses__",
+            "__code__",
+            "__func__",
+            "__self__",
+        }
+    )
+
     def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
@@ -345,9 +373,24 @@ class _ImportVisitor(ast.NodeVisitor):
         if node.module:
             self._check(node.module, node.lineno)
 
-    def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Load) and node.id in self.FORBIDDEN_BUILTINS:
             self.errors.append(
-                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
+                f"{self.path}:{node.lineno}: utilisation interdite de {node.id!r}"
+            )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        # Déjà couvert par visit_Name si c'est un Name,
+        # mais on garde pour la clarté ou si node.func est un Attribute complexe
+        if isinstance(node.func, ast.Name) and node.func.id in self.FORBIDDEN_BUILTINS:
+            # On évite les doublons d'erreurs si visit_Name l'a déjà vu
+            pass
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if node.attr in self.FORBIDDEN_ATTRS:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès interdit à l'attribut {node.attr!r}"
             )
         self.generic_visit(node)
