@@ -48,7 +48,7 @@ class ExtensionLoader(BaseService):
                 logger.info(f"Extension '{name}' ✅")
             except Exception as e:
                 logger.error(f"Extension '{name}' ❌ : {e}")
-        self._status = ServiceStatus.READY
+        self._status = ServiceStatus.READY if self.extensions else ServiceStatus.DEGRADED
 
     def _load(self, name: str, cfg: dict) -> Any:
         module_path = cfg.get("module")
