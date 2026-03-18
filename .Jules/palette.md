@@ -5,3 +5,7 @@
 ## 2025-05-15 - [Structured CLI Data with Rich Tables]
 **Learning:** For command outputs involving multiple entity attributes (like name, version, status), using structured tables with clear headers and semantic colors (e.g., green for OK, red for error) drastically reduces cognitive load compared to manual padding.
 **Action:** Prefer `rich.table.Table` over custom string formatting for any CLI output that lists more than two related properties.
+
+## 2025-05-16 - [UX Responsiveness in CLI]
+**Learning:** Adding `console.status` (spinners) during network-bound marketplace operations significantly improves the user's perception of responsiveness, especially when APIs are slow or unreachable.
+**Action:** Always wrap network or long-running async calls in a `with console.status(...)` block to provide immediate visual feedback.

@@ -15,6 +15,7 @@ import sys
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
@@ -53,27 +54,34 @@ async def handle_marketplace(args) -> None:
 
 async def _mkt_list(args) -> None:
     client, _ = _get_client(args)
-    print("🔍  Récupération du catalogue...")
-    try:
-        plugins = await client.list_plugins()
-    except Exception as e:
-        print(f"❌  Erreur marketplace : {e}", file=sys.stderr)
-        sys.exit(1)
+    with console.status("[bold green]🔍  Récupération du catalogue..."):
+        try:
+            plugins = await client.list_plugins()
+        except Exception as e:
+            console.print(f"[bold red]❌  Erreur marketplace :[/] {escape(str(e))}", file=sys.stderr)
+            sys.exit(1)
 
     if not plugins:
-        print("Aucun plugin disponible.")
+        console.print("[yellow]Aucun plugin disponible.[/]")
         return
 
-    print(f"\n{'Nom':<25} {'Version':<10} {'Auteur':<20} {'Stars':<6} Description")
-    print("─" * 85)
+    table = Table(title=f"Catalogue Marketplace ({len(plugins)} plugins)", box=None, header_style="bold cyan")
+    table.add_column("Nom", style="bold white")
+    table.add_column("Version", justify="center")
+    table.add_column("Auteur", style="magenta")
+    table.add_column("Note", justify="center")
+    table.add_column("Description", ratio=1)
+
     for p in plugins:
-        name = p.get("name", "?")[:24]
-        version = p.get("version", "?")[:9]
-        author = p.get("author", "?")[:19]
-        stars = _stars(p.get("rating", 0))
-        desc = p.get("description", "")[:30]
-        print(f"  {name:<23} {version:<10} {author:<20} {stars:<6} {desc}")
-    print(f"\n  Total : {len(plugins)} plugin(s)")
+        table.add_row(
+            escape(p.get("name", "?")),
+            escape(p.get("version", "?")),
+            escape(p.get("author", "?")),
+            _stars(p.get("rating", 0)),
+            escape(p.get("description", "")),
+        )
+
+    console.print(table)
 
 
 # ── trending ──────────────────────────────────────────────────
@@ -81,27 +89,35 @@ async def _mkt_list(args) -> None:
 
 async def _mkt_trending(args) -> None:
     client, _ = _get_client(args)
-    print("🔥  Plugins populaires...")
-    try:
-        plugins = await client.trending()
-    except Exception as e:
-        print(f"❌  Erreur marketplace : {e}", file=sys.stderr)
-        sys.exit(1)
+    with console.status("[bold orange3]🔥  Plugins populaires..."):
+        try:
+            plugins = await client.trending()
+        except Exception as e:
+            console.print(f"[bold red]❌  Erreur marketplace :[/] {escape(str(e))}", file=sys.stderr)
+            sys.exit(1)
 
     if not plugins:
-        print("Aucun plugin trending.")
+        console.print("[yellow]Aucun plugin trending.[/]")
         return
 
-    print()
+    table = Table(title="🔥  Trending Plugins", box=None, header_style="bold orange3")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Nom", style="bold white")
+    table.add_column("Version")
+    table.add_column("Note")
+    table.add_column("Téléch.", justify="right", style="green")
+    table.add_column("Description", ratio=1)
+
     for i, p in enumerate(plugins, 1):
-        name = p.get("name", "?")
-        version = p.get("version", "?")
-        downloads = p.get("downloads", 0)
-        rating = p.get("rating", 0)
-        desc = p.get("description", "")
-        print(
-            f"  {i:>2}. {name:<25} v{version:<8} {_stars(rating)}  ⬇ {downloads:,}  {desc}"
+        table.add_row(
+            str(i),
+            escape(p.get("name", "?")),
+            f"v{escape(p.get('version', '?'))}",
+            _stars(p.get("rating", 0)),
+            f"{p.get('downloads', 0):,}",
+            escape(p.get("description", "")),
         )
+    console.print(table)
 
 
 # ── search ────────────────────────────────────────────────────
@@ -110,28 +126,33 @@ async def _mkt_trending(args) -> None:
 async def _mkt_search(args) -> None:
     client, _ = _get_client(args)
     query = args.query
-    print(f"🔍  Recherche : '{query}'...")
-    try:
-        results = await client.search(query)
-    except Exception as e:
-        print(f"❌  Erreur marketplace : {e}", file=sys.stderr)
-        sys.exit(1)
+    with console.status(f"[bold green]🔍  Recherche : '{escape(query)}'..."):
+        try:
+            results = await client.search(query)
+        except Exception as e:
+            console.print(f"[bold red]❌  Erreur marketplace :[/] {escape(str(e))}", file=sys.stderr)
+            sys.exit(1)
 
     if not results:
-        print(f"Aucun résultat pour '{query}'.")
+        console.print(f"[yellow]Aucun résultat pour '{escape(query)}'.[/]")
         return
 
-    print(f"\n  {len(results)} résultat(s) pour '{query}' :\n")
+    table = Table(title=f"🔍 {len(results)} résultat(s) pour '{escape(query)}'", box=None, header_style="bold green")
+    table.add_column("Nom", style="bold white")
+    table.add_column("Version")
+    table.add_column("Auteur", style="magenta")
+    table.add_column("Note")
+    table.add_column("Description", ratio=1)
+
     for p in results:
-        name = p.get("name", "?")
-        version = p.get("version", "?")
-        author = p.get("author", "?")
-        rating = p.get("rating", 0)
-        desc = p.get("description", "")
-        print(f"  📦  {name} v{version}  ({author})  {_stars(rating)}")
-        if desc:
-            print(f"      {desc}")
-        print()
+        table.add_row(
+            f"📦 {escape(p.get('name', '?'))}",
+            f"v{escape(p.get('version', '?'))}",
+            escape(p.get("author", "?")),
+            _stars(p.get("rating", 0)),
+            escape(p.get("description", "")),
+        )
+    console.print(table)
 
 
 # ── show ──────────────────────────────────────────────────────
@@ -201,9 +222,13 @@ async def _mkt_rate(args) -> None:
 
 
 def _stars(rating: float) -> str:
-    """Convertit une note 0-5 en étoiles ASCII."""
-    rating = max(0.0, min(5.0, float(rating or 0)))
-    full = int(rating)
-    half = 1 if (rating - full) >= 0.5 else 0
+    """Convertit une note 0-5 en étoiles ASCII avec markup rich."""
+    try:
+        val = float(rating or 0)
+    except (ValueError, TypeError):
+        val = 0.0
+    val = max(0.0, min(5.0, val))
+    full = int(val)
+    half = 1 if (val - full) >= 0.5 else 0
     empty = 5 - full - half
-    return "★" * full + "½" * half + "☆" * empty
+    return f"[bold yellow]{'★' * full + '½' * half}[/]{'☆' * empty}"
