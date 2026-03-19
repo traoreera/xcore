@@ -9,10 +9,22 @@ import shutil
 import sys
 from pathlib import Path
 
+import re
 from rich.console import Console
 from rich.table import Table
 
 console = Console()
+
+# Pattern pour valider le nom d'un plugin : alphanumérique, tirets et underscores uniquement.
+# Cela empêche les tentatives de traversal (..) ou de chemins absolus.
+PLUGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_plugin_name(name: str) -> None:
+    if not name or not PLUGIN_NAME_PATTERN.match(name):
+        print(f"❌  Nom de plugin invalide : {name!r}")
+        print("    Le nom doit contenir uniquement des lettres, chiffres, '-' et '_'.")
+        sys.exit(1)
 
 
 def _load_config(args):
@@ -147,6 +159,7 @@ async def _plugin_install(args) -> None:
     source = getattr(args, "source", "marketplace")
     url = getattr(args, "url", None)
     name = args.name
+    _validate_plugin_name(name)
 
     plugin_dir = Path(cfg.plugins.directory)
     plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -304,6 +317,7 @@ async def _auto_sign(plugin_dir: Path, cfg) -> None:
 async def _plugin_remove(args) -> None:
     cfg = _load_config(args)
     name = args.name
+    _validate_plugin_name(name)
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
@@ -325,6 +339,7 @@ async def _plugin_remove(args) -> None:
 async def _plugin_info(args) -> None:
     cfg = _load_config(args)
     name = args.name
+    _validate_plugin_name(name)
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
@@ -445,6 +460,7 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
 
     cfg = _load_config(args)
     name = args.name
+    _validate_plugin_name(name)
 
     # Construction de l'URL
     # Priorité : --host/--port/--path CLI > config > défauts
