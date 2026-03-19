@@ -18,7 +18,7 @@ class AppConfig:
     plugin_prefix: str = "/plugin"
     plugin_tags: list[str] = field(default_factory=list)
     server_key: bytes | None = None
-    server_key_iterations: int = None
+    server_key_iterations: int = 100_000
 
 
 @dataclass

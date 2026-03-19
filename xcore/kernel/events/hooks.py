@@ -59,6 +59,7 @@ class HookManager:
             self._hooks[event_name] = []
         hook_info = HookInfo(
             func=func,
+            is_async=inspect.iscoroutinefunction(func),
             priority=priority,
             once=once,
             timeout=timeout,
@@ -142,7 +143,7 @@ class HookManager:
                     hook_name=hook_name, event_name=event.name, cancelled=True
                 )
             if hook_info.timeout:
-                if inspect.iscoroutinefunction(hook_info.func):
+                if hook_info.is_async:
                     result = await asyncio.wait_for(
                         hook_info.func(event), timeout=hook_info.timeout
                     )
@@ -152,7 +153,7 @@ class HookManager:
                         timeout=hook_info.timeout,
                     )
             else:
-                if inspect.iscoroutinefunction(hook_info.func):
+                if hook_info.is_async:
                     result = await hook_info.func(event)
                 else:
                     result = await asyncio.to_thread(hook_info.func, event)
