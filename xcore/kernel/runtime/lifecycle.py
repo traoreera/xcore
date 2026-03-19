@@ -52,7 +52,9 @@ class LifecycleManager:
         services: dict[str, Any],  # container partagé (référence)
         events=None,  # EventBus optionnel
         hooks=None,  # HookManager optionnel
+        caller=None,
     ) -> None:
+        self._caller = caller
         self.manifest = manifest
         self._services = services  # même objet que PluginSupervisor._services
         self._events = events
@@ -145,6 +147,7 @@ class LifecycleManager:
             hooks=self._hooks,
             env=self.manifest.env,
             config=getattr(self.manifest, "extra", {}),
+            caller=self._caller,
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)

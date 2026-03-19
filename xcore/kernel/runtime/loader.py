@@ -51,11 +51,13 @@ class PluginLoader:
         services: dict[str, Any],
         events=None,
         hooks=None,
+        caller=None,
     ) -> None:
         self._config = config
         self._services = services
         self._events = events
         self._hooks = hooks
+        self._caller = caller
 
         self._trusted: dict[str, LifecycleManager] = {}
         self._sandboxed: dict[str, SandboxProcessManager] = {}
@@ -211,6 +213,7 @@ class PluginLoader:
             services=self._services,
             events=self._events,
             hooks=self._hooks,
+            caller=self._caller,
         )
         await lm.load()
         self._trusted[manifest.name] = lm

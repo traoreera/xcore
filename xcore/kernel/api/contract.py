@@ -84,6 +84,23 @@ class TrustedBase(ABC):
         # Rétro-compatibilité v1 : expose _services directement
         self._services = ctx.services if ctx else {}
 
+
+    # xcore/kernel/api/contract.py
+    # Ajouter après get_service_as(), avant get_router()
+
+    async def call_plugin(self,plugin_name: str,action: str,payload: dict | None = None,
+    ) -> dict:
+        if self.ctx is None:
+            raise RuntimeError("call_plugin appelé avant injection du contexte.")
+        if self.ctx.caller is None:
+            raise RuntimeError(
+                f"[{self.ctx.name}] call_plugin() non disponible "
+                "(plugin sandboxed ou test sans caller)."
+            )
+        return await self.ctx.caller(plugin_name, action, payload or {})
+
+
+
     # ── get_service — overloads typés ─────────────────────────────────────────
     #
     # L'IDE et mypy voient le type de retour précis selon la valeur littérale
