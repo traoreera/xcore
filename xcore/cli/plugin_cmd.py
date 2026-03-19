@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+from rich.prompt import Confirm
 from rich.table import Table
 
 console = Console()
@@ -153,8 +154,8 @@ async def _plugin_install(args) -> None:
     dest = plugin_dir / name
 
     if dest.exists():
-        print(f"❌  Plugin '{name}' déjà installé dans {dest}")
-        print(
+        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' déjà installé dans {dest}")
+        console.print(
             f"    Pour mettre à jour : xcore plugin remove {name} && xcore plugin install {name}"
         )
         sys.exit(1)
@@ -164,7 +165,7 @@ async def _plugin_install(args) -> None:
 
     elif source == "zip" or (url and (url.endswith(".zip") or url.startswith("http"))):
         if not url:
-            print(f"❌  --url requis pour --source zip")
+            console.print(f"[bold red]❌ Erreur :[/] --url requis pour --source zip")
             sys.exit(1)
         await _install_from_zip(name, url, dest)
 
@@ -196,7 +197,7 @@ async def _install_from_git(name: str, url: str, dest: Path) -> None:
     )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
-        print(f"❌  git clone échoué : {stderr.decode().strip()}", file=sys.stderr)
+        console.print(f"[bold red]❌ git clone échoué :[/] {stderr.decode().strip()}")
         sys.exit(1)
 
 
@@ -241,15 +242,15 @@ async def _install_from_zip(name: str, url: str, dest: Path) -> None:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(zf.read(member))
     except Exception as e:
-        print(f"❌  Téléchargement échoué : {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Téléchargement échoué :[/] {e}")
         sys.exit(1)
 
 
 async def _install_from_marketplace(client, name: str, dest: Path, cfg) -> None:
-    print(f"🔍  Recherche '{name}' sur le marketplace...")
+    console.print(f"🔍  Recherche '{name}' sur le marketplace...")
     plugin = await client.get_plugin(name)
     if not plugin:
-        print(f"❌  Plugin '{name}' introuvable sur le marketplace.", file=sys.stderr)
+        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable sur le marketplace.")
         sys.exit(1)
 
     download_url = plugin.get("download_url")
@@ -307,12 +308,12 @@ async def _plugin_remove(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
-        print(f"❌  Plugin '{name}' introuvable dans {plugin_dir}")
+        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable dans {plugin_dir}")
         sys.exit(1)
 
-    confirm = input(f"⚠️   Supprimer '{name}' ? [y/N] ").strip().lower()
-    if confirm != "y":
-        print("Annulé.")
+    confirm = Confirm.ask(f"[bold red]⚠️  Supprimer '{name}' ?[/]", default=False)
+    if not confirm:
+        console.print("Annulé.")
         return
 
     shutil.rmtree(plugin_dir)
@@ -328,7 +329,7 @@ async def _plugin_info(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
-        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable.")
         sys.exit(1)
 
     from xcore.kernel.security.signature import is_signed
@@ -338,10 +339,10 @@ async def _plugin_info(args) -> None:
         validator = ManifestValidator()
         manifest = validator.load_and_validate(plugin_dir)
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
         sys.exit(1)
 
-    print(f"\n{'='*50}")
+    console.print(f"\n{'='*50}")
     print(f"  {manifest.name}  v{manifest.version}")
     print(f"{'='*50}")
     print(f"  Auteur      : {manifest.author}")
@@ -350,24 +351,24 @@ async def _plugin_info(args) -> None:
     print(f"  Framework   : {manifest.framework_version}")
     print(f"  Entry point : {manifest.entry_point}")
     if manifest.requires:
-        print(f"  Dépendances : {', '.join(manifest.requires)}")
+        console.print(f"  Dépendances : {', '.join(manifest.requires)}")
     if manifest.allowed_imports:
-        print(f"  Imports OK  : {', '.join(manifest.allowed_imports)}")
-    print(f"  Signé       : {'✅ oui' if is_signed(manifest) else '⚠️  non'}")
-    print(f"\n  Ressources :")
-    print(f"    timeout     : {manifest.resources.timeout_seconds}s")
-    print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
-    print(f"    disque max  : {manifest.resources.max_disk_mb}MB")
-    print(
+        console.print(f"  Imports OK  : {', '.join(manifest.allowed_imports)}")
+    console.print(f"  Signé       : {'✅ oui' if is_signed(manifest) else '⚠️  non'}")
+    console.print(f"\n  Ressources :")
+    console.print(f"    timeout     : {manifest.resources.timeout_seconds}s")
+    console.print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
+    console.print(f"    disque max  : {manifest.resources.max_disk_mb}MB")
+    console.print(
         f"    rate limit  : {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s"
     )
     if manifest.permissions:
-        print(f"\n  Permissions ({len(manifest.permissions)}) :")
+        console.print(f"\n  Permissions ({len(manifest.permissions)}) :")
         for p in manifest.permissions:
             effect = p.get("effect", "allow")
             symbol = "✅" if effect == "allow" else "❌"
-            print(f"    {symbol} {p.get('resource')} → {p.get('actions', ['*'])}")
-    print(f"{'='*50}\n")
+            console.print(f"    {symbol} {p.get('resource')} → {p.get('actions', ['*'])}")
+    console.print(f"{'='*50}\n")
 
 
 # ── sign / verify / validate ──────────────────────────────────
@@ -378,16 +379,16 @@ async def _plugin_validate(args) -> None:
 
     path = Path(args.path)
     if not path.exists():
-        print(f"❌  Dossier introuvable : {path}", file=sys.stderr)
+        console.print(f"[bold red]❌ Erreur :[/] Dossier introuvable : {path}")
         sys.exit(1)
     try:
         v = ManifestValidator()
         manifest = v.load_and_validate(path)
-        print(
+        console.print(
             f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
         )
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
         sys.exit(1)
 
 
@@ -411,9 +412,9 @@ async def _plugin_verify(args) -> None:
     manifest = ManifestValidator().load_and_validate(path)
     try:
         verify_plugin(manifest, key)
-        print(f"✅  Signature valide : {manifest.name}")
+        console.print(f"✅  Signature valide : {manifest.name}")
     except SignatureError as e:
-        print(f"❌  {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Erreur de signature :[/] {e}")
         sys.exit(1)
 
 
@@ -487,9 +488,9 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
         status = result.get("status", "?")
         msg = result.get("msg", "")
         if status == "ok":
-            print(f"✅  {msg or f'Plugin {name!r} : {action} OK'}")
+            console.print(f"✅  {msg or f'Plugin {name!r} : {action} OK'}")
         else:
-            print(f"❌  Erreur : {result}", file=sys.stderr)
+            console.print(f"[bold red]❌ Erreur :[/] {result}")
             sys.exit(1)
 
     except HTTPError as e:
@@ -498,19 +499,18 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
             detail = json.loads(body).get("detail", body)
         except Exception:
             detail = body
-        print(f"❌  HTTP {e.code} : {detail}", file=sys.stderr)
+        console.print(f"[bold red]❌ HTTP {e.code} :[/] {detail}")
         sys.exit(1)
 
     except URLError:
-        print(
-            f"❌  Impossible de joindre le serveur xcore sur {host}:{port}.\n"
+        console.print(
+            f"[bold red]❌ Erreur :[/] Impossible de joindre le serveur xcore sur {host}:{port}.\n"
             f"    Vérifiez que le serveur est démarré.",
-            file=sys.stderr,
         )
         sys.exit(1)
 
     except Exception as e:
-        print(f"❌  Erreur inattendue : {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Erreur inattendue :[/] {e}")
         sys.exit(1)
 
 
