@@ -235,9 +235,12 @@ async def _mkt_rate(args) -> None:
 
 
 def _stars(rating: float) -> str:
-    """Convertit une note 0-5 en étoiles ASCII."""
-    rating = max(0.0, min(5.0, float(rating or 0)))
+    """Convertit une note 0-5 en étoiles ASCII avec style Rich."""
+    try:
+        rating = max(0.0, min(5.0, float(rating or 0)))
+    except (ValueError, TypeError):
+        rating = 0.0
     full = int(rating)
     half = 1 if (rating - full) >= 0.5 else 0
     empty = 5 - full - half
-    return "★" * full + "½" * half + "☆" * empty
+    return f"[bold yellow]{'★' * full}{'½' * half}[/][dim]{'☆' * empty}[/]"

@@ -5,3 +5,7 @@
 ## 2025-05-15 - [Structured CLI Data with Rich Tables]
 **Learning:** For command outputs involving multiple entity attributes (like name, version, status), using structured tables with clear headers and semantic colors (e.g., green for OK, red for error) drastically reduces cognitive load compared to manual padding.
 **Action:** Prefer `rich.table.Table` over custom string formatting for any CLI output that lists more than two related properties.
+
+## 2025-05-16 - [Defensive CLI Helpers with Rich Styling]
+**Learning:** CLI helper functions (like star rating generators) are often called with inconsistent data from external sources (APIs, manifests). Implementing defensive type conversion prevents crashes, while using `rich` markup (`[dim]`, `[bold yellow]`) allows for graceful degradation of the UI when data is missing or malformed.
+**Action:** Always wrap type casting in `try-except` blocks within CLI helpers and use semantic styling to distinguish between active and placeholder UI states.
