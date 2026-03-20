@@ -64,6 +64,7 @@ class PluginSupervisor:
             services=svc_dict,
             events=self._events,
             hooks=self._hooks,
+            caller=lambda name, action, payload: self.call(name, action, payload)
         )
         report = await self._loader.load_all()
         logger.info(

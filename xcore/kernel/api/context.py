@@ -9,7 +9,7 @@ variables, and the plugin configuration.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, Awaitable
 
 
 @dataclass
@@ -33,6 +33,7 @@ class PluginContext:
     hooks: Any = None  # HookManager
     env: dict[str, str] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
+    caller: Callable[[str, str, dict], Awaitable[dict]] | None = None
 
     def get_service(self, name: str) -> Any:
         """Accès sécurisé à un service avec message d'erreur clair."""
