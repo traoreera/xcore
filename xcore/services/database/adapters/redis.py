@@ -42,7 +42,7 @@ class RedisAdapter:
         )
         self._client = aioredis.Redis(connection_pool=pool)
         await self._client.ping()
-        logger.info(f"[{self.name}] Redis connecté → {self.url[:30]}…")
+        logger.info(f"[{self.name}] Redis connecté → {self.url[:10]}…")
 
     async def disconnect(self) -> None:
         if self._client:

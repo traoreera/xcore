@@ -78,7 +78,7 @@ def require_service(*service_names: str):
     return decorator
 
 
-def validate_payload(schema: Type[BaseModel]):
+def validate_payload(schema: Type[BaseModel], type_reponse:Literal['dict', 'pydantic']):
     """
     Valide un payload via un modèle Pydantic.
     Retourne {"status": "error"} si la validation échoue.
@@ -102,9 +102,7 @@ def validate_payload(schema: Type[BaseModel]):
                 validate = schema(**payload)
             except ValidationError as e:
                 return error(e.errors(), "validation_error")
-            # FIXME: validation if you want dict or pydantic model's returnning
-            return await fn(self, validate, *args, **kwargs)
-
+            return await fn(self, validate, *args, **kwargs) if type_reponse == 'pydantic' else await fn(self, validate.model_dump(), *args, **kwargs)
         return warpper
 
     return decorator
@@ -182,11 +180,26 @@ class RoutedPlugin:
                 return {"status": "running"}
     """
 
-    def RouterIn(self):
+    def RouterIn(self, *args, **kwargs):
 
         from fastapi import APIRouter
 
         router = APIRouter()
+        def make_handler(fn):
+            @functools.wraps(fn)
+            async def handler(**kwargs):
+                return (
+                    await fn(**kwargs)
+                    if inspect.iscoroutinefunction(fn)
+                    else fn(**kwargs)
+                )
+
+            # IMPORTANT → copie la signature SANS self
+            sig = inspect.signature(fn)
+            params = [p for name, p in sig.parameters.items() if name != "self"]
+            handler.__signature__ = sig.replace(parameters=params) # type: ignore
+
+            return handler
 
         for attr_name in dir(self.__class__):
             method = getattr(self.__class__, attr_name, None)
@@ -194,24 +207,7 @@ class RoutedPlugin:
             route_info = getattr(method, "_xcore_route", None)
             if not route_info:
                 continue
-
             bound = getattr(self, attr_name)
-
-            def make_handler(fn):
-                @functools.wraps(fn)
-                async def handler(**kwargs):
-                    return (
-                        await fn(**kwargs)
-                        if inspect.iscoroutinefunction(fn)
-                        else fn(**kwargs)
-                    )
-
-                # IMPORTANT → copie la signature SANS self
-                sig = inspect.signature(fn)
-                params = [p for name, p in sig.parameters.items() if name != "self"]
-                handler.__signature__ = sig.replace(parameters=params)
-
-                return handler
 
             handler = make_handler(bound)
 
@@ -223,6 +219,8 @@ class RoutedPlugin:
                 summary=route_info["summary"],
                 status_code=route_info["status_code"],
                 response_model=route_info["response_model"],
+                *args,
+                **kwargs,
             )
 
         return router if router.routes else None
