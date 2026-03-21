@@ -5,3 +5,7 @@
 ## 2025-05-15 - [Structured CLI Data with Rich Tables]
 **Learning:** For command outputs involving multiple entity attributes (like name, version, status), using structured tables with clear headers and semantic colors (e.g., green for OK, red for error) drastically reduces cognitive load compared to manual padding.
 **Action:** Prefer `rich.table.Table` over custom string formatting for any CLI output that lists more than two related properties.
+
+## 2025-05-16 - [Safe Destructive Prompts in CLI]
+**Learning:** When using `rich.prompt.Confirm.ask()` for destructive actions like plugin removal, the default behavior is `True` (Yes). To prevent accidental data loss, explicitly set `default=False` to require an intentional confirmation.
+**Action:** Always use `Confirm.ask(..., default=False)` for deletions or other irreversible operations.
