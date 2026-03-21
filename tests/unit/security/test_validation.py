@@ -201,6 +201,19 @@ def dynamic_import(module):
         assert result.passed is False
         assert any("__import__" in err for err in result.errors)
 
+    def test_scan_sensitive_attribute(self, scanner, temp_plugin_dir):
+        """Test scanning code with sensitive attribute access."""
+        bad_code = """
+def escape_sandbox(obj):
+    return obj.__class__.__globals__
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("__globals__" in err for err in result.errors)
+
     def test_scan_syntax_error(self, scanner, temp_plugin_dir):
         """Test scanning code with syntax error."""
         bad_code = """

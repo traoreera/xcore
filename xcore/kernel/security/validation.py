@@ -304,7 +304,7 @@ class ASTScanner:
             result.add_error(f"{path.name}: lecture : {e}")
             return
 
-        visitor = _ImportVisitor(
+        visitor = _SecurityVisitor(
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
@@ -319,7 +319,41 @@ class ASTScanner:
             result.add_warning(w)
 
 
-class _ImportVisitor(ast.NodeVisitor):
+class _SecurityVisitor(ast.NodeVisitor):
+    """
+    Visiteur AST pour détecter les imports interdits, les builtins dangereux
+    et les accès aux attributs sensibles (introspection).
+    """
+
+    # Builtins dangereux à bloquer même hors import
+    FORBIDDEN_BUILTINS = frozenset(
+        {
+            "eval",
+            "exec",
+            "compile",
+            "getattr",
+            "setattr",
+            "delattr",
+            "hasattr",
+            "globals",
+            "locals",
+            "breakpoint",
+            "__import__",
+        }
+    )
+
+    # Attributs sensibles (dunders) pour l'évasion de sandbox
+    FORBIDDEN_ATTRS = frozenset(
+        {
+            "__globals__",
+            "__subclasses__",
+            "__code__",
+            "__builtins__",
+            "__func__",
+            "__self__",
+        }
+    )
+
     def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
@@ -345,9 +379,23 @@ class _ImportVisitor(ast.NodeVisitor):
         if node.module:
             self._check(node.module, node.lineno)
 
-    def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+    def visit_Name(self, node: ast.Name) -> None:
+        """Détecte l'utilisation de builtins interdits."""
+        if isinstance(node.ctx, ast.Load) and node.id in self.FORBIDDEN_BUILTINS:
             self.errors.append(
-                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
+                f"{self.path}:{node.lineno}: utilisation de {node.id}() interdite"
             )
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        """Détecte l'accès aux dunders sensibles (évasion sandbox)."""
+        if node.attr in self.FORBIDDEN_ATTRS:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès à l'attribut sensible {node.attr!r} interdit"
+            )
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        # __import__ est déjà géré par visit_Name, mais on garde visit_Call
+        # pour des vérifications plus complexes si besoin à l'avenir.
         self.generic_visit(node)

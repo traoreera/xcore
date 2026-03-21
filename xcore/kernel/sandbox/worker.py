@@ -495,7 +495,8 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
     src_dir = entry.parent
 
     # UID déterministe basé sur le chemin absolu du plugin_dir
-    uid = hashlib.md5(str(plugin_dir.resolve()).encode()).hexdigest()[:12]
+    # On utilise SHA-256 pour éviter l'usage d'algorithmes considérés comme faibles (MD5).
+    uid = hashlib.sha256(str(plugin_dir.resolve()).encode()).hexdigest()[:12]
     pkg_name = f"xcore_plugin_{uid}"
 
     # Le nom du module principal reprend le stem du fichier entry point

@@ -12,3 +12,8 @@
 **Vulnerability:** CLI commands (`install`, `remove`, `info`, etc.) that accepted a plugin name as an argument were vulnerable to path traversal because the name was used to construct filesystem paths without validation. An attacker could use names like `../../etc/passwd` or absolute paths to target arbitrary locations.
 **Learning:** CLI arguments should be treated as untrusted user input, especially when used in filesystem operations. Concatenating a base directory with an unvalidated argument can escape the intended directory.
 **Prevention:** Implement strict input validation for names and identifiers using allow-lists (e.g., regex `^[a-zA-Z0-9_-]+$`) before using them in filesystem or shell operations.
+
+## 2026-03-21 - AST-based Sandbox Escape Prevention
+**Vulnerability:** Plugin code could bypass basic import restrictions by using dynamic built-ins like `eval()`, `exec()`, or `getattr()`, or by accessing sensitive dunder attributes like `__globals__` to escape the sandbox.
+**Learning:** Checking only the `import` statements is insufficient for a robust Python sandbox. Attackers can use introspection and dynamic execution to reach forbidden modules or modify the execution environment.
+**Prevention:** Implement a comprehensive AST visitor (`_SecurityVisitor`) that intercepts `ast.Name` to block dangerous built-ins and `ast.Attribute` to block access to sensitive dunder attributes (`__globals__`, `__subclasses__`, etc.) before code execution.
