@@ -10,7 +10,10 @@ import sys
 from pathlib import Path
 
 import re
+
 from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
@@ -343,7 +346,7 @@ async def _plugin_info(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
-        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        console.print(f"[bold red]❌ Plugin {escape(name)!r} introuvable.[/]")
         sys.exit(1)
 
     from xcore.kernel.security.signature import is_signed
@@ -353,36 +356,48 @@ async def _plugin_info(args) -> None:
         validator = ManifestValidator()
         manifest = validator.load_and_validate(plugin_dir)
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
-    print(f"\n{'='*50}")
-    print(f"  {manifest.name}  v{manifest.version}")
-    print(f"{'='*50}")
-    print(f"  Auteur      : {manifest.author}")
-    print(f"  Description : {manifest.description}")
-    print(f"  Mode        : {manifest.execution_mode.value}")
-    print(f"  Framework   : {manifest.framework_version}")
-    print(f"  Entry point : {manifest.entry_point}")
+    info = [
+        f"[bold cyan]Auteur      :[/][magenta] {escape(str(manifest.author or '?'))}[/]",
+        f"[bold cyan]Description :[/] {escape(str(manifest.description or '?'))}",
+        f"[bold cyan]Mode        :[/][yellow] {escape(str(manifest.execution_mode.value))}[/]",
+        f"[bold cyan]Framework   :[/] {escape(str(manifest.framework_version))}",
+        f"[bold cyan]Entry point :[/][green] {escape(str(manifest.entry_point))}[/]",
+        f"[bold cyan]Signé       :[/] {'[green]✅ oui[/]' if is_signed(manifest) else '[yellow]⚠️  non[/]'}",
+    ]
+
     if manifest.requires:
-        print(f"  Dépendances : {', '.join(manifest.requires)}")
+        info.append(
+            f"[bold cyan]Dépendances :[/] {escape(', '.join(manifest.requires))}"
+        )
     if manifest.allowed_imports:
-        print(f"  Imports OK  : {', '.join(manifest.allowed_imports)}")
-    print(f"  Signé       : {'✅ oui' if is_signed(manifest) else '⚠️  non'}")
-    print(f"\n  Ressources :")
-    print(f"    timeout     : {manifest.resources.timeout_seconds}s")
-    print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
-    print(f"    disque max  : {manifest.resources.max_disk_mb}MB")
-    print(
-        f"    rate limit  : {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s"
+        info.append(
+            f"[bold cyan]Imports OK  :[/] [dim]{escape(', '.join(manifest.allowed_imports))}[/]"
+        )
+
+    info.append("\n[bold white]Ressources :[/]")
+    info.append(f"  [cyan]timeout     :[/] {manifest.resources.timeout_seconds}s")
+    info.append(f"  [cyan]mémoire max :[/] {manifest.resources.max_memory_mb}MB")
+    info.append(f"  [cyan]disque max  :[/] {manifest.resources.max_disk_mb}MB")
+    info.append(
+        f"  [cyan]rate limit  :[/] {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s"
     )
+
     if manifest.permissions:
-        print(f"\n  Permissions ({len(manifest.permissions)}) :")
+        info.append(f"\n[bold white]Permissions ({len(manifest.permissions)}) :[/]")
         for p in manifest.permissions:
             effect = p.get("effect", "allow")
             symbol = "✅" if effect == "allow" else "❌"
-            print(f"    {symbol} {p.get('resource')} → {p.get('actions', ['*'])}")
-    print(f"{'='*50}\n")
+            res = escape(p.get("resource", "*"))
+            actions = escape(", ".join(p.get("actions", ["*"])))
+            info.append(f"  {symbol} {res} → {actions}")
+
+    title = f"[bold green]📦 {escape(manifest.name)} v{escape(manifest.version)}[/]"
+    console.print(
+        Panel("\n".join(info), title=title, expand=False, border_style="cyan")
+    )
 
 
 # ── sign / verify / validate ──────────────────────────────────
