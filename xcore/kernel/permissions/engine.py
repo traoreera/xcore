@@ -8,10 +8,11 @@ The PermissionEngine is the singleton that:
 
 from __future__ import annotations
 
+import itertools
 import logging
+from collections import deque
 
 from .policies import PolicyEffect, PolicySet
-from collections import deque
 logger = logging.getLogger("xcore.permissions.engine")
 
 
@@ -112,12 +113,22 @@ class PermissionEngine:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
-        log = (
-            [e for e in self._audit_log if e["plugin"] == plugin_name]
-            if plugin_name
-            else self._audit_log
-        )
-        return log[-limit:]
+        """
+        Returns the last `limit` entries of the audit log.
+        If `plugin_name` is provided, only returns entries for that plugin.
+        """
+        if plugin_name:
+            # Optimized O(limit) in best case instead of O(N)
+            results = []
+            for entry in reversed(self._audit_log):
+                if entry["plugin"] == plugin_name:
+                    results.append(entry)
+                    if len(results) >= limit:
+                        break
+            return list(reversed(results))
+
+        # O(limit) approach using reversed iterator for deque
+        return list(reversed(list(itertools.islice(reversed(self._audit_log), limit))))
 
     def status(self) -> dict:
         return {
