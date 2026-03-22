@@ -136,16 +136,16 @@ class ServiceContainer:
     # L'implémentation réelle (dernier overload) reste Any pour les clés dynamiques.
 
     @overload
-    def get(self, name: "Literal['db']") -> "AsyncSQLAdapter": ...          # noqa: F811
+    def get(self, name: "Literal['db']") -> "AsyncSQLAdapter": ...  # noqa: F811
 
     @overload
-    def get(self, name: "Literal['cache']") -> "CacheService": ...          # noqa: F811
+    def get(self, name: "Literal['cache']") -> "CacheService": ...  # noqa: F811
 
     @overload
     def get(self, name: "Literal['scheduler']") -> "SchedulerService": ...  # noqa: F811
 
     @overload
-    def get(self, name: str) -> Any: ...                                     # noqa: F811
+    def get(self, name: str) -> Any: ...  # noqa: F811
 
     def get(self, name: str) -> T:
         """
@@ -161,7 +161,7 @@ class ServiceContainer:
         Lève KeyError avec message clair si absent.
         """
         if name in self._raw:
-            T = type(self._raw[name])
+            type(self._raw[name])
             return self._raw[name]
         raise KeyError(
             f"Service '{name}' indisponible.\n"

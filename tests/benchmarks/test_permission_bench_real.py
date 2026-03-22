@@ -1,9 +1,11 @@
-import timeit
 import logging
+import timeit
+
 from xcore.kernel.permissions.engine import PermissionEngine
 
 # Suppress logging during benchmark
 logging.getLogger("xcore.permissions.engine").setLevel(logging.ERROR)
+
 
 def benchmark_permissions():
     engine = PermissionEngine()
@@ -38,6 +40,7 @@ def benchmark_permissions():
     time_taken = timer.timeit(number=iterations)
     print(f"Time for {iterations} iterations: {time_taken:.4f}s")
     print(f"Average time per call set: {time_taken/iterations*1000000:.2f}µs")
+
 
 if __name__ == "__main__":
     benchmark_permissions()

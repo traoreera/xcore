@@ -5,11 +5,11 @@ plugin_cmd.py — Handlers des commandes `xcore plugin *`.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
 
-import re
 from rich.console import Console
 from rich.table import Table
 
@@ -95,7 +95,12 @@ async def _plugin_list(args) -> None:
             except Exception:
                 table.add_row(p, "[red]?[/]", "[red]?[/]", "[red]Erreur de lecture[/]")
         else:
-            table.add_row(p, "[grey70]?[/]", "[grey70]?[/]", "[italic grey70]Manifeste manquant[/]")
+            table.add_row(
+                p,
+                "[grey70]?[/]",
+                "[grey70]?[/]",
+                "[italic grey70]Manifeste manquant[/]",
+            )
 
     console.print(table)
 
@@ -146,7 +151,14 @@ async def _plugin_health(args) -> None:
             table.add_row(name, mode, signed, ast_ok, "✅", "[green]OK[/]")
 
         except Exception as e:
-            table.add_row(name, "[red]?[/]", "[red]?[/]", "[red]?[/]", "❌", f"[red]Erreur: {e}[/]")
+            table.add_row(
+                name,
+                "[red]?[/]",
+                "[red]?[/]",
+                "[red]?[/]",
+                "❌",
+                f"[red]Erreur: {e}[/]",
+            )
 
     console.print(table)
 

@@ -69,7 +69,9 @@ async def _mkt_list(args) -> None:
         return
 
     table = Table(title=f"Catalogue Marketplace ({len(plugins)} plugins)")
-    table.add_column("Nom", style="cyan", no_wrap=True, max_width=32, overflow="ellipsis")
+    table.add_column(
+        "Nom", style="cyan", no_wrap=True, max_width=32, overflow="ellipsis"
+    )
     table.add_column("Version", style="magenta", max_width=16, overflow="ellipsis")
     table.add_column("Auteur", style="green", max_width=24, overflow="ellipsis")
     table.add_column("Note", style="yellow")
@@ -132,9 +134,7 @@ async def _mkt_trending(args) -> None:
 async def _mkt_search(args) -> None:
     client, _ = _get_client(args)
     query = args.query
-    with console.status(
-        f"[bold green]🔍 Recherche : [white]{escape(query)}[/]...[/]"
-    ):
+    with console.status(f"[bold green]🔍 Recherche : [white]{escape(query)}[/]...[/]"):
         try:
             results = await client.search(query)
         except Exception as e:
@@ -179,7 +179,9 @@ async def _mkt_show(args) -> None:
             plugin = await client.get_plugin(name)
             versions = await client.get_versions(name)
         except Exception as e:
-            error_console.print(f"[bold red]❌ Erreur marketplace :[/] {escape(str(e))}")
+            error_console.print(
+                f"[bold red]❌ Erreur marketplace :[/] {escape(str(e))}"
+            )
             sys.exit(1)
 
     if not plugin:
@@ -196,7 +198,9 @@ async def _mkt_show(args) -> None:
         f"[bold cyan]Dépôt       :[/][blue] {escape(str(plugin.get('repository', '?')))}[/]",
     ]
     if plugin.get("requires"):
-        info.append(f"[bold cyan]Dépendances :[/] {escape(', '.join(plugin['requires']))}")
+        info.append(
+            f"[bold cyan]Dépendances :[/] {escape(', '.join(plugin['requires']))}"
+        )
 
     content = "\n".join(info)
     if versions:

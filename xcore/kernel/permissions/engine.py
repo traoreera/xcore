@@ -9,9 +9,10 @@ The PermissionEngine is the singleton that:
 from __future__ import annotations
 
 import logging
+from collections import deque
 
 from .policies import PolicyEffect, PolicySet
-from collections import deque
+
 logger = logging.getLogger("xcore.permissions.engine")
 
 
@@ -40,7 +41,7 @@ class PermissionEngine:
     def __init__(self, events=None, max_audit=100_000) -> None:
         self._policies: dict[str, PolicySet] = {}
         self._events = events
-        self._audit_log:  deque[dict] = deque(maxlen=max_audit)
+        self._audit_log: deque[dict] = deque(maxlen=max_audit)
         self._cache: dict[tuple[str, str, str], PolicyEffect] = {}
 
     def load_from_manifest(

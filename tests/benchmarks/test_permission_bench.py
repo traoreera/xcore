@@ -1,12 +1,13 @@
-import timeit
 import fnmatch
-from enum import Enum
+import timeit
 from dataclasses import dataclass, field
-from typing import Any
+from enum import Enum
+
 
 class PolicyEffect(str, Enum):
     ALLOW = "allow"
     DENY = "deny"
+
 
 @dataclass
 class Policy:
@@ -19,6 +20,7 @@ class Policy:
         action_match = "*" in self.actions or action in self.actions
         return resource_match and action_match
 
+
 @dataclass
 class PolicySet:
     plugin_name: str
@@ -30,29 +32,39 @@ class PolicySet:
                 return policy.effect
         return PolicyEffect.DENY
 
+
 class PermissionEngine:
     def __init__(self) -> None:
         self._policies = {}
         self._audit_log = []
 
     def load_from_manifest(self, plugin_name, raw_permissions):
-        policies = [Policy(p['resource'], p['actions'], PolicyEffect(p.get('effect', 'allow'))) for p in raw_permissions]
+        policies = [
+            Policy(p["resource"], p["actions"], PolicyEffect(p.get("effect", "allow")))
+            for p in raw_permissions
+        ]
         self._policies[plugin_name] = PolicySet(plugin_name, policies)
 
     def _evaluate(self, plugin_name: str, resource: str, action: str) -> PolicyEffect:
         ps = self._policies.get(plugin_name)
-        if ps is None: return PolicyEffect.DENY
+        if ps is None:
+            return PolicyEffect.DENY
         return ps.evaluate(resource, action)
 
     def _audit(self, plugin_name, resource, action, effect):
-        entry = {"plugin": plugin_name, "resource": resource, "action": action, "effect": effect.value}
+        entry = {
+            "plugin": plugin_name,
+            "resource": resource,
+            "action": action,
+            "effect": effect.value,
+        }
         self._audit_log.append(entry)
 
     def check(self, plugin_name, resource, action):
         effect = self._evaluate(plugin_name, resource, action)
         self._audit(plugin_name, resource, action, effect)
         if effect == PolicyEffect.DENY:
-            pass # Simplified
+            pass  # Simplified
 
     def allows(self, plugin_name: str, resource: str, action: str) -> bool:
         try:
@@ -61,6 +73,7 @@ class PermissionEngine:
             return True
         except:
             return False
+
 
 class PermissionEngineOptimized(PermissionEngine):
     def __init__(self) -> None:
@@ -75,6 +88,7 @@ class PermissionEngineOptimized(PermissionEngine):
         result = super()._evaluate(plugin_name, resource, action)
         self._cache[key] = result
         return result
+
 
 def benchmark_permissions():
     engine = PermissionEngine()
@@ -113,6 +127,7 @@ def benchmark_permissions():
 
     improvement = (t1 - t2) / t1 * 100
     print(f"Improvement: {improvement:.2f}%")
+
 
 if __name__ == "__main__":
     benchmark_permissions()

@@ -119,9 +119,7 @@ class ManifestValidator:
 
         # Sécurité : vérifie que le fichier .env est bien dans le dossier du plugin
         if not env_path.is_relative_to(plugin_dir.resolve()):
-            raise ManifestError(
-                f"Tentative de traversal via env_file : {env_file!r}"
-            )
+            raise ManifestError(f"Tentative de traversal via env_file : {env_file!r}")
 
         if not env_path.exists():
             raise ManifestError(
