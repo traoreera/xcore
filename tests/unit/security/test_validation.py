@@ -246,6 +246,47 @@ def process():
         # Should pass if custom_module is in whitelist
         assert result.passed is True
 
+    def test_scan_direct_builtin_usage(self, scanner, temp_plugin_dir):
+        """Test scanning code using forbidden built-ins directly."""
+        bad_code = """
+x = eval("1+1")
+y = getattr(obj, "attr")
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("eval" in err for err in result.errors)
+        assert any("getattr" in err for err in result.errors)
+
+    def test_scan_sensitive_attribute_access(self, scanner, temp_plugin_dir):
+        """Test scanning code accessing sensitive attributes."""
+        bad_code = """
+def hack():
+    return ().__class__.__base__.__subclasses__()
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("__subclasses__" in err for err in result.errors)
+        assert any("__base__" in err for err in result.errors)
+
+    def test_scan_forbidden_name_as_variable(self, scanner, temp_plugin_dir):
+        """Test scanning code using forbidden names as variables."""
+        bad_code = """
+os = "not the module"
+print(os)
+"""
+        (temp_plugin_dir / "src" / "main.py").write_text(bad_code)
+
+        result = scanner.scan(temp_plugin_dir)
+
+        assert result.passed is False
+        assert any("os" in err for err in result.errors)
+
 
 class TestScanResult:
     """Test ScanResult dataclass."""
