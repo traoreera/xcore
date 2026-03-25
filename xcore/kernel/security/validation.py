@@ -186,7 +186,39 @@ class _SimpleManifest:
 # AST Scanner (repris de sandbox/sandbox/scanner.py v1)
 # ─────────────────────────────────────────────────────────────
 
+FORBIDDEN_BUILTINS = {
+    "eval",
+    "exec",
+    "compile",
+    "getattr",
+    "setattr",
+    "delattr",
+    "globals",
+    "locals",
+    "breakpoint",
+    "__import__",
+    "pickle",
+    "shelve",
+    "marshal",
+}
+
+FORBIDDEN_ATTRIBUTES = {
+    "__globals__",
+    "__subclasses__",
+    "__code__",
+    "__mro__",
+    "__builtins__",
+    "__dict__",
+    "__base__",
+    "__bases__",
+    "__getattribute__",
+}
+
 DEFAULT_FORBIDDEN = {
+    "posix",
+    "pwd",
+    "grp",
+    "resource",
     "os",
     "sys",
     "subprocess",
@@ -212,13 +244,7 @@ DEFAULT_FORBIDDEN = {
     "dis",
     "tempfile",
     "glob",
-    "exec",
-    "eval",
-    "compile",
-    "pickle",
-    "shelve",
-    "marshal",
-}
+} | FORBIDDEN_BUILTINS
 
 DEFAULT_ALLOWED = {
     "json",
@@ -304,7 +330,7 @@ class ASTScanner:
             result.add_error(f"{path.name}: lecture : {e}")
             return
 
-        visitor = _ImportVisitor(
+        visitor = _SecurityVisitor(
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
@@ -319,7 +345,7 @@ class ASTScanner:
             result.add_warning(w)
 
 
-class _ImportVisitor(ast.NodeVisitor):
+class _SecurityVisitor(ast.NodeVisitor):
     def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
@@ -346,8 +372,23 @@ class _ImportVisitor(ast.NodeVisitor):
             self._check(node.module, node.lineno)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+        # __import__ est déjà capturé par visit_Name car il est dans FORBIDDEN_BUILTINS
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id in FORBIDDEN_BUILTINS:
             self.errors.append(
-                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
+                f"{self.path}:{node.lineno}: utilisation de built-in interdit : {node.id!r}"
+            )
+        elif node.id in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: utilisation de nom interdit : {node.id!r}"
+            )
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if node.attr in FORBIDDEN_ATTRIBUTES:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès à l'attribut sensible interdit : {node.attr!r}"
             )
         self.generic_visit(node)
