@@ -10,6 +10,10 @@ import shutil
 import sys
 from pathlib import Path
 
+import re
+from rich.console import Console, Group
+from rich.markup import escape
+from rich.panel import Panel
 from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
@@ -369,33 +373,47 @@ async def _plugin_info(args) -> None:
         console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
         sys.exit(1)
 
-    console.print(f"\n{'='*50}")
-    print(f"  {manifest.name}  v{manifest.version}")
-    print(f"{'='*50}")
-    print(f"  Auteur      : {manifest.author}")
-    print(f"  Description : {manifest.description}")
-    print(f"  Mode        : {manifest.execution_mode.value}")
-    print(f"  Framework   : {manifest.framework_version}")
-    print(f"  Entry point : {manifest.entry_point}")
+    # Construction du contenu du panel
+    info = [
+        f"[bold cyan]Auteur      :[/][magenta] {escape(str(manifest.author))}[/]",
+        f"[bold cyan]Description :[/] {escape(str(manifest.description))}",
+        f"[bold cyan]Mode        :[/][yellow] {escape(str(manifest.execution_mode.value))}[/]",
+        f"[bold cyan]Framework   :[/][green] {escape(str(manifest.framework_version))}[/]",
+        f"[bold cyan]Entry point :[/][blue] {escape(str(manifest.entry_point))}[/]",
+        f"[bold cyan]Signé       :[/] {'✅ oui' if is_signed(manifest) else '⚠️  non'}",
+    ]
+
     if manifest.requires:
-        console.print(f"  Dépendances : {', '.join(manifest.requires)}")
+        deps = ", ".join(d.name if hasattr(d, "name") else str(d) for d in manifest.requires)
+        info.append(f"[bold cyan]Dépendances :[/] {escape(deps)}")
+
     if manifest.allowed_imports:
-        console.print(f"  Imports OK  : {', '.join(manifest.allowed_imports)}")
-    console.print(f"  Signé       : {'✅ oui' if is_signed(manifest) else '⚠️  non'}")
-    console.print(f"\n  Ressources :")
-    console.print(f"    timeout     : {manifest.resources.timeout_seconds}s")
-    console.print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
-    console.print(f"    disque max  : {manifest.resources.max_disk_mb}MB")
-    console.print(
-        f"    rate limit  : {manifest.resources.rate_limit.calls} appels / {manifest.resources.rate_limit.period_seconds}s"
+        imports = ", ".join(map(str, manifest.allowed_imports))
+        info.append(f"[bold cyan]Imports OK  :[/] [dim]{escape(imports)}[/]")
+
+    # Ressources
+    info.append("\n[bold white]Ressources :[/]")
+    r = manifest.resources
+    info.append(f"  [cyan]timeout     :[/][magenta] {r.timeout_seconds}s[/]")
+    info.append(f"  [cyan]mémoire max :[/][magenta] {r.max_memory_mb}MB[/]")
+    info.append(f"  [cyan]disque max  :[/][magenta] {r.max_disk_mb}MB[/]")
+    info.append(
+        f"  [cyan]rate limit  :[/][magenta] {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s[/]"
     )
+
+    # Permissions
     if manifest.permissions:
-        console.print(f"\n  Permissions ({len(manifest.permissions)}) :")
+        info.append(f"\n[bold white]Permissions ({len(manifest.permissions)}) :[/]")
         for p in manifest.permissions:
             effect = p.get("effect", "allow")
             symbol = "✅" if effect == "allow" else "❌"
-            console.print(f"    {symbol} {p.get('resource')} → {p.get('actions', ['*'])}")
-    console.print(f"{'='*50}\n")
+            res = escape(str(p.get("resource", "*")))
+            acts = escape(str(p.get("actions", ["*"])))
+            info.append(f"  {symbol} {res} → {acts}")
+
+    content = Group(*info)
+    title = f"[bold green]🔌 {escape(manifest.name)} v{escape(manifest.version)}[/]"
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── sign / verify / validate ──────────────────────────────────
