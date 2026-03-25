@@ -2,9 +2,10 @@
 Tests for ServiceContainer.
 """
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -41,6 +42,7 @@ class MockService(BaseService):
 @dataclass
 class MockConfig:
     """Mock configuration for ServiceContainer."""
+
     databases: dict = None
     cache: Any = None
     scheduler: Any = None
@@ -68,7 +70,12 @@ class TestServiceContainer:
 
     def test_init_order_constant(self):
         """Test INIT_ORDER is correct."""
-        assert ServiceContainer.INIT_ORDER == ["database", "cache", "scheduler", "extensions"]
+        assert ServiceContainer.INIT_ORDER == [
+            "database",
+            "cache",
+            "scheduler",
+            "extensions",
+        ]
 
     def test_get_nonexistent_service(self, container):
         """Test getting nonexistent service raises KeyError."""
@@ -136,10 +143,13 @@ class TestServiceContainer:
     @pytest.mark.asyncio
     async def test_init_empty_config(self, container):
         """Test init with empty config."""
-        with patch.object(container, "_init_databases") as mock_db, \
-             patch.object(container, "_init_cache") as mock_cache, \
-             patch.object(container, "_init_scheduler") as mock_sched, \
-             patch.object(container, "_init_extensions") as mock_ext:
+        with patch.object(container, "_init_databases") as mock_db, patch.object(
+            container, "_init_cache"
+        ) as mock_cache, patch.object(
+            container, "_init_scheduler"
+        ) as mock_sched, patch.object(
+            container, "_init_extensions"
+        ) as mock_ext:
 
             await container.init()
 

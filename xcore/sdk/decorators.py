@@ -79,7 +79,9 @@ def require_service(*service_names: str):
 
 
 def validate_payload(
-    schema: Type[BaseModel], type_reponse: Literal["dict", "BaseModel"] = 'BaseModel', unset:bool=True
+    schema: Type[BaseModel],
+    type_response: Literal["dict", "BaseModel"] = "BaseModel",
+    unset: bool = True,
 ):
     """
     Valide un payload via un modèle Pydantic.
@@ -106,8 +108,10 @@ def validate_payload(
                 return error(e.errors(), "validation_error")
             return (
                 await fn(self, validate, *args, **kwargs)
-                if type_reponse == "pydantic"
-                else await fn(self, validate.model_dump(exclude_unset=unset), *args, **kwargs)
+                if type_response == "pydantic"
+                else await fn(
+                    self, validate.model_dump(exclude_unset=unset), *args, **kwargs
+                )
             )
 
         return warpper

@@ -4,14 +4,14 @@ Tests for ASTScanner and security validation.
 
 import ast
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from xcore.kernel.security.validation import (
-    ASTScanner,
     DEFAULT_ALLOWED,
     DEFAULT_FORBIDDEN,
+    ASTScanner,
     ManifestError,
     ManifestValidator,
     ScanResult,
@@ -71,7 +71,7 @@ class TestImportVisitor:
             forbidden={"os", "sys"},
             allowed={"json", "re"},
             filename="test.py",
-            path=Path("/test/test.py")
+            path=Path("/test/test.py"),
         )
 
     def test_check_forbidden_import(self, visitor):
@@ -241,7 +241,9 @@ class TestASTScanner:
         # Mock file read to raise exception
         with patch.object(Path, "read_text", side_effect=IOError("Permission denied")):
             # We need to patch the specific path's read_text
-            with patch.object(bad_file, "read_text", side_effect=IOError("Permission denied")):
+            with patch.object(
+                bad_file, "read_text", side_effect=IOError("Permission denied")
+            ):
                 result = scanner.scan(tmp_path)
 
         assert result.passed is False
@@ -365,8 +367,17 @@ class TestDefaultLists:
     def test_forbidden_contains_dangerous(self):
         """Test forbidden contains dangerous modules."""
         dangerous = [
-            "os", "sys", "subprocess", "shutil", "ctypes", "socket",
-            "exec", "eval", "compile", "pickle", "marshal",
+            "os",
+            "sys",
+            "subprocess",
+            "shutil",
+            "ctypes",
+            "socket",
+            "exec",
+            "eval",
+            "compile",
+            "pickle",
+            "marshal",
         ]
         for module in dangerous:
             assert module in DEFAULT_FORBIDDEN, f"{module} should be forbidden"
@@ -374,8 +385,17 @@ class TestDefaultLists:
     def test_allowed_contains_safe(self):
         """Test allowed contains safe modules."""
         safe = [
-            "json", "re", "math", "random", "datetime", "time",
-            "typing", "dataclasses", "enum", "hashlib", "asyncio",
+            "json",
+            "re",
+            "math",
+            "random",
+            "datetime",
+            "time",
+            "typing",
+            "dataclasses",
+            "enum",
+            "hashlib",
+            "asyncio",
         ]
         for module in safe:
             assert module in DEFAULT_ALLOWED, f"{module} should be allowed"

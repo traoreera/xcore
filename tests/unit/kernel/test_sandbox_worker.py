@@ -6,17 +6,17 @@ import builtins
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 # Test the components we can import
 from xcore.kernel.sandbox.worker import (
     FilesystemGuard,
-    _PluginImportHook,
-    _PluginManifest,
     _apply_memory_limit,
     _load_manifest,
+    _PluginImportHook,
+    _PluginManifest,
 )
 
 
@@ -35,7 +35,7 @@ class TestPluginManifest:
         manifest = _PluginManifest(
             entry_point="app/main.py",
             allowed_paths=["uploads/", "cache/"],
-            denied_paths=["system/", "logs/"]
+            denied_paths=["system/", "logs/"],
         )
         assert manifest.entry_point == "app/main.py"
         assert manifest.allowed_paths == ["uploads/", "cache/"]
@@ -78,9 +78,7 @@ class TestFilesystemGuard:
     def guard(self, tmp_path):
         """Create a FilesystemGuard instance."""
         return FilesystemGuard(
-            plugin_dir=tmp_path,
-            allowed_paths=["data/"],
-            denied_paths=["src/"]
+            plugin_dir=tmp_path, allowed_paths=["data/"], denied_paths=["src/"]
         )
 
     def test_init(self, guard, tmp_path):
@@ -246,7 +244,7 @@ filesystem:
 
     def test_load_json_manifest(self, tmp_path):
         """Test loading JSON manifest."""
-        json_content = '''
+        json_content = """
 {
     "entry_point": "app/core.py",
     "filesystem": {
@@ -254,7 +252,7 @@ filesystem:
         "denied_paths": ["config/"]
     }
 }
-'''
+"""
         (tmp_path / "plugin.json").write_text(json_content)
 
         manifest = _load_manifest(tmp_path)
@@ -284,13 +282,16 @@ filesystem:
 class TestFilesystemGuardEdgeCases:
     """Test edge cases for FilesystemGuard."""
 
+    @pytest.fixture
+    def guard(self, tmp_path):
+        """Create a FilesystemGuard instance."""
+        return FilesystemGuard(
+            plugin_dir=tmp_path, allowed_paths=["data/"], denied_paths=["src/"]
+        )
+
     def test_empty_allowed_paths(self, tmp_path):
         """Test guard with empty allowed paths."""
-        guard = FilesystemGuard(
-            plugin_dir=tmp_path,
-            allowed_paths=[],
-            denied_paths=[]
-        )
+        guard = FilesystemGuard(plugin_dir=tmp_path, allowed_paths=[], denied_paths=[])
         # With no allowed paths, everything should be denied (fail-closed)
         assert guard.is_allowed(tmp_path / "any/file.txt") is False
 
@@ -315,6 +316,6 @@ class TestFilesystemGuardEdgeCases:
         malicious_path = tmp_path / "data" / ".." / ".." / "etc" / "passwd"
         # The path should be resolved to absolute, which may or may not be allowed
         # depending on the resolved location
-        result = guard.is_allowed(malicious_path)
+        guard.is_allowed(malicious_path)
         # Should either be False (denied) or resolved to actual path
         # The important thing is it doesn't actually allow access to /etc/passwd

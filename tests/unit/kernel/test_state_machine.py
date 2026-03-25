@@ -137,7 +137,7 @@ class TestStateMachine:
             sm.transition("invalid_event")
 
         assert "invalid_event" in str(exc_info.value)
-        assert "UNLOADED" in str(exc_info.value)
+        assert "unloaded" in str(exc_info.value)
 
     def test_transition_from_running(self, sm):
         """Test transitions from RUNNING state."""

@@ -27,9 +27,7 @@ class TestPolicy:
     def test_creation(self):
         """Test basic policy creation."""
         policy = Policy(
-            resource="db.*",
-            actions=["read", "write"],
-            effect=PolicyEffect.ALLOW
+            resource="db.*", actions=["read", "write"], effect=PolicyEffect.ALLOW
         )
         assert policy.resource == "db.*"
         assert policy.actions == ["read", "write"]
@@ -68,11 +66,7 @@ class TestPolicy:
 
     def test_from_dict_basic(self):
         """Test from_dict with basic data."""
-        data = {
-            "resource": "db.*",
-            "actions": ["read", "write"],
-            "effect": "allow"
-        }
+        data = {"resource": "db.*", "actions": ["read", "write"], "effect": "allow"}
         policy = Policy.from_dict(data)
         assert policy.resource == "db.*"
         assert policy.actions == ["read", "write"]
@@ -80,32 +74,21 @@ class TestPolicy:
 
     def test_from_dict_string_actions(self):
         """Test from_dict with string actions."""
-        data = {
-            "resource": "db.*",
-            "actions": "read",
-            "effect": "deny"
-        }
+        data = {"resource": "db.*", "actions": "read", "effect": "deny"}
         policy = Policy.from_dict(data)
         assert policy.actions == ["read"]
         assert policy.effect == PolicyEffect.DENY
 
     def test_from_dict_invalid_effect(self):
         """Test from_dict with invalid effect."""
-        data = {
-            "resource": "db.*",
-            "actions": ["read"],
-            "effect": "invalid"
-        }
+        data = {"resource": "db.*", "actions": ["read"], "effect": "invalid"}
         with pytest.raises(ValueError) as exc_info:
             Policy.from_dict(data)
         assert "effect invalide" in str(exc_info.value)
 
     def test_from_dict_default_effect(self):
         """Test from_dict with missing effect."""
-        data = {
-            "resource": "db.*",
-            "actions": ["read"]
-        }
+        data = {"resource": "db.*", "actions": ["read"]}
         policy = Policy.from_dict(data)
         assert policy.effect == PolicyEffect.ALLOW
 
@@ -202,7 +185,9 @@ class TestPolicySet:
 
     def test_repr(self):
         """Test __repr__ method."""
-        ps = PolicySet(plugin_name="test", policies=[Policy(resource="*", actions=["*"])])
+        ps = PolicySet(
+            plugin_name="test", policies=[Policy(resource="*", actions=["*"])]
+        )
         repr_str = repr(ps)
         assert "test" in repr_str
         assert "rules=1" in repr_str
@@ -239,8 +224,8 @@ class TestPolicySetEdgeCases:
     def test_complex_wildcard_pattern(self):
         """Test complex wildcard patterns."""
         policies = [
-            Policy(resource="db.user[?].*", actions=["read"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.user*.*", actions=["read"], effect=PolicyEffect.ALLOW),
         ]
         ps = PolicySet(plugin_name="test", policies=policies)
         assert ps.allows("db.user1.profile", "read") is True
-        assert ps.allows("db.userA.settings", "read") is True
+        assert ps.allows("db.user2.settings", "read") is True

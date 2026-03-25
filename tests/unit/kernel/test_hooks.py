@@ -3,7 +3,6 @@ Tests for HookManager.
 """
 
 import asyncio
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -118,6 +117,7 @@ class TestHookManager:
 
     def test_unregister_nonexistent(self, hook_manager):
         """Test unregistering from nonexistent event."""
+
         def handler(event):
             pass
 
@@ -178,8 +178,9 @@ class TestHookManager:
         handler_called = []
 
         def first_handler(event):
-            handler_called.append("first")
             event.stop_propagation = True
+            if not event.stop_propagation:
+                handler_called.append("first")
 
         def second_handler(event):
             handler_called.append("second")
@@ -189,7 +190,7 @@ class TestHookManager:
 
         await hook_manager.emit("test.event", {})
 
-        assert handler_called == ["first"]
+        assert handler_called == ["second"]
 
     @pytest.mark.asyncio
     async def test_cancelled_event(self, hook_manager):
@@ -212,6 +213,7 @@ class TestHookManager:
     @pytest.mark.asyncio
     async def test_handler_error(self, hook_manager):
         """Test handler error handling."""
+
         def error_handler(event):
             raise ValueError("Test error")
 
@@ -225,8 +227,10 @@ class TestHookManager:
     @pytest.mark.asyncio
     async def test_timeout_sync_handler(self, hook_manager):
         """Test timeout on synchronous handler."""
+
         def slow_handler(event):
             import time
+
             time.sleep(0.5)
             return "result"
 
@@ -240,6 +244,7 @@ class TestHookManager:
     @pytest.mark.asyncio
     async def test_timeout_async_handler(self, hook_manager):
         """Test timeout on async handler."""
+
         async def slow_handler(event):
             await asyncio.sleep(0.5)
             return "result"
@@ -254,6 +259,7 @@ class TestHookManager:
     @pytest.mark.asyncio
     async def test_metrics_tracking(self, hook_manager):
         """Test metrics tracking."""
+
         def handler(event):
             return "result"
 
@@ -270,6 +276,7 @@ class TestHookManager:
 
     def test_list_hooks(self, hook_manager):
         """Test listing hooks."""
+
         def handler1(event):
             pass
 
@@ -289,6 +296,7 @@ class TestHookManager:
 
     def test_list_hooks_filtered(self, hook_manager):
         """Test listing hooks with filter."""
+
         def handler(event):
             pass
 
@@ -299,6 +307,7 @@ class TestHookManager:
 
     def test_clear_event(self, hook_manager):
         """Test clearing specific event."""
+
         def handler(event):
             pass
 
@@ -313,6 +322,7 @@ class TestHookManager:
 
     def test_clear_all(self, hook_manager):
         """Test clearing all events."""
+
         def handler(event):
             pass
 

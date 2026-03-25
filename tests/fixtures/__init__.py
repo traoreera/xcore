@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from xcore.kernel.sandbox.worker import FilesystemGuard
+
 
 @pytest.fixture
 def sample_plugin_dir():
@@ -51,3 +53,10 @@ def mock_services():
         "cache": MagicMock(),
         "scheduler": MagicMock(),
     }
+
+
+@pytest.fixture
+def guard(tmp_path):
+    return FilesystemGuard(
+        plugin_dir=tmp_path, allowed_paths=["data/"], denied_paths=["src/"]
+    )

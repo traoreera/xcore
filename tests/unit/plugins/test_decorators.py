@@ -8,13 +8,13 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from xcore.sdk.decorators import (
-    action,
     AutoDispatchMixin,
+    RoutedPlugin,
+    action,
     require_service,
     route,
-    RoutedPlugin,
-    trusted,
     sandboxed,
+    trusted,
     validate_payload,
 )
 
