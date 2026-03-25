@@ -90,6 +90,9 @@ nav:
       - Complete Plugin: examples/complete-plugin.md
       - Trusted Plugin: examples/trusted-plugin.md
       - Sandbox plugin: examples/sandboxed-plugin.md
+  - About:
+      - versions: versions.md
+
 
 extra:
   social:

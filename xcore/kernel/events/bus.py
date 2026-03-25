@@ -121,7 +121,11 @@ class EventBus:
                 return h(e)
 
             tasks = [
-                entry.handler(event) if entry.is_async else _call_sync(entry.handler, event)
+                (
+                    entry.handler(event)
+                    if entry.is_async
+                    else _call_sync(entry.handler, event)
+                )
                 for entry in handlers
             ]
 

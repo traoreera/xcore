@@ -1,6 +1,8 @@
 import pytest
-from xcore.kernel.permissions.engine import PermissionEngine, PermissionDenied
+
+from xcore.kernel.permissions.engine import PermissionDenied, PermissionEngine
 from xcore.kernel.permissions.policies import PolicyEffect
+
 
 class TestPermissionEngine:
     @pytest.fixture
@@ -8,9 +10,7 @@ class TestPermissionEngine:
         return PermissionEngine()
 
     def test_load_and_check(self, engine):
-        permissions = [
-            {"resource": "db.*", "actions": ["read"], "effect": "allow"}
-        ]
+        permissions = [{"resource": "db.*", "actions": ["read"], "effect": "allow"}]
         engine.load_from_manifest("test_plugin", permissions)
 
         # Should allow
@@ -23,9 +23,7 @@ class TestPermissionEngine:
         assert engine.allows("test_plugin", "db.users", "write") is False
 
     def test_memoization(self, engine):
-        permissions = [
-            {"resource": "db.*", "actions": ["read"], "effect": "allow"}
-        ]
+        permissions = [{"resource": "db.*", "actions": ["read"], "effect": "allow"}]
         engine.load_from_manifest("test_plugin", permissions)
 
         # First call, populates cache
@@ -45,9 +43,7 @@ class TestPermissionEngine:
         assert engine.allows("test_plugin", "db.users", "read") is False
 
     def test_cache_invalidation_load(self, engine):
-        permissions = [
-            {"resource": "db.*", "actions": ["read"], "effect": "allow"}
-        ]
+        permissions = [{"resource": "db.*", "actions": ["read"], "effect": "allow"}]
         engine.load_from_manifest("test_plugin", permissions)
         engine.allows("test_plugin", "db.users", "read")
         assert len(engine._cache) > 0
@@ -56,7 +52,9 @@ class TestPermissionEngine:
         assert len(engine._cache) == 0
 
     def test_cache_invalidation_grant_all(self, engine):
-        engine.load_from_manifest("test_plugin", [{"resource": "db.*", "actions": ["read"], "effect": "deny"}])
+        engine.load_from_manifest(
+            "test_plugin", [{"resource": "db.*", "actions": ["read"], "effect": "deny"}]
+        )
         engine.allows("test_plugin", "db.users", "read")
         assert len(engine._cache) > 0
 

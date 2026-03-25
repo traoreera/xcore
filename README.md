@@ -1,6 +1,6 @@
 # ⚡ XCore Framework
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/traoreera/xcore)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/traoreera/xcore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.118+-green.svg)](https://fastapi.tiangolo.com/)
@@ -112,11 +112,24 @@ plugins/my_plugin/
 
 ### Example `plugin.yaml`
 ```yaml
-name: "my_plugin"
-version: "1.0.0"
-entry_point: "src.main:MyPlugin"
-trusted: true  # Set to false for sandboxed execution
-dependencies: ["other_plugin"]
+name: my_plugin
+version: "2.0.0"
+author: Your Name
+description: "A sample plugin"
+execution_mode: trusted  # or "sandboxed"
+framework_version: ">=2.0"
+entry_point: src/main.py
+
+permissions:
+  - resource: "cache.*"
+    actions: ["read", "write"]
+    effect: allow
+
+resources:
+  timeout_seconds: 30
+  rate_limit:
+    calls: 100
+    period_seconds: 60
 ```
 
 ---

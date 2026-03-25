@@ -10,12 +10,14 @@ Filesystem policy appliquée via FilesystemGuard.
 from __future__ import annotations
 
 import asyncio
+import builtins as _builtins_module
 import importlib.machinery
 import importlib.util
 import json
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logging.basicConfig(
@@ -29,6 +31,7 @@ logger = logging.getLogger("xcore.worker")
 # ─────────────────────────────────────────────────────────────────────────────
 #  Limite mémoire
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _apply_memory_limit() -> None:
     max_mb = int(os.environ.get("_SANDBOX_MAX_MEM_MB", "0"))
@@ -49,7 +52,6 @@ def _apply_memory_limit() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Capture de builtins.open AVANT tout patch
-import builtins as _builtins_module
 builtins_open = _builtins_module.open
 
 
@@ -161,21 +163,19 @@ class FilesystemGuard:
             """Log + lève PermissionError avec stack trace pour audit."""
             stack = "".join(_traceback.format_stack()[:-1])
             logger.warning(
-                f"[sandbox:BLOCKED] {label}\n"
-                f"  args={args!r}\n"
-                f"  stack:\n{stack}"
+                f"[sandbox:BLOCKED] {label}\n" f"  args={args!r}\n" f"  stack:\n{stack}"
             )
             raise PermissionError(f"[sandbox] {label} interdit dans le sandbox")
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
-        _real_open    = builtins.open
+        _real_open = builtins.open
         _real_os_open = os.open
-        _real_os_fdopen = os.fdopen
-        _real_fileio  = io.FileIO
+        os.fdopen
+        _real_fileio = io.FileIO
 
         def _guarded_open(file, mode="r", *args, **kwargs):
-            if isinstance(file, int):               # stdin/stdout/stderr → OK
+            if isinstance(file, int):  # stdin/stdout/stderr → OK
                 return _real_open(file, mode, *args, **kwargs)
             if not guard.is_allowed(file):
                 _block(f"open('{file}')", file)
@@ -198,6 +198,7 @@ class FilesystemGuard:
                 super().__init__(file, *args, **kwargs)
 
         from pathlib import Path as _Path
+
         _real_path_open = _Path.open
 
         def _guarded_path_open(self_path, mode="r", *args, **kwargs):
@@ -206,26 +207,54 @@ class FilesystemGuard:
             return _real_path_open(self_path, mode, *args, **kwargs)
 
         builtins.open = _guarded_open
-        os.open       = _guarded_os_open
-        os.fdopen     = _guarded_os_fdopen
-        io.open       = _guarded_open
-        io.FileIO     = _GuardedFileIO
-        _Path.open    = _guarded_path_open
+        os.open = _guarded_os_open
+        os.fdopen = _guarded_os_fdopen
+        io.open = _guarded_open
+        io.FileIO = _GuardedFileIO
+        _Path.open = _guarded_path_open
 
         # ── Couche 2 : Exécution dynamique ────────────────────────────────────
 
         # Modules interdits dans un contexte sandbox — toute tentative d'import
         # dynamique vers ces modules est bloquée même si le code contourne l'AST
         # scan en passant le nom comme string à exec/eval/__import__.
-        _FORBIDDEN_MODULES = frozenset({
-            "os", "sys", "subprocess", "shutil", "signal",
-            "ctypes", "cffi", "mmap", "socket", "ssl",
-            "http", "urllib", "httpx", "requests", "aiohttp",
-            "websockets", "importlib", "imp", "builtins",
-            "inspect", "gc", "tracemalloc", "dis",
-            "tempfile", "glob", "pickle", "shelve", "marshal",
-            "pty", "termios", "tty", "fcntl", "resource",
-        })
+        _FORBIDDEN_MODULES = frozenset(
+            {
+                "os",
+                "sys",
+                "subprocess",
+                "shutil",
+                "signal",
+                "ctypes",
+                "cffi",
+                "mmap",
+                "socket",
+                "ssl",
+                "http",
+                "urllib",
+                "httpx",
+                "requests",
+                "aiohttp",
+                "websockets",
+                "importlib",
+                "imp",
+                "builtins",
+                "inspect",
+                "gc",
+                "tracemalloc",
+                "dis",
+                "tempfile",
+                "glob",
+                "pickle",
+                "shelve",
+                "marshal",
+                "pty",
+                "termios",
+                "tty",
+                "fcntl",
+                "resource",
+            }
+        )
 
         _real_import = builtins.__import__
 
@@ -245,18 +274,18 @@ class FilesystemGuard:
             _block("compile()", type(source).__name__)
 
         builtins.__import__ = _guarded_import
-        builtins.exec       = _blocked_exec
-        builtins.eval       = _blocked_eval
-        builtins.compile    = _blocked_compile
+        builtins.exec = _blocked_exec
+        builtins.eval = _blocked_eval
+        builtins.compile = _blocked_compile
 
         # ── Couche 3 : importlib post-chargement ──────────────────────────────
 
         import importlib as _importlib
         import importlib.util as _importlib_util
 
-        _real_import_module      = _importlib.import_module
-        _real_spec_from_file     = _importlib_util.spec_from_file_location
-        _real_find_spec          = _importlib_util.find_spec
+        _real_import_module = _importlib.import_module
+        _importlib_util.spec_from_file_location
+        _real_find_spec = _importlib_util.find_spec
 
         def _guarded_import_module(name, package=None):
             root = name.lstrip(".").split(".")[0]
@@ -275,9 +304,9 @@ class FilesystemGuard:
                 _block(f"importlib.util.find_spec('{name}')", name)
             return _real_find_spec(name, *args, **kwargs)
 
-        _importlib.import_module                  = _guarded_import_module
-        _importlib_util.spec_from_file_location   = _blocked_spec_from_file
-        _importlib_util.find_spec                 = _guarded_find_spec
+        _importlib.import_module = _guarded_import_module
+        _importlib_util.spec_from_file_location = _blocked_spec_from_file
+        _importlib_util.find_spec = _guarded_find_spec
 
         # ── Couche 4 : ctypes — blocage complet ───────────────────────────────
         # ctypes.CDLL/cdll déjà bloqués → on ferme les APIs restantes.
@@ -288,21 +317,22 @@ class FilesystemGuard:
             def _blocked_ctypes_api(label):
                 def _inner(*args, **kwargs):
                     _block(f"ctypes.{label}()", args)
+
                 return _inner
 
             # Chargement de bibliothèques natives
-            _ctypes.CDLL          = _blocked_ctypes_api("CDLL")
-            _ctypes.cdll          = _blocked_ctypes_api("cdll")
-            _ctypes.WinDLL        = _blocked_ctypes_api("WinDLL")   # Windows
-            _ctypes.OleDLL        = _blocked_ctypes_api("OleDLL")   # Windows
-            _ctypes.PyDLL         = _blocked_ctypes_api("PyDLL")
+            _ctypes.CDLL = _blocked_ctypes_api("CDLL")
+            _ctypes.cdll = _blocked_ctypes_api("cdll")
+            _ctypes.WinDLL = _blocked_ctypes_api("WinDLL")  # Windows
+            _ctypes.OleDLL = _blocked_ctypes_api("OleDLL")  # Windows
+            _ctypes.PyDLL = _blocked_ctypes_api("PyDLL")
 
             # Manipulation mémoire brute
-            _ctypes.cast          = _blocked_ctypes_api("cast")
-            _ctypes.memmove       = _blocked_ctypes_api("memmove")
-            _ctypes.memset        = _blocked_ctypes_api("memset")
-            _ctypes.string_at     = _blocked_ctypes_api("string_at")
-            _ctypes.wstring_at    = _blocked_ctypes_api("wstring_at")
+            _ctypes.cast = _blocked_ctypes_api("cast")
+            _ctypes.memmove = _blocked_ctypes_api("memmove")
+            _ctypes.memset = _blocked_ctypes_api("memset")
+            _ctypes.string_at = _blocked_ctypes_api("string_at")
+            _ctypes.wstring_at = _blocked_ctypes_api("wstring_at")
 
             # Accès Python C-API et libc
             try:
@@ -326,7 +356,6 @@ class FilesystemGuard:
     def uninstall(self) -> None:
         """Restaure les builtins originaux (utile pour les tests)."""
         import builtins
-        from pathlib import Path as _Path
 
         builtins.open = self._original_open
         # Note : Path.open ne peut pas être restauré facilement sans référence,
@@ -336,6 +365,7 @@ class FilesystemGuard:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Chargement du plugin — namespace isolé, sans sys.path global
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class _PluginImportHook:
     """
@@ -372,13 +402,16 @@ class _PluginImportHook:
         if not self._owns(fullname):
             return None
         # Traduit xcore_plugin_<uid>.foo.bar → src_dir/foo/bar.py (ou package)
-        relative = fullname[len(self._pkg_prefix) + 1:]  # retire le préfixe + "."
+        # retire le préfixe + "."
+        relative = fullname[len(self._pkg_prefix) + 1 :]
         return self._spec_for(fullname, relative)
 
     # ── Résolution ────────────────────────────────────────────────────────────
 
     def _owns(self, fullname: str) -> bool:
-        return fullname == self._pkg_prefix or fullname.startswith(self._pkg_prefix + ".")
+        return fullname == self._pkg_prefix or fullname.startswith(
+            self._pkg_prefix + "."
+        )
 
     def _spec_for(self, fullname: str, relative: str):
         """
@@ -425,7 +458,11 @@ class _PluginImportHook:
         """API legacy — utilisée si find_module() a retourné self."""
         if fullname in sys.modules:
             return sys.modules[fullname]
-        relative = fullname[len(self._pkg_prefix) + 1:] if fullname != self._pkg_prefix else ""
+        relative = (
+            fullname[len(self._pkg_prefix) + 1 :]
+            if fullname != self._pkg_prefix
+            else ""
+        )
         spec = self._spec_for(fullname, relative)
         if spec is None:
             raise ImportError(f"Module introuvable : {fullname}")
@@ -460,10 +497,16 @@ class _PluginImportHook:
         if self in sys.meta_path:
             sys.meta_path.remove(self)
         # Purge tous les modules enregistrés sous ce namespace
-        to_remove = [k for k in sys.modules if k == self._pkg_prefix or k.startswith(self._pkg_prefix + ".")]
+        to_remove = [
+            k
+            for k in sys.modules
+            if k == self._pkg_prefix or k.startswith(self._pkg_prefix + ".")
+        ]
         for key in to_remove:
             del sys.modules[key]
-        logger.debug(f"[{self._uid}] Import hook retiré ({len(to_remove)} modules purgés)")
+        logger.debug(
+            f"[{self._uid}] Import hook retiré ({len(to_remove)} modules purgés)"
+        )
 
 
 def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
@@ -543,9 +586,6 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
     return instance
 
 
-from dataclasses import dataclass, field
-
-
 @dataclass
 class _PluginManifest:
     """
@@ -553,9 +593,10 @@ class _PluginManifest:
     Seuls les champs utilisés par le subprocess sont lus ici —
     la validation complète reste du ressort du LifecycleManager côté core.
     """
-    entry_point:   str  = "src/main.py"
+
+    entry_point: str = "src/main.py"
     allowed_paths: list = field(default_factory=lambda: ["data/"])
-    denied_paths:  list = field(default_factory=lambda: ["src/"])
+    denied_paths: list = field(default_factory=lambda: ["src/"])
 
 
 def _load_manifest(plugin_dir: Path) -> _PluginManifest:
@@ -579,10 +620,12 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         try:
             if fname.endswith(".yaml"):
                 import yaml
+
                 with open(manifest_path, encoding="utf-8") as f:
                     raw = yaml.safe_load(f) or {}
             else:
                 import json as _json
+
                 with open(manifest_path, encoding="utf-8") as f:
                     raw = _json.load(f)
 
@@ -612,6 +655,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
 #  Utilitaires IPC
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _send(transport, data: dict) -> None:
     line = json.dumps(data) + "\n"
     transport.write(line.encode("utf-8"))
@@ -620,6 +664,7 @@ def _send(transport, data: dict) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 #  Boucle principale du worker
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def _run(plugin_dir: Path) -> None:
     # 1. Lecture du manifeste (entry_point + filesystem policy)
@@ -645,6 +690,7 @@ async def _run(plugin_dir: Path) -> None:
     class _StdoutProtocol(asyncio.BaseProtocol):
         def connection_made(self, transport):
             pass
+
         def connection_lost(self, exc):
             pass
 

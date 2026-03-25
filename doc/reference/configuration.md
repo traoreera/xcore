@@ -10,7 +10,7 @@ XCore uses YAML configuration with environment variable substitution.
 # integration.yaml
 app:
   name: my-app
-  env: production
+  env: development
   secret_key: ${APP_SECRET_KEY}
 
 plugins:
@@ -46,7 +46,7 @@ app:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | string | required | Application identifier |
-| `env` | string | `production` | Environment name |
+| `env` | string | `development` | Environment name |
 | `debug` | boolean | `false` | Enable debug mode |
 | `secret_key` | string | required | Application secret key |
 | `dotenv` | string | `null` | Path to .env file |
@@ -439,6 +439,53 @@ security:
   rate_limit_default:
     calls: 200
     period_seconds: 60
+
+  # IPC configuration for sandboxed plugins
+  ipc:
+    timeout: 10.0                    # Default IPC call timeout (seconds)
+    max_output_size: 524288         # Max response size (512 KB)
+    startup_timeout: 5.0            # Plugin startup timeout (seconds)
+```
+
+### IPC Communication
+
+Le système IPC (Inter-Process Communication) permet la communication bidirectionnelle entre le Core XCore et les plugins Sandboxed.
+
+**Architecture IPC** :
+```
+┌─────────────┐      HTTP API     ┌─────────────────┐
+│   Client    │ ─────────────────→│   XCore Core    │
+│   (CLI)     │                   │   (FastAPI)     │
+└─────────────┘                   └────────┬────────┘
+                                           │
+                                           │ IPCChannel
+                                           │ (JSON-RPC)
+                                           ↓
+                                    ┌─────────────────┐
+                                    │ SandboxProcess  │
+                                    │ Manager         │
+                                    └────────┬────────┘
+                                             │ subprocess
+                                             ↓
+                                    ┌─────────────────┐
+                                    │ Plugin Worker   │
+                                    │ (isolated)      │
+                                    └─────────────────┘
+```
+
+**Protocole IPC** :
+- Format : JSON newline-delimited (NDJSON)
+- Canal : stdin/stdout du subprocess
+- Timeout : configurable via `security.ipc.timeout`
+- Actions supportées : `ping`, `shutdown`, et actions personnalisées du plugin
+
+**Exemple de message IPC** :
+```json
+// Core → Plugin (request)
+{"action": "convert", "payload": {"input": "data", "format": "pdf"}}
+
+// Plugin → Core (response)
+{"status": "ok", "result": {"output": "...", "size": 1234}}
 ```
 
 ## Environment Variables
@@ -460,6 +507,64 @@ security:
 | `SENTRY_DSN` | Sentry error tracking | None |
 | `XCORE_CONFIG` | Config file path | `integration.yaml` |
 | `LOG_LEVEL` | Logging level | `INFO` |
+
+## CLI Commands Reference
+
+### Plugin Management
+
+```bash
+# List installed plugins
+xcore plugin list
+
+# Load a plugin via IPC (communicates with running server)
+xcore plugin load <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
+
+# Reload a plugin via IPC
+xcore plugin reload <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
+
+# Install from marketplace/git/zip
+xcore plugin install <name> [--source marketplace|git|zip] [--url <url>]
+
+# Remove a plugin
+xcore plugin remove <name>
+
+# Show plugin info
+xcore plugin info <name>
+
+# Health check all plugins
+xcore plugin health
+
+# Sign/Verify plugin signature
+xcore plugin sign <path> --key <secret>
+xcore plugin verify <path> --key <secret>
+xcore plugin validate <path>
+```
+
+### Sandboxed Plugin Commands
+
+```bash
+# Run a plugin in isolated sandbox mode (test)
+xcore sandbox run <name>
+
+# Display resource limits
+xcore sandbox limits <name>
+
+# Display network policy
+xcore sandbox network <name>
+
+# Display filesystem policy
+xcore sandbox fs <name>
+```
+
+### Services & Health
+
+```bash
+# Show service status
+xcore services status
+
+# Global health check
+xcore health
+```
 
 ## Complete Example
 

@@ -142,7 +142,7 @@ class TestTrustedBase:
         with pytest.raises(RuntimeError) as exc:
             plugin.get_service("db")
 
-        assert "Contexte non injecté" in str(exc.value)
+        assert "Context not injected" in str(exc.value)
 
     @pytest.mark.asyncio
     async def test_get_service_not_found(self):
@@ -155,7 +155,7 @@ class TestTrustedBase:
         plugin = TestPlugin()
         mock_ctx = MagicMock()
         mock_ctx.services = {}
-        mock_ctx.services.keys = lambda: []
+        mock_ctx.services = {}
 
         await plugin._inject_context(mock_ctx)
 
