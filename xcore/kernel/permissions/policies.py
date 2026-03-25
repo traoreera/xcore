@@ -43,9 +43,11 @@ class Policy:
     effect: PolicyEffect = PolicyEffect.ALLOW
 
     def matches(self, resource: str, action: str) -> bool:
-        resource_match = fnmatch.fnmatch(resource, self.resource)
-        action_match = "*" in self.actions or action in self.actions
-        return resource_match and action_match
+        # Check action first (list lookup is fast)
+        if "*" not in self.actions and action not in self.actions:
+            return False
+        # Then check resource (fnmatch is slow)
+        return fnmatch.fnmatch(resource, self.resource)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Policy":

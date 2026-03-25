@@ -112,12 +112,18 @@ class PermissionEngine:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
-        log = (
-            [e for e in self._audit_log if e["plugin"] == plugin_name]
-            if plugin_name
-            else self._audit_log
-        )
-        return log[-limit:]
+        """Returns the audit log, filtered by plugin name if provided, up to the limit."""
+        from itertools import islice
+
+        # Iterate in reverse to get the latest entries first
+        it = reversed(self._audit_log)
+        if plugin_name:
+            it = (e for e in it if e["plugin"] == plugin_name)
+
+        # Slice to the limit and return in chronological order
+        results = list(islice(it, limit))
+        results.reverse()
+        return results
 
     def status(self) -> dict:
         return {
