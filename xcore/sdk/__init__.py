@@ -5,7 +5,7 @@ Import recommandé dans un plugin :
     from xcore.sdk import TrustedBase, sandboxed, ok, error
     from xcore.sdk import PluginManifest
 """
-
+from ..kernel.api.rbac import require_permission, require_role, RBACChecker
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
@@ -40,4 +40,7 @@ __all__ = [
     "AutoDispatchMixin",
     "BaseAsyncRepository",
     "BaseSyncRepository",
+    "RBACChecker",
+    "require_permission",
+    "require_role",
 ]

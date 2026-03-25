@@ -127,6 +127,9 @@ def route(
     summary: str | None = None,
     status_code: int = 200,
     response_model=None,
+    dependencies: list | None = None,       # ← FastAPI Depends() par route
+    permissions: list[str] | None = None,   # ← RBAC déclaratif ["admin", "read:users"]
+    scopes: list[str] | None = None,        # ← OAuth2 scopes si besoin
 ):
     """
     Décorateur pour déclarer une route HTTP FastAPI directement sur le plugin.
@@ -161,6 +164,9 @@ def route(
             "summary": summary or fn.__name__.replace("_", " ").title(),
             "status_code": status_code,
             "response_model": response_model,
+            "dependencies": dependencies or [],
+            "permissions": permissions or [],
+            "scopes": scopes or [],
         }
         return fn
 
@@ -190,36 +196,44 @@ class RoutedPlugin:
             async def status_http(self):
                 return {"status": "running"}
     """
+# xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
 
-    def RouterIn(self, *args, **kwargs):
-
-        from fastapi import APIRouter
+    def RouterIn(self):
+        from fastapi import APIRouter, Depends
 
         router = APIRouter()
 
-        def make_handler(fn):
-            @functools.wraps(fn)
-            async def handler(**kwargs):
-                return (
-                    await fn(**kwargs)
-                    if inspect.iscoroutinefunction(fn)
-                    else fn(**kwargs)
-                )
-
-            # IMPORTANT → copie la signature SANS self
-            sig = inspect.signature(fn)
-            params = [p for name, p in sig.parameters.items() if name != "self"]
-            handler.__signature__ = sig.replace(parameters=params)  # type: ignore
-
-            return handler
-
         for attr_name in dir(self.__class__):
             method = getattr(self.__class__, attr_name, None)
-
             route_info = getattr(method, "_xcore_route", None)
             if not route_info:
                 continue
+
             bound = getattr(self, attr_name)
+
+            # ── Construit les dependencies ──────────────────────────
+            route_deps = list(route_info.get("dependencies", []))
+
+            # RBAC automatique depuis `permissions`
+            required_perms = route_info.get("permissions", [])
+            if required_perms:
+                from xcore.kernel.api.rbac import RBACChecker
+                route_deps.append(Depends(RBACChecker(required_perms)))
+
+            # ── Handler ────────────────────────────────────────────
+            def make_handler(fn):
+                @functools.wraps(fn)
+                async def handler(**kwargs):
+                    return (
+                        await fn(**kwargs)
+                        if inspect.iscoroutinefunction(fn)
+                        else fn(**kwargs)
+                    )
+
+                sig = inspect.signature(fn)
+                params = [p for name, p in sig.parameters.items() if name != "self"]
+                handler.__signature__ = sig.replace(parameters=params)
+                return handler
 
             handler = make_handler(bound)
 
@@ -231,12 +245,10 @@ class RoutedPlugin:
                 summary=route_info["summary"],
                 status_code=route_info["status_code"],
                 response_model=route_info["response_model"],
-                *args,
-                **kwargs,
+                dependencies=route_deps,   # ← ici, par route
             )
 
         return router if router.routes else None
-
 
 class AutoDispatchMixin:
     """
