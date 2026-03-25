@@ -51,9 +51,8 @@ class DatabaseManager(BaseService):
             except Exception as e:
                 logger.error(f"[database:{name}] ❌ connexion échouée : {e}")
                 # Ne bloque pas les autres connexions
-                
-        self._status = ServiceStatus.READY if self.adapters else ServiceStatus.DEGRADED
 
+        self._status = ServiceStatus.READY if self.adapters else ServiceStatus.DEGRADED
 
     def _build_adapter(self, name: str, cfg: "DatabaseConfig"):
         kind = _TYPE_MAP.get(cfg.type.lower())

@@ -78,7 +78,11 @@ def require_service(*service_names: str):
     return decorator
 
 
-def validate_payload(schema: Type[BaseModel], type_reponse:Literal['dict', 'pydantic']):
+def validate_payload(
+    schema: Type[BaseModel],
+    type_response: Literal["dict", "BaseModel"] = "BaseModel",
+    unset: bool = True,
+):
     """
     Valide un payload via un modèle Pydantic.
     Retourne {"status": "error"} si la validation échoue.
@@ -102,7 +106,14 @@ def validate_payload(schema: Type[BaseModel], type_reponse:Literal['dict', 'pyda
                 validate = schema(**payload)
             except ValidationError as e:
                 return error(e.errors(), "validation_error")
-            return await fn(self, validate, *args, **kwargs) if type_reponse == 'pydantic' else await fn(self, validate.model_dump(), *args, **kwargs)
+            return (
+                await fn(self, validate, *args, **kwargs)
+                if type_response == "pydantic"
+                else await fn(
+                    self, validate.model_dump(exclude_unset=unset), *args, **kwargs
+                )
+            )
+
         return warpper
 
     return decorator
@@ -185,6 +196,7 @@ class RoutedPlugin:
         from fastapi import APIRouter
 
         router = APIRouter()
+
         def make_handler(fn):
             @functools.wraps(fn)
             async def handler(**kwargs):
@@ -197,7 +209,7 @@ class RoutedPlugin:
             # IMPORTANT → copie la signature SANS self
             sig = inspect.signature(fn)
             params = [p for name, p in sig.parameters.items() if name != "self"]
-            handler.__signature__ = sig.replace(parameters=params) # type: ignore
+            handler.__signature__ = sig.replace(parameters=params)  # type: ignore
 
             return handler
 

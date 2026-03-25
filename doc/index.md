@@ -83,6 +83,12 @@ graph TB
 - [Creating Your First Plugin](guides/creating-plugins.md)
 - [Configuration Reference](reference/configuration.md)
 - [Architecture Overview](architecture/overview.md)
+- [Versions & Changelog](versions.md)
+
+## Versions
+
+- **Stable**: v2.0.0 — Architecture plugin-first avec sandboxing
+- [Historique complet](versions.md)
 
 ## Community & Support
 

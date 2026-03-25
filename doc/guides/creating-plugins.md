@@ -13,6 +13,31 @@ plugins/my_plugin/
     └── main.py     # Plugin implementation
 ```
 
+## Communication Inter-Process (IPC)
+
+XCore utilise un système IPC bidirectionnel pour la communication entre le core et les plugins :
+
+- **Core → Plugin** : Via HTTP API (`{plugin_prefix}/ipc/{plugin_name}/{action}`)
+- **Plugin → Core** : Via le canal IPC interne (sandboxed) ou services directs (trusted)
+
+### Appels IPC depuis le Core
+
+Pour charger ou recharger un plugin via IPC :
+
+```bash
+# Charger un plugin
+xcore plugin load <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
+
+# Recharger un plugin
+xcore plugin reload <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
+```
+
+Ces commandes communiquent avec l'API HTTP du serveur XCore en cours d'exécution :
+- `POST {plugin_prefix}/ipc/{name}/load`
+- `POST {plugin_prefix}/ipc/{name}/reload`
+
+Les arguments `--host`, `--port`, `--path` et `--key` permettent de surcharger la configuration.
+
 ## The Manifest (plugin.yaml)
 
 The manifest describes your plugin to XCore:
@@ -278,6 +303,35 @@ class Plugin(TrustedBase):
 
     def _scheduled_action(self, data):
         print(f"Scheduled action executed with data: {data}")
+```
+
+## Calling Plugins via IPC
+
+Les plugins peuvent être appelés depuis l'extérieur via l'API HTTP IPC :
+
+```bash
+# Appeler une action IPC d'un plugin
+curl -X POST http://localhost:8000/plugin/ipc/my_plugin/my_action \
+  -H "Content-Type: application/json" \
+  -H "X-Plugin-Key: ${API_KEY}" \
+  -d '{"param1": "value1", "param2": "value2"}'
+```
+
+La réponse suit le format standardisé :
+```json
+{
+  "status": "ok",
+  "data": { ... }
+}
+```
+
+Ou en cas d'erreur :
+```json
+{
+  "status": "error",
+  "msg": "Description de l'erreur",
+  "code": "error_code"
+}
 ```
 
 ## Using Events
@@ -556,6 +610,48 @@ class Plugin(TrustedBase):
             ...
         elif action == ACTION_UPDATE:
             ...
+```
+
+## Sandboxed Plugin Commands
+
+Pour les plugins en mode `sandboxed`, des commandes CLI spécifiques permettent de gérer et inspecter l'isolation :
+
+```bash
+# Lancer un plugin en mode sandbox isolé (test)
+xcore sandbox run <name>
+
+# Afficher les limites ressources d'un plugin
+xcore sandbox limits <name>
+
+# Afficher la politique réseau
+xcore sandbox network <name>
+
+# Afficher et valider la politique filesystem
+xcore sandbox fs <name>
+```
+
+Ces commandes sont utiles pour :
+- **Tester** un plugin sandboxed avant déploiement
+- **Vérifier** les limites ressources configurées
+- **Auditer** les politiques de sécurité réseau et filesystem
+- **Déboguer** les problèmes d'isolation
+
+Exemple de sortie `xcore sandbox limits` :
+```
+=============================================
+  Limites ressources : document_converter
+=============================================
+  Mémoire max      : 256 MB
+  Disque max       : 100 MB
+  Timeout appel    : 60 s
+  Rate limit       : 50 appels / 60s
+
+  Runtime :
+  Health check     : activé
+    intervalle     : 10s
+    timeout        : 2s
+  Retry            : 1 tentative(s)
+=============================================
 ```
 
 ## Next Steps

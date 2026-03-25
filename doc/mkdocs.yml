@@ -88,17 +88,24 @@ nav:
     - guides/security.md
     - guides/monitoring.md
     - guides/scaling.md
+    - guides/troubleshooting.md
   - Reference:
     - reference/sdk.md
     - reference/configuration.md
     - reference/api.md
-    - reference/sdk.md
   - Architecture:
     - architecture/overview.md
   - Deployment:
     - deployment/guide.md
+  - Development:
+    - development/testing.md
+    - development/contributing.md
   - Examples:
     - examples/basic-plugin.md
     - examples/complete-plugin.md
+    - examples/trusted-plugin.md
+    - examples/sandboxed-plugin.md
+  - About:
+    - versions.md
 
 copyright: Copyright &copy; 2023 XCore Team

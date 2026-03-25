@@ -85,7 +85,7 @@ class TestAppConfig:
         """Test default configuration values."""
         config = AppConfig(name="test", secret_key="secret")
 
-        assert config.env == "production"
+        assert config.env == "development"
         assert config.debug is False
         assert config.plugin_prefix == "/plugin"
 

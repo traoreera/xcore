@@ -11,8 +11,8 @@ Responsabilités :
 from __future__ import annotations
 
 import asyncio
-from collections import deque
 import logging
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -322,9 +322,7 @@ class PluginLoader:
         for m in manifests:
             for dep in m.requires:
                 if dep not in by_name:
-                    raise ValueError(
-                        f"[{m.name}] Missing dependency '{dep}'"
-                    )
+                    raise ValueError(f"[{m.name}] Missing dependency '{dep}'")
 
                 dependents[dep].append(m.name)
                 in_degree[m.name] += 1
@@ -350,9 +348,7 @@ class PluginLoader:
 
             remaining = [m.name for m in manifests if m.name not in visited]
 
-            raise ValueError(
-                f"Circular dependency detected: {remaining}"
-            )
+            raise ValueError(f"Circular dependency detected: {remaining}")
 
         return result
 

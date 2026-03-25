@@ -946,6 +946,69 @@ sudo apt-get install libreoffice poppler-utils pandoc
 which libreoffice  # doit retourner un chemin
 ```
 
+## Commandes Sandbox CLI
+
+Le mode sandbox peut être testé et inspecté via les commandes CLI :
+
+```bash
+# Lancer un plugin en mode sandbox isolé pour test
+xcore sandbox run document_converter
+# 🚀  Lancement sandbox : document_converter
+#     mémoire max : 256MB
+#     timeout     : 60s
+# ✅  Sandbox démarré
+#     PID   : 12345
+#     État  : running
+# ✅  Ping OK — plugin opérationnel
+# 🛑  Sandbox arrêté.
+
+# Vérifier les limites ressources
+xcore sandbox limits document_converter
+
+# Auditer la politique réseau
+xcore sandbox network document_converter
+
+# Valider la politique filesystem
+xcore sandbox fs document_converter
+```
+
+## Appels IPC depuis le Core
+
+Pour appeler un plugin sandboxed depuis l'extérieur (Core ou autre plugin Trusted) :
+
+```bash
+# Via l'API HTTP IPC
+curl -X POST http://localhost:8000/plugin/ipc/document_converter/convert \
+  -H "Content-Type: application/json" \
+  -H "X-Plugin-Key: ${API_KEY}" \
+  -d '{
+    "data": "JVBERi0xLjQK...",
+    "input_format": "pdf",
+    "output_format": "txt"
+  }'
+
+# Réponse :
+# {
+#   "status": "ok",
+#   "data": "...base64...",
+#   "format": "txt",
+#   "size": 1234,
+#   "hash": "sha256...",
+#   "duration_ms": 250
+# }
+
+#ou via autre plugin
+
+class Plugin(TustedBase):
+    ...
+
+    def 
+
+
+```
+
+Le canal IPC est géré par `IPCChannel` qui communique en JSON newline-delimited avec le subprocess sandbox.
+
 ## Résumé
 
 | Caractéristique | Trusted Plugin | Sandboxed Plugin |
@@ -958,6 +1021,7 @@ which libreoffice  # doit retourner un chemin
 | **Timeout** | 30s par défaut | 60s max |
 | **Persistance** | Base de données | Fichiers temporaires |
 | **Configuration** | `.env` + `plugin.yaml` | `plugin.yaml` uniquement |
+| **IPC** | Via services directs | Via `IPCChannel` JSON-RPC |
 
 ## 3. src/router.py
 
