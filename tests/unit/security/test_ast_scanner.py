@@ -15,7 +15,7 @@ from xcore.kernel.security.validation import (
     ManifestError,
     ManifestValidator,
     ScanResult,
-    _ImportVisitor,
+    _SecurityVisitor,
     _resolve_env,
 )
 
@@ -61,13 +61,13 @@ class TestScanResult:
         assert "Warning 1" in result_str
 
 
-class TestImportVisitor:
-    """Test _ImportVisitor AST visitor."""
+class TestSecurityVisitor:
+    """Test _SecurityVisitor AST visitor."""
 
     @pytest.fixture
     def visitor(self):
         """Create a visitor for testing."""
-        return _ImportVisitor(
+        return _SecurityVisitor(
             forbidden={"os", "sys"},
             allowed={"json", "re"},
             filename="test.py",
