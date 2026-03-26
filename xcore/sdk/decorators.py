@@ -2,6 +2,7 @@
 decorators.py — Décorateurs utilitaires pour les plugins xcore v2.
 
 Usage:
+```python
     from xcore.sdk import TrustedBase, action, require_service
 
     class Plugin(TrustedBase):
@@ -16,6 +17,7 @@ Usage:
         async def save(self, payload: dict) -> dict:
             db = self.get_service("db")
             ...
+    ```
 """
 
 from __future__ import annotations
@@ -127,9 +129,10 @@ def route(
     summary: str | None = None,
     status_code: int = 200,
     response_model=None,
-    dependencies: list | None = None,       # ← FastAPI Depends() par route
-    permissions: list[str] | None = None,   # ← RBAC déclaratif ["admin", "read:users"]
-    scopes: list[str] | None = None,        # ← OAuth2 scopes si besoin
+    dependencies: list | None = None,  # ← FastAPI Depends() par route
+    # ← RBAC déclaratif ["admin", "read:users"]
+    permissions: list[str] | None = None,
+    scopes: list[str] | None = None,  # ← OAuth2 scopes si besoin
 ):
     """
     Décorateur pour déclarer une route HTTP FastAPI directement sur le plugin.
@@ -196,10 +199,13 @@ class RoutedPlugin:
             async def status_http(self):
                 return {"status": "running"}
     """
-# xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
+
+    # xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
 
     def RouterIn(self):
         from fastapi import APIRouter, Depends
+
+        from xcore.kernel.api.rbac import RBACChecker
 
         router = APIRouter()
 
@@ -217,7 +223,6 @@ class RoutedPlugin:
             # RBAC automatique depuis `permissions`
             required_perms = route_info.get("permissions", [])
             if required_perms:
-                from xcore.kernel.api.rbac import RBACChecker
                 route_deps.append(Depends(RBACChecker(required_perms)))
 
             # ── Handler ────────────────────────────────────────────
@@ -245,10 +250,11 @@ class RoutedPlugin:
                 summary=route_info["summary"],
                 status_code=route_info["status_code"],
                 response_model=route_info["response_model"],
-                dependencies=route_deps,   # ← ici, par route
+                dependencies=route_deps,  # ← ici, par route
             )
 
         return router if router.routes else None
+
 
 class AutoDispatchMixin:
     """

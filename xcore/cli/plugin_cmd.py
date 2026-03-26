@@ -10,11 +10,9 @@ import shutil
 import sys
 from pathlib import Path
 
-import re
 from rich.console import Console, Group
 from rich.markup import escape
 from rich.panel import Panel
-from rich.console import Console
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -183,7 +181,9 @@ async def _plugin_install(args) -> None:
     dest = plugin_dir / name
 
     if dest.exists():
-        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' déjà installé dans {dest}")
+        console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{name}' déjà installé dans {dest}"
+        )
         console.print(
             f"    Pour mettre à jour : xcore plugin remove {name} && xcore plugin install {name}"
         )
@@ -279,7 +279,9 @@ async def _install_from_marketplace(client, name: str, dest: Path, cfg) -> None:
     console.print(f"🔍  Recherche '{name}' sur le marketplace...")
     plugin = await client.get_plugin(name)
     if not plugin:
-        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable sur le marketplace.")
+        console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable sur le marketplace."
+        )
         sys.exit(1)
 
     download_url = plugin.get("download_url")
@@ -338,7 +340,9 @@ async def _plugin_remove(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.exists():
-        console.print(f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable dans {plugin_dir}")
+        console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{name}' introuvable dans {plugin_dir}"
+        )
         sys.exit(1)
 
     confirm = Confirm.ask(f"[bold red]⚠️  Supprimer '{name}' ?[/]", default=False)
@@ -384,7 +388,9 @@ async def _plugin_info(args) -> None:
     ]
 
     if manifest.requires:
-        deps = ", ".join(d.name if hasattr(d, "name") else str(d) for d in manifest.requires)
+        deps = ", ".join(
+            d.name if hasattr(d, "name") else str(d) for d in manifest.requires
+        )
         info.append(f"[bold cyan]Dépendances :[/] {escape(deps)}")
 
     if manifest.allowed_imports:

@@ -79,7 +79,9 @@ class RedisCacheBackend:
         ex = ttl if ttl is not None else self._ttl
         async with self._client.pipeline() as pipe:
             for key, value in mapping.items():
-                raw = json.dumps(value) if not isinstance(value, (str, bytes)) else value
+                raw = (
+                    json.dumps(value) if not isinstance(value, (str, bytes)) else value
+                )
                 pipe.set(key, raw, ex=ex if ex > 0 else None)
             await pipe.execute()
 
