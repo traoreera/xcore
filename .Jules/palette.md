@@ -5,3 +5,15 @@
 ## 2025-05-15 - [Structured CLI Data with Rich Tables]
 **Learning:** For command outputs involving multiple entity attributes (like name, version, status), using structured tables with clear headers and semantic colors (e.g., green for OK, red for error) drastically reduces cognitive load compared to manual padding.
 **Action:** Prefer `rich.table.Table` over custom string formatting for any CLI output that lists more than two related properties.
+
+## 2025-05-16 - [Safe Destructive Prompts in CLI]
+**Learning:** When using `rich.prompt.Confirm.ask()` for destructive actions like plugin removal, the default behavior is `True` (Yes). To prevent accidental data loss, explicitly set `default=False` to require an intentional confirmation.
+**Action:** Always use `Confirm.ask(..., default=False)` for deletions or other irreversible operations.
+
+## 2025-05-17 - [Defensive Metadata Display in CLI]
+**Learning:** Metadata in plugin manifests (like `requires`) may be parsed into complex objects (e.g., `PluginDependency`) rather than simple strings. Directly using `", ".join()` on these lists causes a `TypeError`.
+**Action:** Always use a generator or `map` with defensive attribute access (e.g., `d.name if hasattr(d, "name") else str(d)`) when joining metadata lists for display.
+
+## 2025-05-18 - [Visual Hierarchy with Rich Panels]
+**Learning:** Grouping related metadata into a `rich.panel.Panel` using `rich.console.Group` creates a clear visual boundary and hierarchy, making dense information (like plugin specs and permissions) much easier to scan than plain text with manual separators.
+**Action:** Use `Panel(Group(...))` for entity-detail commands to provide a "card-like" experience in the terminal.

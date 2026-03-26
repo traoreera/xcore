@@ -95,11 +95,10 @@ class CacheService(BaseService):
         return value
 
     async def mget(self, keys: list[str]) -> dict[str, Any]:
-        return {k: await self.get(k) for k in keys}
+        return await self._backend.mget(keys)
 
     async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
-        for k, v in mapping.items():
-            await self.set(k, v, ttl=ttl)
+        await self._backend.mset(mapping, ttl=ttl)
 
     # ── Cycle de vie ──────────────────────────────────────────
 
