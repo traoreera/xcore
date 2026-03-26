@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger("xcore.marketplace.client")
@@ -128,6 +128,9 @@ class MarketplaceClient:
         return await loop.run_in_executor(None, lambda: self._http_post(url, body))
 
     def _http_get(self, url: str) -> Any:
+        scheme = urlparse(url).scheme
+        if scheme not in ("http", "https"):
+            raise MarketplaceError(f"Sécurité : protocole '{scheme}' non autorisé pour {url}")
         req = Request(url, headers=self._headers())
         try:
             with urlopen(req, timeout=self._timeout) as resp:
@@ -140,6 +143,9 @@ class MarketplaceClient:
             raise MarketplaceError(f"Erreur réseau : {e}") from e
 
     def _http_post(self, url: str, body: dict) -> Any:
+        scheme = urlparse(url).scheme
+        if scheme not in ("http", "https"):
+            raise MarketplaceError(f"Sécurité : protocole '{scheme}' non autorisé pour {url}")
         data = json.dumps(body).encode("utf-8")
         req = Request(
             url,
