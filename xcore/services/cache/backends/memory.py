@@ -70,6 +70,15 @@ class MemoryBackend:
     async def clear(self) -> None:
         self._store.clear()
 
+    async def mget(self, keys: list[str]) -> dict[str, Any]:
+        """Récupère plusieurs clés d'un coup."""
+        return {k: await self.get(k) for k in keys}
+
+    async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
+        """Définit plusieurs clés d'un coup."""
+        for k, v in mapping.items():
+            await self.set(k, v, ttl=ttl)
+
     async def keys(self, pattern: str | None = None) -> list[str]:
         import fnmatch
 

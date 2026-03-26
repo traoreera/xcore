@@ -11,6 +11,7 @@ xcore marketplace rate   <n> --score <1-5>
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
@@ -74,7 +75,7 @@ async def _mkt_list(args) -> None:
     )
     table.add_column("Version", style="magenta", max_width=16, overflow="ellipsis")
     table.add_column("Auteur", style="green", max_width=24, overflow="ellipsis")
-    table.add_column("Note", style="yellow")
+    table.add_column("Note")
     table.add_column("Description", style="white")
 
     for p in plugins:
@@ -111,7 +112,7 @@ async def _mkt_trending(args) -> None:
     table.add_column("#", justify="right", style="dim")
     table.add_column("Nom", style="cyan", no_wrap=True)
     table.add_column("Version", style="magenta")
-    table.add_column("Note", style="yellow")
+    table.add_column("Note")
     table.add_column("Téléchargements", justify="right", style="green")
     table.add_column("Description", style="white")
 
@@ -151,7 +152,7 @@ async def _mkt_search(args) -> None:
     table.add_column("Nom", style="cyan", no_wrap=True)
     table.add_column("Version", style="magenta")
     table.add_column("Auteur", style="green")
-    table.add_column("Note", style="yellow")
+    table.add_column("Note")
     table.add_column("Description", style="white")
 
     for p in results:
@@ -193,7 +194,7 @@ async def _mkt_show(args) -> None:
         f"[bold cyan]Description :[/] {escape(str(plugin.get('description', '?')))}",
         f"[bold cyan]Mode        :[/][yellow] {escape(str(plugin.get('execution_mode', 'legacy')))}[/]",
         f"[bold cyan]Licence     :[/][green] {escape(str(plugin.get('license', '?')))}[/]",
-        f"[bold cyan]Note        :[/][bold yellow] {_stars(plugin.get('rating', 0))}[/] ({plugin.get('rating_count', 0)} votes)",
+        f"[bold cyan]Note        :[/] {_stars(plugin.get('rating', 0))} ({plugin.get('rating_count', 0)} votes)",
         f"[bold cyan]Téléch.     :[/][bold] {plugin.get('downloads', 0):,}[/]",
         f"[bold cyan]Dépôt       :[/][blue] {escape(str(plugin.get('repository', '?')))}[/]",
     ]
@@ -222,12 +223,12 @@ async def _mkt_rate(args) -> None:
     name = args.name
     score = args.score
 
-    print(f"⭐  Notation de '{name}' : {score}/5")
+    console.print(f"⭐  Notation de '{name}' : {score}/5")
     try:
         result = await client.rate_plugin(name, score)
         new_rating = result.get("new_rating", "?")
         total = result.get("rating_count", "?")
-        print(
+        console.print(
             f"✅  Note enregistrée. Nouvelle moyenne : {new_rating}/5 ({total} votes)"
         )
     except Exception as e:
@@ -238,10 +239,17 @@ async def _mkt_rate(args) -> None:
 # ── helpers ───────────────────────────────────────────────────
 
 
-def _stars(rating: float) -> str:
-    """Convertit une note 0-5 en étoiles ASCII."""
-    rating = max(0.0, min(5.0, float(rating or 0)))
+def _stars(rating: Any) -> str:
+    """Convertit une note 0-5 en étoiles ASCII avec markup Rich."""
+    try:
+        rating = max(0.0, min(5.0, float(rating or 0)))
+    except (ValueError, TypeError):
+        rating = 0.0
+
     full = int(rating)
     half = 1 if (rating - full) >= 0.5 else 0
     empty = 5 - full - half
-    return "★" * full + "½" * half + "☆" * empty
+
+    active = "[bold yellow]" + ("★" * full + "½" * half) + "[/]"
+    dimmed = "[dim]" + ("☆" * empty) + "[/]"
+    return active + dimmed
