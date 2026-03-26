@@ -2,20 +2,20 @@ app:
   name: my-app
   env: production
   debug: true
-  secret_key: ${APP_SECRET_KEY}
-  dotenv: "./extensions/.env"
+  secret_key: "vjherbvjhe"
+  #dotenv: "./extensions/.env"
   plugin_prefix: "/app"
-  server_key: ${SERVER_KEY}
+  server_key: "rhverujierf"
   server_key_iterations: 100000
   plugin_tags:
-    - "my-app"
+    - "test"
 
 # ── Plugins ───────────────────────────────────────────────────
 plugins:
-  directory: ./plugins
+  directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "${PLUGIN_SECRET_KEY}"
+  secret_key: "hiuhihihi"
 
   # true = refuse tout plugin Trusted non signé
   strict_trusted: false
@@ -32,46 +32,30 @@ plugins:
     filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
     hidden: true
 
-
 # ── Services ──────────────────────────────────────────────────
 services:
-
   # ── Bases de données ────────────────────────────────────────
   databases:
-
-    # Connexion principale (PostgreSQL)
-    #default:
-    #  type: postgresql
-    #  url: "${DATABASE_URL}"
-    #  pool_size: 20          # connexions actives max en pool
-    #  max_overflow: 10       # connexions supplémentaires si pool plein
-    #  echo: true            # true = log chaque requête SQL (dev seulement)
-
-    # Connexion async pour les endpoints FastAPI haute charge
-    # (même BDD, driver asyncpg)
-    async_default:
+    db:
       type: sqlasync
-      url: "${DATABASE_ASYNC_URL}"  # postgresql+asyncpg://user:pass@host/db
-      echo: false
-
-    # Redis utilisé comme base de données (séparé du cache)
-    # Pratique pour les sessions, les locks distribués, pub/sub
+      url: sqlite+aiosqlite:///db.sqlite3
+      echo: true
     redis_db:
       type: redis
-      url: "${REDIS_URL}"
+      url: redis://localhost:6379/0
       max_connections: 50
 
   # ── Cache ────────────────────────────────────────────────────
   cache:
     backend: redis
-    url: "${REDIS_URL}"
-    ttl: 300          # TTL par défaut en secondes
-    max_size: 10000   # ignoré en mode redis, actif en mode memory
+    url: redis://localhost:6379/0
+    ttl: 300 # TTL par défaut en secondes
+    max_size: 10000 # ignoré en mode redis, actif en mode memory
 
   # ── Scheduler ────────────────────────────────────────────────
   scheduler:
     enabled: true
-    backend: redis      # redis = tâches persistantes, survivent au redémarrage
+    backend: redis # redis = tâches persistantes, survivent au redémarrage
     timezone: Europe/Paris
 
     # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
@@ -89,33 +73,29 @@ services:
     #    trigger: interval
     #    minutes: 5
 
-
 # ── Observabilité ─────────────────────────────────────────────
 observability:
-
   logging:
     enabled: true
-    level: DEBUG          # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    level: ERROR # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
-    max_bytes: 52428800     # 50 MB par fichier
-    backup_count: 10        # 10 fichiers de rotation = 500 MB max
+    max_bytes: 52428800 # 50 MB par fichier
+    backup_count: 10 # 10 fichiers de rotation = 500 MB max
 
   metrics:
     enabled: true
-    backend: prometheus     # memory | prometheus | statsd
-    prefix: myapp           # préfixe des métriques exposées sur /metrics
+    backend: prometheus # memory | prometheus | statsd
+    prefix: myapp # préfixe des métriques exposées sur /metrics
 
   tracing:
-    enabled: false          # true si tu utilises OpenTelemetry / Jaeger
-    backend: noop           # noop | opentelemetry | jaeger
+    enabled: false # true si tu utilises OpenTelemetry / Jaeger
+    backend: noop # noop | opentelemetry | jaeger
     service_name: my-app
-    endpoint: null          # ex: http://jaeger:4317 (OTLP gRPC)
-
+    endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
 
 # ── Sécurité ──────────────────────────────────────────────────
 security:
-
   # Imports Python autorisés dans les plugins Sandboxed (whitelist AST)
   # Les plugins Trusted ne sont pas limités par cette liste
   allowed_imports:
@@ -146,33 +126,8 @@ security:
   # Imports explicitement interdits (surcharge les allowed_imports)
   forbidden_imports:
     - os
-    - sys
-    - subprocess
-    - shutil
-    - signal
-    - ctypes
-    - socket
-    - ssl
-    - http
-    - urllib
-    - httpx
-    - requests
-    - aiohttp
-    - importlib
-    - builtins
-    - exec
-    - eval
-    - compile
-    - pickle
 
   # Rate limit appliqué par défaut à chaque plugin non configuré
   rate_limit_default:
     calls: 200
     period_seconds: 60
-
-
-marketplace:
-  url: http://localhost:8000/marketplace
-  api_key: ${XCORE_MARKETPLACE_KEY}
-  timeout: 10
-  cache_ttl: 300

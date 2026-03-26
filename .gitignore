@@ -50,3 +50,5 @@ analyse.md
 .coverage
 coverage.*
 integration.yaml
+/app
+main.py
