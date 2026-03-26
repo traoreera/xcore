@@ -12,6 +12,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from rich.console import Console, Group
+from rich.markup import escape
+from rich.panel import Panel
+
+console = Console()
+error_console = Console(stderr=True)
+
 
 def _load_config(args):
     from xcore.configurations.loader import ConfigLoader
@@ -115,38 +122,34 @@ async def _sandbox_limits(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
         sys.exit(1)
 
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
     r = manifest.resources
     rt = manifest.runtime
 
-    print(f"\n{'='*45}")
-    print(f"  Limites ressources : {name}")
-    print(f"{'='*45}")
-    print(f"  Mémoire max      : {r.max_memory_mb} MB")
-    print(f"  Disque max       : {r.max_disk_mb} MB")
-    print(f"  Timeout appel    : {r.timeout_seconds} s")
-    print(
-        f"  Rate limit       : {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s"
-    )
-    print(f"\n  Runtime :")
-    print(
-        f"  Health check     : {'activé' if rt.health_check.enabled else 'désactivé'}"
-    )
+    info = [
+        f"[bold cyan]Mémoire max      :[/][magenta] {r.max_memory_mb} MB[/]",
+        f"[bold cyan]Disque max       :[/][magenta] {r.max_disk_mb} MB[/]",
+        f"[bold cyan]Timeout appel    :[/][magenta] {r.timeout_seconds} s[/]",
+        f"[bold cyan]Rate limit       :[/][magenta] {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s[/]",
+        "\n[bold white]Runtime :[/]",
+        f"  [cyan]Health check     :[/][yellow] {'activé' if rt.health_check.enabled else 'désactivé'}[/]",
+    ]
+
     if rt.health_check.enabled:
-        print(f"    intervalle     : {rt.health_check.interval_seconds}s")
-        print(f"    timeout        : {rt.health_check.timeout_seconds}s")
-    print(f"  Retry            : {rt.retry.max_attempts} tentative(s)")
+        info.append(f"    [dim]intervalle     : {rt.health_check.interval_seconds}s[/]")
+        info.append(f"    [dim]timeout        : {rt.health_check.timeout_seconds}s[/]")
+
+    info.append(f"  [cyan]Retry            :[/][yellow] {rt.retry.max_attempts} tentative(s)[/]")
     if rt.retry.max_attempts > 1:
-        print(f"    backoff        : {rt.retry.backoff_seconds}s")
-    print(f"{'='*45}\n")
+        info.append(f"    [dim]backoff        : {rt.retry.backoff_seconds}s[/]")
 
     # Vérifie le disque actuel si le plugin est installé
     data_dir = plugin_dir / "data"
@@ -156,9 +159,14 @@ async def _sandbox_limits(args) -> None:
         watcher = DiskWatcher(data_dir, r.max_disk_mb)
         stats = watcher.stats()
         symbol = "✅" if stats["ok"] else "❌"
-        print(
-            f"  Disque actuel    : {stats['used_mb']}MB / {stats['max_mb']}MB ({stats['used_pct']}%) {symbol}"
+        info.append("\n[bold white]État actuel :[/]")
+        info.append(
+            f"  [cyan]Disque utilisé   :[/][magenta] {stats['used_mb']}MB / {stats['max_mb']}MB ({stats['used_pct']}%) {symbol}[/]"
         )
+
+    content = Group(*info)
+    title = f"[bold green]🛡️  Limites ressources : {escape(name)}[/]"
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── network ───────────────────────────────────────────────────
