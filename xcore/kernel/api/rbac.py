@@ -1,7 +1,6 @@
 # xcore/kernel/api/rbac.py
 from __future__ import annotations
 
-
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 

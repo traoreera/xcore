@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +19,8 @@ if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
 from ...kernel.security.validation import ManifestValidator
-from ...sdk.plugin_base import PluginDependency
+
+# from ...sdk.plugin_base import PluginDependency
 from ..sandbox.process_manager import SandboxProcessManager
 from .dependency import DependencyGraph
 from .lifecycle import LifecycleManager, LoadError

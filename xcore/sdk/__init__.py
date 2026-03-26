@@ -10,7 +10,6 @@ from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error,
 from ..kernel.api.rbac import RBACChecker, require_permission, require_role
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
-from .routers import RouterRegistry
 from .decorators import (
     AutoDispatchMixin,
     RoutedPlugin,
@@ -22,6 +21,7 @@ from .decorators import (
     validate_payload,
 )
 from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
+from .routers import RouterRegistry
 
 __all__ = [
     "TrustedBase",

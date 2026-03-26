@@ -191,7 +191,7 @@ class TestValidatePayloadDecorator:
             count: int
 
         class Plugin:
-            @validate_payload(InputModel, type_reponse="dict")
+            @validate_payload(InputModel, type_response="dict")
             async def create(self, data: dict):
                 return {"name": data["name"], "count": data["count"]}
 

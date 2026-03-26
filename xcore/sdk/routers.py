@@ -88,7 +88,7 @@ class RouterRegistry:
             permissions=permissions,
             scopes=scopes,
         )
-    
+
     def put(
         self,
         path: str,
@@ -136,7 +136,7 @@ class RouterRegistry:
             permissions=permissions,
             scopes=scopes,
         )
-    
+
     def path(
         self,
         path: str,
@@ -160,9 +160,8 @@ class RouterRegistry:
             permissions=permissions,
             scopes=scopes,
         )
-    
 
-    def route_instance(self, fn: Callable): # ← FastAPI Depends() par route
+    def route_instance(self, fn: Callable):  # ← FastAPI Depends() par route
         return self.router(
             fn._xcore_route["path"],
             fn._xcore_route["method"],

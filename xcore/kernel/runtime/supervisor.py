@@ -152,6 +152,7 @@ class PluginSupervisor:
 
         # 1. Rate limiting
         try:
+            print(plugin_name, action)
             await self._rate.check(plugin_name)
         except RateLimitExceeded as e:
             return self._err(str(e), "rate_limit_exceeded")
@@ -163,7 +164,7 @@ class PluginSupervisor:
         # 3. Vérification des permissions
         # La ressource par défaut est "action.<action>" ce qui permet aux plugins
         # de déclarer : resource: "action.*" effect: allow
-        effective_resource = resource or f"action.{action}"
+        effective_resource = resource or f"{action}"
         try:
             self._permissions.check(plugin_name, effective_resource, "execute")
         except PermissionDenied as e:

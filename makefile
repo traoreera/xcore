@@ -3,7 +3,7 @@
 # ============================================================
 PROJECT_PATH_APP := $(shell pwd)/core
 PROJECT_PATH := $(shell pwd)
-LOGS_FILE := $(shell pwd)/logs/dev.log
+LOGS_FILE := $(shell pwd)/log/app.log
 
 
 # Variables pour gestion liens symboliques

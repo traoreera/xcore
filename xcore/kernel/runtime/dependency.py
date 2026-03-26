@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -21,8 +21,10 @@ class DependencyGraph(Generic[T]):
 
     def __init__(self) -> None:
         self._nodes: dict[str, T] = {}
-        self._dependencies: dict[str, set[str]] = {}  # node -> set of nodes it depends on
-        self._dependents: dict[str, set[str]] = {}    # node -> set of nodes that depend on it
+        # node -> set of nodes it depends on
+        self._dependencies: dict[str, set[str]] = {}
+        # node -> set of nodes that depend on it
+        self._dependents: dict[str, set[str]] = {}
 
     def add_node(self, name: str, data: T) -> None:
         """Adds a node to the graph with its associated data."""

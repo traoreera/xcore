@@ -1,5 +1,7 @@
 import pytest
+
 from xcore.kernel.runtime.dependency import DependencyGraph
+
 
 def test_dependency_graph_ordered():
     graph = DependencyGraph()
@@ -15,6 +17,7 @@ def test_dependency_graph_ordered():
     ordered = graph.get_ordered()
     assert ordered == ["dataA", "dataB", "dataC"]
 
+
 def test_dependency_graph_cycle():
     graph = DependencyGraph()
     graph.add_node("A", 1)
@@ -24,6 +27,7 @@ def test_dependency_graph_cycle():
 
     with pytest.raises(ValueError, match="Circular dependency"):
         graph.get_ordered()
+
 
 def test_dependency_graph_missing_node():
     graph = DependencyGraph()

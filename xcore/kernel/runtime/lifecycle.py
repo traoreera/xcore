@@ -325,7 +325,7 @@ class LifecycleManager:
                     plugin_name=self.manifest.name,
                     service_name=name,
                     service_obj=obj,
-                    metadata={"reloaded": is_reload}
+                    metadata={"reloaded": is_reload},
                 )
 
         return self._services

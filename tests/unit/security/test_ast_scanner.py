@@ -15,8 +15,8 @@ from xcore.kernel.security.validation import (
     ManifestError,
     ManifestValidator,
     ScanResult,
-    _SecurityVisitor,
     _resolve_env,
+    _SecurityVisitor,
 )
 
 

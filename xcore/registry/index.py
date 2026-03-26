@@ -37,7 +37,8 @@ class PluginRegistry:
     def __init__(self, config: "PluginConfig | None" = None) -> None:
         self._config = config
         self._entries: dict[str, dict[str, Any]] = {}
-        self._exported_services: dict[str, dict[str, Any]] = {}  # service_name -> metadata
+        # service_name -> metadata
+        self._exported_services: dict[str, dict[str, Any]] = {}
 
     def register(self, name: str, handler: Any, metadata: dict | None = None) -> None:
         manifest = getattr(handler, "manifest", None)
@@ -60,19 +61,28 @@ class PluginRegistry:
     def unregister(self, name: str) -> None:
         # Nettoie aussi les services exportés par ce plugin
         self._exported_services = {
-            s: meta for s, meta in self._exported_services.items()
+            s: meta
+            for s, meta in self._exported_services.items()
             if meta.get("plugin") != name
         }
         self._entries.pop(name, None)
 
-    def register_service(self, plugin_name: str, service_name: str, service_obj: Any, metadata: dict | None = None) -> None:
+    def register_service(
+        self,
+        plugin_name: str,
+        service_name: str,
+        service_obj: Any,
+        metadata: dict | None = None,
+    ) -> None:
         """Enregistre un service exporté par un plugin."""
         self._exported_services[service_name] = {
             "plugin": plugin_name,
             "obj": service_obj,
-            **(metadata or {})
+            **(metadata or {}),
         }
-        logger.debug(f"[registry] service '{service_name}' enregistré par '{plugin_name}'")
+        logger.debug(
+            f"[registry] service '{service_name}' enregistré par '{plugin_name}'"
+        )
 
     def get_service(self, service_name: str, requester: str | None = None) -> Any:
         """
@@ -91,7 +101,11 @@ class PluginRegistry:
 
     def list_services(self) -> list[dict]:
         return [
-            {"name": name, "plugin": meta["plugin"], "scope": meta.get("scope", "public")}
+            {
+                "name": name,
+                "plugin": meta["plugin"],
+                "scope": meta.get("scope", "public"),
+            }
             for name, meta in self._exported_services.items()
         ]
 
