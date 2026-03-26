@@ -13,3 +13,7 @@
 ## 2026-03-25 - [Short-circuiting Permission Matching]
 **Learning:** In the `Policy.matches` method, evaluating resource glob patterns (via `fnmatch.fnmatch`) before checking for action matches is inefficient because string pattern matching is significantly slower than list lookups. Since many checks fail on the action, reversing the order provides an "early exit" that can speed up non-matching evaluations by ~80%.
 **Action:** Always prioritize low-cost boolean or membership checks (like action lookups) before high-cost operations (like regex or glob matching) in hot-path evaluation logic.
+
+## 2026-04-10 - [Inlining Logic in MemoryBackend Batch Operations]
+**Learning:** Inlining `get` and `set` logic within `mget` and `mset` methods of an in-memory cache backend significantly reduces performance overhead. This improvement comes from two sources: avoiding the creation and awaiting of individual coroutines for every key in the batch, and reducing the number of calls to `time.monotonic()` (and other redundant calculations) by performing them once per batch.
+**Action:** For performance-critical batch operations in synchronous or asynchronous in-memory stores, avoid simple loops that delegate to individual item handlers. Instead, inline the core logic to minimize call stack depth, coroutine overhead, and redundant system calls.
