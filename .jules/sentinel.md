@@ -17,3 +17,8 @@
 **Vulnerability:** The `ASTScanner` was only monitoring imports, allowing plugins to use dangerous built-ins (e.g., `eval`, `exec`, `getattr`) and access sensitive internal attributes (e.g., `__subclasses__`, `__globals__`) to escape the sandbox.
 **Learning:** A security scanner that only checks `import` statements is insufficient for Python, as many powerful features are available as built-ins or reachable through attribute traversal from any object.
 **Prevention:** Use an AST visitor to monitor `ast.Name` (for built-ins) and `ast.Attribute` (for sensitive internals) in addition to imports. Maintain a strict blocklist of forbidden names and attributes.
+
+## 2026-03-27 - Weak Hashing for Plugin UID Generation
+**Vulnerability:** The `xcore/kernel/sandbox/worker.py` used `hashlib.md5` to generate deterministic UIDs for plugins based on their directory paths. MD5 is considered cryptographically broken and often flagged by security scanners (Bandit B324).
+**Learning:** Using legacy hashing algorithms like MD5, even for non-cryptographic purposes like identifier generation, can trigger security audits and is generally discouraged in favor of more robust algorithms.
+**Prevention:** Always prefer SHA256 or better for any hashing operation to ensure both security and compliance with modern safety standards.
