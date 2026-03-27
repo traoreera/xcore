@@ -69,6 +69,9 @@ class PluginSupervisor:
         events=None,
         hooks=None,
         registry=None,
+        metrics = None,
+        tracer = None,
+        health = None,
     ) -> None:
         self._config = config
         self._services = services
@@ -80,6 +83,15 @@ class PluginSupervisor:
 
         self._loader: PluginLoader | None = None
         self._pipeline: MiddlewarePipeline | None = None
+
+        self._metrics = metrics
+        self._tracer = tracer
+        self._health = health
+
+        if self._metrics:
+            self._c_calls  = self._metrics.counter("plugin.calls")
+            self._c_errors = self._metrics.counter("plugin.errors")
+            self._h_lat    = self._metrics.histogram("plugin.latency_seconds")
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
@@ -161,26 +173,50 @@ class PluginSupervisor:
 
     # ── Appel ─────────────────────────────────────────────────
 
-    async def call(
-        self,
-        plugin_name: str,
-        action: str,
-        payload: dict,
-        *,
-        resource: str | None = None,
-    ) -> dict:
-        """
-        Route un appel vers le plugin approprié via le pipeline de middlewares.
-        """
-        if self._loader is None or self._pipeline is None:
+    async def call(self, plugin_name, action, payload, *, resource=None) -> dict:
+        import time
+
+        if self._loader is None:
             return self._err("Supervisor non démarré", "not_ready")
+
+        try:
+            await self._rate.check(plugin_name)
+        except RateLimitExceeded as e:
+            return self._err(str(e), "rate_limit_exceeded")
 
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
 
-        return await self._pipeline.execute(
-            plugin_name, action, payload, resource=resource
-        )
+        effective_resource = resource or action
+        try:
+            self._permissions.check(plugin_name, effective_resource, "execute")
+        except PermissionDenied as e:
+            return self._err(str(e), "permission_denied")
+
+        handler = self._loader.get(plugin_name)
+
+        t0 = time.monotonic()
+        if self._metrics:
+            self._c_calls.inc()
+
+        # Span de tracing optionnel
+        if self._tracer:
+            async with self._tracer.span(f"{plugin_name}.{action}") as span:
+                span.set_attribute("plugin", plugin_name)
+                span.set_attribute("action", action)
+                result = await self._call_with_retry(plugin_name, handler, action, payload)
+                if result.get("status") == "error":
+                    span.set_status("error")
+        else:
+            result = await self._call_with_retry(plugin_name, handler, action, payload)
+
+        elapsed = time.monotonic() - t0
+        if self._metrics:
+            self._h_lat.observe(elapsed)
+            if result.get("status") == "error":
+                self._c_errors.inc()
+
+        return result
 
     async def _dispatch(
         self, plugin_name: str, action: str, payload: dict, **kwargs

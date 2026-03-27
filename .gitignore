@@ -52,3 +52,4 @@ coverage.*
 integration.yaml
 /app
 main.py
+/log

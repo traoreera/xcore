@@ -8,9 +8,9 @@ cache:
   path: docgen/cache/summaries.json
 
 model:
-  base_url: http://localhost:1234/v1
+  base_url: http://localhost:11434/v1
   api_key: lm-studio
-  model_name: google/gemma-3-4b
+  model_name: novaforgeai/deepseek-coder:6.7b-optimized
   temperature: 0.1
 
 generation:
@@ -26,4 +26,4 @@ generation:
       ".vscode",
       "docgen",
     ]
-  exclude_files: ["__init__.py", "*.md", "*.pyc", "*.ini", "*.html", "*.json"] # fichiers ignores completement
+  exclude_files: [ "*.md", "*.pyc", "*.ini", "*.html", "*.json"] # fichiers ignores completement

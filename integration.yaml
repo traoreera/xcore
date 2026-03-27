@@ -1,6 +1,6 @@
 app:
   name: my-app
-  env: production
+  env: development
   debug: true
   secret_key: "vjherbvjhe"
   #dotenv: "./extensions/.env"
@@ -77,7 +77,7 @@ services:
 observability:
   logging:
     enabled: true
-    level:  WARNING # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    level:  DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
     max_bytes: 52428800 # 50 MB par fichier

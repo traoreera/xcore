@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..observability import MetricsRegistry, HealthChecker
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
@@ -55,7 +58,6 @@ def _hash_key(
 
     if isinstance(server_key, str):
         server_key = server_key.encode("utf-8")
-
     return hashlib.pbkdf2_hmac(
         hash_name="sha256",
         password=key_bytes,
@@ -71,6 +73,8 @@ def build_router(
     server_key_iterations: int = 100000,
     prefix: str = "",
     tags: list[str] | None = None,
+    metrics_registry: MetricsRegistry | None = None,
+    health_checker: HealthChecker | None = None,
     **kwargs,
 ) -> APIRouter:
     """
@@ -161,5 +165,19 @@ def build_router(
     async def unload_plugin(plugin_name: str) -> dict[str, str]:
         await supervisor.unload(plugin_name)
         return {"status": "ok", "msg": f"Plugin '{plugin_name}' unloaded"}
+
+
+    @router.get("/health")
+    async def health_check() -> dict:
+        if health_checker is None:
+            return {"status": "healthy", "checks": {}}
+        return await health_checker.run_all()
+
+    @router.get("/metrics")
+    async def metrics_snapshot() -> dict:
+        if metrics_registry is None:
+            return {}
+        return metrics_registry.snapshot()
+
 
     return router

@@ -53,7 +53,7 @@ class LifecycleManager:
         events=None,  # EventBus optionnel
         hooks=None,  # HookManager optionnel
         registry=None,  # PluginRegistry optionnel
-        caller=None,
+        caller=None,metrics=None, tracer=None, health=None
     ) -> None:
         self._caller = caller
         self.manifest = manifest
@@ -66,6 +66,9 @@ class LifecycleManager:
         self._loaded_at: float | None = None
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
+        self._metrics = metrics
+        self._tracer  = tracer
+        self._health  = health
         self._sm = StateMachine(
             manifest.name,
             on_change=self._on_state_change,
@@ -160,6 +163,9 @@ class LifecycleManager:
             env=self.manifest.env,
             config=getattr(self.manifest, "extra", {}),
             caller=self._caller,
+            metrics=self._metrics,
+            tracer=self._tracer,  
+            health=self._health,  
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
