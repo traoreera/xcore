@@ -17,3 +17,7 @@
 ## 2025-05-18 - [Visual Hierarchy with Rich Panels]
 **Learning:** Grouping related metadata into a `rich.panel.Panel` using `rich.console.Group` creates a clear visual boundary and hierarchy, making dense information (like plugin specs and permissions) much easier to scan than plain text with manual separators.
 **Action:** Use `Panel(Group(...))` for entity-detail commands to provide a "card-like" experience in the terminal.
+
+## 2025-05-19 - [Escaping Markup in Rich]
+**Learning:** Dynamic content or error messages containing square brackets can be misinterpreted as `rich` markup, leading to broken layouts or missing text.
+**Action:** Always wrap dynamic or user-provided strings in `rich.markup.escape()` before passing them to `rich` renderables.

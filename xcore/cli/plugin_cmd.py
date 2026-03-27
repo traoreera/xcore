@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from urllib.parse import urlparse
 import sys
 from pathlib import Path
 
@@ -27,6 +28,15 @@ def _validate_plugin_name(name: str) -> None:
     if not name or not PLUGIN_NAME_PATTERN.match(name):
         print(f"❌  Nom de plugin invalide : {name!r}")
         print("    Le nom doit contenir uniquement des lettres, chiffres, '-' et '_'.")
+        sys.exit(1)
+
+
+def _ensure_safe_scheme(url: str) -> None:
+    """Vérifie que l'URL utilise un protocole sécurisé (http/https)."""
+    scheme = urlparse(url).scheme
+    if scheme not in ("http", "https"):
+        console.print(f"[bold red]❌ Sécurité :[/] Protocole '{scheme}' non supporté pour {url}")
+        console.print("    Seuls 'http' et 'https' sont autorisés.")
         sys.exit(1)
 
 
@@ -236,6 +246,7 @@ async def _install_from_zip(name: str, url: str, dest: Path) -> None:
     import urllib.request
     import zipfile
 
+    _ensure_safe_scheme(url)
     print(f"📦  Téléchargement : {url}")
     try:
         loop = asyncio.get_event_loop()
@@ -522,6 +533,7 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
     print(f"🔄  {method} {url}")
 
     def _do_request():
+        _ensure_safe_scheme(url)
         req = urllib.request.Request(
             url,
             data=b"{}",
