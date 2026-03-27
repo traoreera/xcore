@@ -139,18 +139,17 @@ class SandboxProcessManager:
             await self._kill()
             raise RuntimeError(f"Pas de réponse au ping dans {timeout}s") from e
 
-    async def call(self, action: str, payload: dict) -> IPCResponse:
+    async def call(self, action: str, payload: dict) -> dict:
         if not self.is_available:
             raise RuntimeError(f"Plugin {self.manifest.name} non disponible")
         try:
             self._disk.check(self.manifest.name)
         except DiskQuotaExceeded as e:
-            return IPCResponse(
-                success=False,
-                data={"status": "error", "msg": str(e), "code": "disk_quota"},
-            )
+            return {"status": "error", "msg": str(e), "code": "disk_quota"}
+
         try:
-            return await self._channel.call(action, payload)
+            resp = await self._channel.call(action, payload)
+            return resp.data
         except IPCProcessDead:
             await self._handle_crash()
             raise
