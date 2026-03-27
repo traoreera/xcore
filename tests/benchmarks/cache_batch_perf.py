@@ -1,10 +1,10 @@
-
 import asyncio
 import time
 import unittest.mock as mock
-import json
+
 from xcore.services.cache.backends.memory import MemoryBackend
 from xcore.services.cache.backends.redis import RedisCacheBackend
+
 
 async def benchmark_memory():
     print("\n--- MemoryBackend Benchmark ---")
@@ -38,6 +38,7 @@ async def benchmark_memory():
     end = time.perf_counter()
     print(f"Native MGET (100 keys): {(end-start)*1000:.2f}ms")
 
+
 async def benchmark_redis_mocked():
     print("\n--- RedisCacheBackend (Mocked Latency) Benchmark ---")
 
@@ -47,35 +48,49 @@ async def benchmark_redis_mocked():
     class MockRedis:
         def __init__(self):
             self.data = {}
-        async def ping(self): return True
+
+        async def ping(self):
+            return True
+
         async def get(self, key):
             await asyncio.sleep(LATENCY)
             return self.data.get(key)
+
         async def set(self, key, val, ex=None):
             await asyncio.sleep(LATENCY)
             self.data[key] = val
+
         async def mget(self, keys):
             await asyncio.sleep(LATENCY)
             return [self.data.get(k) for k in keys]
+
         def pipeline(self):
             return MockPipeline(self)
-        async def aclose(self): pass
+
+        async def aclose(self):
+            pass
 
     class MockPipeline:
         def __init__(self, redis):
             self.redis = redis
             self.cmds = []
+
         def set(self, key, val, ex=None):
             self.cmds.append(("set", key, val, ex))
             return self
+
         async def execute(self):
-            await asyncio.sleep(LATENCY) # Batch latency
+            await asyncio.sleep(LATENCY)  # Batch latency
             for cmd, *args in self.cmds:
                 if cmd == "set":
                     self.redis.data[args[0]] = args[1]
             return [True] * len(self.cmds)
-        async def __aenter__(self): return self
-        async def __aexit__(self, *args): pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
 
     with mock.patch("redis.asyncio.from_url") as mock_from_url:
         mock_redis = MockRedis()
@@ -93,13 +108,17 @@ async def benchmark_redis_mocked():
         for k, v in values.items():
             await backend.set(k, v)
         end = time.perf_counter()
-        print(f"Sequential SET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms")
+        print(
+            f"Sequential SET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+        )
 
         # MSET (Optimized)
         start = time.perf_counter()
         await backend.mset(values)
         end = time.perf_counter()
-        print(f"Optimized MSET (Pipeline) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms")
+        print(
+            f"Optimized MSET (Pipeline) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+        )
 
         # 2. GET Benchmark
         # Sequential
@@ -107,13 +126,18 @@ async def benchmark_redis_mocked():
         for k in keys:
             await backend.get(k)
         end = time.perf_counter()
-        print(f"Sequential GET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms")
+        print(
+            f"Sequential GET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+        )
 
         # MGET (Optimized)
         start = time.perf_counter()
         await backend.mget(keys)
         end = time.perf_counter()
-        print(f"Optimized MGET (Native) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms")
+        print(
+            f"Optimized MGET (Native) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+        )
+
 
 if __name__ == "__main__":
     asyncio.run(benchmark_memory())

@@ -1,6 +1,7 @@
 # xcore/kernel/api/auth.py
 from __future__ import annotations
-from typing import Protocol, runtime_checkable, TypedDict, NotRequired, List
+
+from typing import List, NotRequired, Protocol, TypedDict, runtime_checkable
 
 
 class AuthPayload(TypedDict):
@@ -18,23 +19,14 @@ class RequestAdapter(Protocol):
 @runtime_checkable
 class AuthBackend(Protocol):
 
-    async def decode_token(self, token: str) -> AuthPayload | None:
-        ...
+    async def decode_token(self, token: str) -> AuthPayload | None: ...
 
-    async def extract_token(self, request: RequestAdapter) -> str | None:
-        ...
+    async def extract_token(self, request: RequestAdapter) -> str | None: ...
 
-    async def has_permission(
-        self,
-        payload: AuthPayload,
-        permission: str
-    ) -> bool:
-        ...
-
+    async def has_permission(self, payload: AuthPayload, permission: str) -> bool: ...
 
 
 # ── Registry singleton ────────────────────────────────────────
-
 _backend: AuthBackend | None = None
 
 

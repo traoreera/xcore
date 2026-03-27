@@ -1,12 +1,13 @@
-
-import time
 import fnmatch
+import time
 from dataclasses import dataclass
 from enum import Enum
+
 
 class PolicyEffect(str, Enum):
     ALLOW = "allow"
     DENY = "deny"
+
 
 @dataclass
 class Policy:
@@ -25,6 +26,7 @@ class Policy:
             return False
         # Then check resource (fnmatch is slow)
         return fnmatch.fnmatch(resource, self.resource)
+
 
 def benchmark():
     policy = Policy(resource="db.*", actions=["read", "write"])
@@ -79,6 +81,7 @@ def benchmark():
         policy.matches_optimized(resource, action)
     end = time.time()
     print(f"Optimized (Full match): {end - start:.4f}s")
+
 
 if __name__ == "__main__":
     benchmark()

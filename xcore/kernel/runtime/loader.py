@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,8 +19,10 @@ if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
 
 from ...kernel.security.validation import ManifestValidator
-from ...sdk.plugin_base import PluginDependency
+
+# from ...sdk.plugin_base import PluginDependency
 from ..sandbox.process_manager import SandboxProcessManager
+from .dependency import DependencyGraph
 from .lifecycle import LifecycleManager, LoadError
 from .state_machine import PluginState
 
@@ -51,12 +52,14 @@ class PluginLoader:
         services: dict[str, Any],
         events=None,
         hooks=None,
+        registry=None,
         caller=None,
     ) -> None:
         self._config = config
         self._services = services
         self._events = events
         self._hooks = hooks
+        self._registry = registry
         self._caller = caller
 
         self._trusted: dict[str, LifecycleManager] = {}
@@ -213,6 +216,7 @@ class PluginLoader:
             services=self._services,
             events=self._events,
             hooks=self._hooks,
+            registry=self._registry,
             caller=self._caller,
         )
         await lm.load()
@@ -314,43 +318,19 @@ class PluginLoader:
     # ── Tri topologique (Kahn) ────────────────────────────────
     @staticmethod
     def _topo_sort(manifests: list) -> list:
-
-        by_name = {m.name: m for m in manifests}
-        in_degree = {m.name: 0 for m in manifests}
-        dependents = {m.name: [] for m in manifests}
+        graph = DependencyGraph()
+        for m in manifests:
+            graph.add_node(m.name, m)
 
         for m in manifests:
             for dep in m.requires:
-                if dep not in by_name:
-                    raise ValueError(f"[{m.name}] Missing dependency '{dep}'")
+                # dep est un PluginDependency object
+                dep_name = dep.name if hasattr(dep, "name") else str(dep)
+                if dep_name not in graph:
+                    raise ValueError(f"[{m.name}] Missing dependency '{dep_name}'")
+                graph.add_dependency(m.name, dep_name)
 
-                dependents[dep].append(m.name)
-                in_degree[m.name] += 1
-
-        queue = deque(name for name, deg in in_degree.items() if deg == 0)
-
-        result = []
-        visited = set()
-
-        while queue:
-            name = queue.popleft()
-            visited.add(name)
-
-            result.append(by_name[name])
-
-            for child in dependents[name]:
-                in_degree[child] -= 1
-
-                if in_degree[child] == 0:
-                    queue.append(child)
-
-        if len(result) != len(manifests):
-
-            remaining = [m.name for m in manifests if m.name not in visited]
-
-            raise ValueError(f"Circular dependency detected: {remaining}")
-
-        return result
+        return graph.get_ordered()
 
     async def shutdown(self) -> None:
         """Décharge tous les plugins proprement."""

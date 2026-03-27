@@ -52,6 +52,7 @@ class LifecycleManager:
         services: dict[str, Any],  # container partagé (référence)
         events=None,  # EventBus optionnel
         hooks=None,  # HookManager optionnel
+        registry=None,  # PluginRegistry optionnel
         caller=None,
     ) -> None:
         self._caller = caller
@@ -59,6 +60,7 @@ class LifecycleManager:
         self._services = services  # même objet que PluginSupervisor._services
         self._events = events
         self._hooks = hooks
+        self._registry = registry
         self._instance: BasePlugin | None = None
         self._module: Any = None
         self._loaded_at: float | None = None
@@ -292,28 +294,39 @@ class LifecycleManager:
     def mems(self, *, is_reload: bool = False) -> dict:
         """
         Propage les services enregistrés par le plugin vers le container partagé.
-
-        is_reload=False : n'ajoute que les nouvelles clés (respect ordre topo).
-        is_reload=True  : écrase les clés du plugin rechargé (fix stale objects).
+        Utilise le PluginRegistry pour une gestion plus propre si disponible.
         """
         if self._instance is None:
             return self._services
 
         instance_services: dict = getattr(self._instance, "_services", {})
+        if not instance_services:
+            return self._services
 
         if is_reload:
-            if instance_services:
-                self._services.update(instance_services)
-                logger.info(
-                    f"[{self.manifest.name}] 🔄 services mis à jour : "
-                    f"{sorted(instance_services.keys())}"
-                )
-        elif new_keys := set(instance_services.keys()) - set(self._services.keys()):
+            self._services.update(instance_services)
+            logger.info(
+                f"[{self.manifest.name}] 🔄 services mis à jour : "
+                f"{sorted(instance_services.keys())}"
+            )
+        else:
+            new_keys = set(instance_services.keys()) - set(self._services.keys())
             for k in new_keys:
                 self._services[k] = instance_services[k]
-            logger.info(
-                f"[{self.manifest.name}] 📦 nouveaux services : {sorted(new_keys)}"
-            )
+            if new_keys:
+                logger.info(
+                    f"[{self.manifest.name}] 📦 nouveaux services : {sorted(new_keys)}"
+                )
+
+        # Enregistrement explicite dans le registre pour le scoping/discovery
+        if self._registry:
+            for name, obj in instance_services.items():
+                self._registry.register_service(
+                    plugin_name=self.manifest.name,
+                    service_name=name,
+                    service_obj=obj,
+                    metadata={"reloaded": is_reload},
+                )
 
         return self._services
 

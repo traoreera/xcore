@@ -17,6 +17,7 @@ from xcore.kernel.security.validation import (
     ScanResult,
     _SecurityVisitor,
     _resolve_env,
+    _SecurityVisitor,
 )
 
 

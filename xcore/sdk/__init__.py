@@ -5,8 +5,9 @@ Import recommandé dans un plugin :
     from xcore.sdk import TrustedBase, sandboxed, ok, error
     from xcore.sdk import PluginManifest
 """
-from ..kernel.api.rbac import require_permission, require_role, RBACChecker
+
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
+from ..kernel.api.rbac import RBACChecker, require_permission, require_role
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
 from .decorators import (
@@ -20,6 +21,7 @@ from .decorators import (
     validate_payload,
 )
 from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
+from .routers import RouterRegistry
 
 __all__ = [
     "TrustedBase",
@@ -43,4 +45,5 @@ __all__ = [
     "RBACChecker",
     "require_permission",
     "require_role",
+    "RouterRegistry",
 ]
