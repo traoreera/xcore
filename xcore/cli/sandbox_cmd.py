@@ -15,6 +15,8 @@ from pathlib import Path
 from rich.console import Console, Group
 from rich.markup import escape
 from rich.panel import Panel
+from rich.prompt import Confirm
+from rich.table import Table
 
 console = Console()
 error_console = Console(stderr=True)
@@ -184,20 +186,16 @@ async def _sandbox_network(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
         sys.exit(1)
 
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
-    print(f"\n{'='*45}")
-    print(f"  Politique réseau : {name}")
-    print(f"{'='*45}")
-
-    # Imports réseau interdits par défaut dans le scanner AST
+    info = []
     NETWORK_IMPORTS = {
         "socket",
         "ssl",
@@ -221,20 +219,23 @@ async def _sandbox_network(args) -> None:
     ]
 
     if allowed_network:
-        print(f"  ⚠️   Imports réseau autorisés (whitelist) : {allowed_network}")
+        info.append(f"⚠️  [yellow]Imports réseau autorisés (whitelist) :[/] {escape(str(allowed_network))}")
     else:
-        print(f"  ✅  Aucun import réseau autorisé")
+        info.append("✅ [green]Aucun import réseau autorisé[/]")
 
     if blocked_by_ast:
-        print(f"  ❌  Imports réseau détectés et bloqués par AST scan :")
+        info.append("\n❌ [bold red]Imports réseau détectés et bloqués par AST scan :[/]")
         for b in blocked_by_ast:
-            print(f"       {b}")
+            info.append(f"   [red]→ {escape(str(b))}[/]")
     else:
-        print(f"  ✅  Aucun import réseau détecté dans le code")
+        info.append("✅ [green]Aucun import réseau détecté dans le code[/]")
 
-    print(f"\n  Note : isolation réseau OS (namespaces) — Linux uniquement.")
-    print(f"  Pour une isolation complète, utilisez un conteneur Docker.")
-    print(f"{'='*45}\n")
+    info.append("\n[dim]Note : isolation réseau OS (namespaces) — Linux uniquement.[/]")
+    info.append("[dim]Pour une isolation complète, utilisez un conteneur Docker.[/]")
+
+    content = Group(*info)
+    title = f"[bold green]🌐 Politique réseau : {escape(name)}[/]"
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── fs ────────────────────────────────────────────────────────
@@ -247,45 +248,54 @@ async def _sandbox_fs(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        print(f"❌  Plugin '{name}' introuvable.", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
         sys.exit(1)
 
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
     fs = manifest.filesystem
+    info = []
 
-    print(f"\n{'='*45}")
-    print(f"  Politique filesystem : {name}")
-    print(f"{'='*45}")
+    table = Table(box=None, padding=(0, 2), show_header=False)
+    table.add_column("Path", style="cyan")
+    table.add_column("Status", justify="right")
 
-    print(f"\n  Chemins autorisés :")
-    for p in fs.allowed_paths:
-        abs_path = plugin_dir / p
-        exists = "✅" if abs_path.exists() else "⚠️  (inexistant)"
-        print(f"    ✅  {p}  {exists}")
+    info.append("[bold white]Chemins autorisés :[/]")
+    if not fs.allowed_paths:
+        info.append("  [dim]Aucun chemin autorisé explicitement[/]")
+    else:
+        for p in fs.allowed_paths:
+            abs_path = plugin_dir / p
+            status = "[green]✅ existe[/]" if abs_path.exists() else "[yellow]⚠️  manquant[/]"
+            table.add_row(escape(str(p)), status)
+        info.append(table)
 
-    print(f"\n  Chemins bloqués :")
-    for p in fs.denied_paths:
-        print(f"    ❌  {p}")
+    if fs.denied_paths:
+        info.append("\n[bold white]Chemins bloqués :[/]")
+        denied_table = Table(box=None, padding=(0, 2), show_header=False)
+        for p in fs.denied_paths:
+            denied_table.add_row(escape(str(p)), "[red]❌ bloqué[/]")
+        info.append(denied_table)
 
-    print(f"\n  Comportement : fail-closed")
-    print("  Tout chemin hors de 'allowed' est refusé,")
-    print("  même si non listé dans 'denied'.")
+    info.append("\n[italic dim]Comportement : fail-closed[/]")
+    info.append("[dim]Tout chemin hors de 'allowed' est refusé.[/]")
+
+    content = Group(*info)
+    title = f"[bold green]📁 Politique filesystem : {escape(name)}[/]"
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
     # Vérifie si le dossier data/ existe, le créer si nécessaire
     data_dir = plugin_dir / "data"
     if not data_dir.exists():
-        create = (
-            input(f"\n  ⚠️   Le dossier data/ n'existe pas. Créer ? [y/N] ")
-            .strip()
-            .lower()
+        console.print("")
+        create = Confirm.ask(
+            f"[yellow]⚠️  Le dossier {escape(str(data_dir.relative_to(plugin_dir.parent)))} n'existe pas. Créer ?[/]",
+            default=False
         )
-        if create == "y":
+        if create:
             data_dir.mkdir(parents=True)
-            print(f"  ✅  {data_dir} créé.")
-
-    print(f"{'='*45}\n")
+            console.print(f"✅ [green]{data_dir} créé.[/]")
