@@ -93,6 +93,16 @@ class LifecycleManager:
                 {"from": old.value, "to": new.value},
             )
 
+    # ── Interface PluginHandler ───────────────────────────────
+
+    async def start(self) -> None:
+        """Alias de load() pour la conformité PluginHandler."""
+        await self.load()
+
+    async def stop(self) -> None:
+        """Alias de unload() pour la conformité PluginHandler."""
+        await self.unload()
+
     # ── Chargement ────────────────────────────────────────────
 
     async def load(self) -> None:

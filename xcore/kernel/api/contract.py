@@ -48,6 +48,22 @@ class BasePlugin(Protocol):
     async def handle(self, action: str, payload: dict) -> dict: ...
 
 
+@runtime_checkable
+class PluginHandler(Protocol):
+    """
+    Common interface for all plugin managers (Trusted or Sandboxed).
+    Ensures they all expose the same lifecycle and call methods.
+    """
+
+    @property
+    def state(self) -> Any: ...
+
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
+    async def call(self, action: str, payload: dict) -> Any: ...
+    def status(self) -> dict[str, Any]: ...
+
+
 class TrustedBase(ABC):
     """
     Classe de base pour les plugins Trusted.

@@ -17,8 +17,35 @@ if TYPE_CHECKING:
 from ..permissions.engine import PermissionDenied, PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
 from .loader import PluginLoader
+from .middleware import Middleware, MiddlewarePipeline
 
 logger = logging.getLogger("xcore.runtime.supervisor")
+
+
+class RateLimitMiddleware(Middleware):
+    def __init__(self, rate):
+        self._rate = rate
+
+    async def __call__(self, plugin_name, action, payload, next_call, **kwargs):
+        try:
+            await self._rate.check(plugin_name)
+        except RateLimitExceeded as e:
+            return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
+        return await next_call(plugin_name, action, payload, **kwargs)
+
+
+class PermissionMiddleware(Middleware):
+    def __init__(self, permissions):
+        self._permissions = permissions
+
+    async def __call__(self, plugin_name, action, payload, next_call, **kwargs):
+        resource = kwargs.get("resource") or f"{action}"
+        try:
+            self._permissions.check(plugin_name, resource, "execute")
+        except PermissionDenied as e:
+            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
+            return {"status": "error", "msg": str(e), "code": "permission_denied"}
+        return await next_call(plugin_name, action, payload, **kwargs)
 
 
 class PluginSupervisor:
@@ -52,6 +79,7 @@ class PluginSupervisor:
         self._permissions = PermissionEngine(events=events)
 
         self._loader: PluginLoader | None = None
+        self._pipeline: MiddlewarePipeline | None = None
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
@@ -83,6 +111,15 @@ class PluginSupervisor:
         if self._registry:
             for name in report["loaded"]:
                 self._registry.register(name, self._loader.get(name))
+
+        # Initialisation du pipeline de middlewares
+        self._pipeline = MiddlewarePipeline(
+            middlewares=[
+                RateLimitMiddleware(self._rate),
+                PermissionMiddleware(self._permissions),
+            ],
+            final_handler=self._dispatch,
+        )
 
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
@@ -133,45 +170,22 @@ class PluginSupervisor:
         resource: str | None = None,
     ) -> dict:
         """
-        Route un appel vers le plugin approprié.
-
-        Applique dans l'ordre :
-          1. Rate limiting
-          2. Vérification permissions (resource = action par défaut)
-          3. Retry + gestion d'erreur standardisée
-
-        Args:
-            plugin_name: nom du plugin cible
-            action: action à exécuter
-            payload: données de l'appel
-            resource: ressource ciblée pour la vérification de permission.
-                      Si absent, utilise "action.<action>" comme ressource.
+        Route un appel vers le plugin approprié via le pipeline de middlewares.
         """
-        if self._loader is None:
+        if self._loader is None or self._pipeline is None:
             return self._err("Supervisor non démarré", "not_ready")
 
-        # 1. Rate limiting
-        try:
-            print(plugin_name, action)
-            await self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return self._err(str(e), "rate_limit_exceeded")
-
-        # 2. Plugin existe ?
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
 
-        # 3. Vérification des permissions
-        # La ressource par défaut est "action.<action>" ce qui permet aux plugins
-        # de déclarer : resource: "action.*" effect: allow
-        effective_resource = resource or f"{action}"
-        try:
-            self._permissions.check(plugin_name, effective_resource, "execute")
-        except PermissionDenied as e:
-            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
-            return self._err(str(e), "permission_denied")
+        return await self._pipeline.execute(
+            plugin_name, action, payload, resource=resource
+        )
 
-        # 4. Appel avec retry
+    async def _dispatch(
+        self, plugin_name: str, action: str, payload: dict, **kwargs
+    ) -> dict:
+        """Dernière étape du pipeline : exécution réelle."""
         handler = self._loader.get(plugin_name)
         return await self._call_with_retry(plugin_name, handler, action, payload)
 
