@@ -69,6 +69,19 @@ class ServiceContainer:
         self._config = config
         self._services: dict[str, BaseService] = {}
         self._raw: dict[str, Any] = {}
+        self._providers: dict[str, Any] = {}
+
+    def register_provider(self, name: str, provider: Any) -> None:
+        """Enregistre un fournisseur de services dynamique."""
+        self._providers[name] = provider
+        logger.debug(f"Provider '{name}' enregistré")
+
+    def register_service(self, name: str, service: Any) -> None:
+        """Enregistre manuellement un service dans le conteneur."""
+        self._raw[name] = service
+        if isinstance(service, BaseService):
+            self._services[name] = service
+        logger.debug(f"Service '{name}' enregistré manuellement")
 
     async def init(self) -> None:
         """Initialise tous les services dans l'ordre."""
@@ -161,11 +174,21 @@ class ServiceContainer:
         Lève KeyError avec message clair si absent.
         """
         if name in self._raw:
-            type(self._raw[name])
             return self._raw[name]
+
+        # Recherche dans les providers (Lazy loading)
+        for provider_name, provider in self._providers.items():
+            if hasattr(provider, "provide"):
+                svc = provider.provide(name)
+                if svc is not None:
+                    # Cache le service pour les prochains appels
+                    self._raw[name] = svc
+                    return svc
+
         raise KeyError(
             f"Service '{name}' indisponible.\n"
             f"  Disponibles : {sorted(self._raw.keys())}\n"
+            f"  Providers actifs : {list(self._providers.keys())}\n"
             f"  Conseil : vérifiez le nom exact dans votre xcore.yaml → databases / services."
         )
 
