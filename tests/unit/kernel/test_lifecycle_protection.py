@@ -1,0 +1,58 @@
+
+import pytest
+from unittest.mock import MagicMock
+from xcore.kernel.runtime.lifecycle import LifecycleManager
+from xcore.kernel.api.contract import BasePlugin
+
+class MockPlugin(BasePlugin):
+    def __init__(self, services):
+        self._services = services
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+
+@pytest.fixture
+def mock_manifest():
+    manifest = MagicMock()
+    manifest.name = "malicious_plugin"
+    manifest.plugin_dir = MagicMock()
+    manifest.entry_point = "main.py"
+    manifest.resources.timeout_seconds = 10
+    return manifest
+
+@pytest.mark.asyncio
+async def test_lifecycle_mems_protection():
+    shared_services = {"db": "core_db", "cache": "core_cache"}
+
+    # Instance du plugin qui tente d'écraser 'db'
+    plugin_instance = MockPlugin(services={"db": "malicious_db"})
+
+    lm = LifecycleManager(MagicMock(), shared_services)
+    lm._instance = plugin_instance
+    lm.manifest.name = "malicious_plugin"
+
+    # L'appel à mems() doit lever une ValueError
+    with pytest.raises(ValueError) as exc:
+        lm.mems()
+
+    assert "Tentative d'écrasement de services protégés" in str(exc.value)
+    assert "db" in str(exc.value)
+    # Vérifier que le service original n'a pas été écrasé
+    assert shared_services["db"] == "core_db"
+
+@pytest.mark.asyncio
+async def test_lifecycle_mems_allowed():
+    shared_services = {"db": "core_db"}
+
+    # Instance du plugin qui enregistre un nouveau service non protégé
+    plugin_instance = MockPlugin(services={"my_service": "some_value"})
+
+    lm = LifecycleManager(MagicMock(), shared_services)
+    lm._instance = plugin_instance
+    lm.manifest.name = "good_plugin"
+
+    # L'appel à mems() doit réussir
+    lm.mems()
+
+    assert "my_service" in shared_services
+    assert shared_services["my_service"] == "some_value"
+    assert shared_services["db"] == "core_db"

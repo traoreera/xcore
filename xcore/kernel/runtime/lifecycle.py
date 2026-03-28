@@ -46,6 +46,9 @@ class LifecycleManager:
         await lm.unload()```
     """
 
+    # Liste des clés de services protégées (ne peuvent pas être écrasées par un plugin)
+    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database", "extensions"}
+
     def __init__(
         self,
         manifest,  # PluginManifest
@@ -318,6 +321,14 @@ class LifecycleManager:
         instance_services: dict = getattr(self._instance, "_services", {})
         if not instance_services:
             return self._services
+
+        # Vérification des collisions avec les services protégés
+        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
+        if collisions:
+            raise ValueError(
+                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
+                f"par le noyau : {collisions}"
+            )
 
         if is_reload:
             self._services.update(instance_services)
