@@ -71,9 +71,11 @@ nav:
       - Event System: guides/events.md
       - Monitoring: guides/monitoring.md
       - Security Best Practices: guides/security.md
+      - Scaling: guides/scaling.md
       - Troubleshooting: guides/troubleshooting.md
   - Architecture:
       - Overview: architecture/overview.md
+      - Technical Decisions: architecture/decisions.md
   - Reference:
       - Configuration: reference/configuration.md
       - Development Kit: reference/sdk.md

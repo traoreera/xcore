@@ -8,13 +8,13 @@ XCore is a modular orchestration framework designed to load, isolate, and manage
 
 ## Key Features
 
-- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restart
-- **🔒 Sandboxing & Security** — Isolated execution with process limits, timeouts, and automatic restarts
-- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more
-- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system events
-- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints
-- **♻️ Hot Reloading** — Automatic file watching for development
-- **📊 Production Ready** — YAML configuration, environment variables, structured logging, metrics
+- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restarts.
+- **🔒 Sandboxing & Security** — Isolated execution with process limits, AST scanning, and permission enforcement.
+- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more.
+- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system-level hooks.
+- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints seamlessly.
+- **♻️ Hot Reloading** — Automatic file watching for rapid development.
+- **📊 Production Ready** — YAML configuration, environment variable injection, structured logging, and metrics.
 
 ## Quick Start
 
@@ -27,21 +27,16 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Run development server
-poetry run uvicorn app:app --reload --port 8082
+make run-dev
 ```
 
 ## Documentation Structure
 
-```
-docs/
-├── getting-started/     # Installation and first steps
-├── guides/             # How-to guides
-├── reference/          # API reference and configuration
-├── architecture/       # System architecture and design
-├── development/        # Development guidelines
-├── deployment/         # Production deployment
-└── examples/           # Code examples and tutorials
-```
+- [**Getting Started**](getting-started/installation.md): Installation and first steps.
+- [**Guides**](guides/creating-plugins.md): Deep dives into plugins, services, and events.
+- [**Architecture**](architecture/overview.md): Internal design and core concepts.
+- [**Reference**](reference/configuration.md): Exhaustive API and configuration reference.
+- [**Examples**](examples/complete-plugin.md): Real-world plugin implementations.
 
 ## Project Architecture
 
@@ -83,12 +78,12 @@ graph TB
 - [Creating Your First Plugin](guides/creating-plugins.md)
 - [Configuration Reference](reference/configuration.md)
 - [Architecture Overview](architecture/overview.md)
-- [Versions & Changelog](versions.md)
+- [Security Best Practices](guides/security.md)
 
 ## Versions
 
-- **Stable**: v2.0.0 — Architecture plugin-first avec sandboxing
-- [Historique complet](versions.md)
+- **Current Stable**: v2.0.0 — Plugin-first architecture with advanced sandboxing.
+- [Full Changelog](versions.md)
 
 ## Community & Support
 

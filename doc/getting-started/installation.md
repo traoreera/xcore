@@ -1,218 +1,88 @@
 # Installation
 
-This guide walks you through installing XCore and setting up your development environment.
+This guide covers the installation of XCore Framework for development and production environments.
 
 ## Prerequisites
 
-Before installing XCore, ensure you have:
+Before you begin, ensure you have the following installed on your system:
 
-- **Python 3.11** or higher
-- **Poetry** 1.7+ (dependency management)
-- **Git** (for cloning the repository)
+- **Python 3.11+**: The core framework and plugins require Python 3.11 or newer.
+- **Poetry**: Recommended for dependency management and project isolation.
+- **Git**: For cloning the repository.
+- **Make** (Optional): For using provided shortcuts (e.g., `make init`).
 
-### Verify Python Version
+## Standard Installation
 
-```bash
-python --version
-# Should output: Python 3.11.x or higher
-```
+To install XCore and its dependencies in a virtual environment:
 
-### Install Poetry
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/traoreera/xcore.git
+    cd xcore
+    ```
 
-If you don't have Poetry installed:
+2.  **Initialize Project with Poetry**:
+    ```bash
+    poetry install
+    ```
+    This will install the core dependencies, including FastAPI, Pydantic, and others required for basic operation.
 
-```bash
-# On macOS/Linux
-curl -sSL https://install.python-poetry.org | python3 -
+3.  **Install Optional Extensions**:
+    Depending on your database or cache choice, you may need additional libraries:
+    ```bash
+    # For Redis support
+    poetry add aioredis
 
-# On Windows (PowerShell)
-(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
-```
-
-Add Poetry to your PATH:
-
-```bash
-# Add to your ~/.bashrc, ~/.zshrc, or ~/.profile
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-## Installation Steps
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/traoreera/xcore.git
-cd xcore
-```
-
-### 2. Install Dependencies
-
-```bash
-poetry install
-```
-
-This will:
-- Create a virtual environment
-- Install all production and development dependencies
-- Install pre-commit hooks (if configured)
-
-### 3. Verify Installation
-
-```bash
-poetry run xcore --version
-# Output: xcore v2.0.0
-```
+    # For PostgreSQL support
+    poetry add asyncpg psycopg2-binary
+    ```
 
 ## Environment Configuration
 
-### Create Environment File
+XCore uses a `.env` file for sensitive configuration (passwords, API keys) and an `xcore.yaml` for system-wide settings.
+
+1.  **Copy Example Environment**:
+    ```bash
+    cp .env.example .env
+    ```
+
+2.  **Edit `.env`**:
+    Update the values to match your local or production environment:
+    ```env
+    XCORE_ENV=development
+    DATABASE_URL=postgresql+asyncpg://user:password@localhost/xcore
+    REDIS_URL=redis://localhost:6379/0
+    SECRET_KEY=your_secure_secret_key
+    ```
+
+## Initializing and Running
+
+The easiest way to get started is using the `make` commands:
 
 ```bash
-cp .env.example .env
-```
+# Install dependencies and run the development server
+make init
 
-Or create `.env` manually:
-
-```bash
-# Required variables
-echo "APP_SECRET_KEY=$(openssl rand -hex 32)" > .env
-echo "PLUGIN_SECRET_KEY=$(openssl rand -hex 32)" >> .env
-echo "DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/xcore" >> .env
-echo "REDIS_URL=redis://localhost:6379/0" >> .env
-```
-
-### Environment Variables Reference
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `APP_SECRET_KEY` | Yes | Application secret (min 32 chars) |
-| `PLUGIN_SECRET_KEY` | Yes | Plugin signing key |
-| `DATABASE_URL` | Yes | Main database connection |
-| `DATABASE_ASYNC_URL` | No | Async database connection |
-| `REDIS_URL` | Yes | Redis connection string |
-| `SENTRY_DSN` | No | Sentry error tracking |
-
-## Development Setup
-
-### IDE Configuration
-
-#### VS Code
-
-Recommended extensions:
-- Python
-- Pylance
-- Black Formatter
-- isort
-- YAML
-
-Create `.vscode/settings.json`:
-
-```json
-{
-  "python.defaultInterpreterPath": "./.venv/bin/python",
-  "python.formatting.provider": "black",
-  "python.sortImports.args": ["--profile", "black"],
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.organizeImports": true
-  }
-}
-```
-
-#### PyCharm
-
-1. Open the project in PyCharm
-2. Set Python interpreter to Poetry virtualenv
-3. Enable Black formatter in Settings → Tools → Black
-
-### Pre-commit Hooks
-
-Install pre-commit hooks:
-
-```bash
-poetry run pre-commit install
-```
-
-## Running the Application
-
-### Development Mode
-
-```bash
-# With hot reload
+# Alternatively, run manually
 poetry run uvicorn app:app --reload --port 8082
-
-# Or using the Makefile
-make run-dev
 ```
 
-### Production Mode
+## Verifying the Installation
 
-```bash
-# Using the configuration file
-XCORE_CONFIG=integration.yaml uvicorn app:app --workers 4
+Once the server is running, you can verify the installation by accessing the health endpoint or using the CLI:
 
-# Or using the Makefile
-make run-st
-```
+- **Health Check**: `http://localhost:8082/health`
+- **CLI Check**:
+  ```bash
+  PYTHONPATH=. python -m xcore.cli.main health
+  ```
 
-### Verify the Server
+If everything is configured correctly, you should see a JSON response indicating that the kernel and services are "healthy".
 
-```bash
-curl http://localhost:8082/plugin/status
-```
+## Production Deployment Considerations
 
-## Troubleshooting
-
-### Common Issues
-
-#### Poetry not found
-
-```bash
-# Add to your shell profile
-export PATH="$HOME/.local/bin:$PATH"
-source ~/.bashrc  # or ~/.zshrc
-```
-
-#### Database connection errors
-
-Ensure PostgreSQL is running:
-
-```bash
-# macOS with Homebrew
-brew services start postgresql
-
-# Ubuntu/Debian
-sudo systemctl start postgresql
-
-# Docker
-docker run -d -p 5432:5432 -e POSTGRES_DB=xcore -e POSTGRES_USER=user -e POSTGRES_PASSWORD=pass postgres:15
-```
-
-#### Redis connection errors
-
-```bash
-# macOS with Homebrew
-brew services start redis
-
-# Ubuntu/Debian
-sudo systemctl start redis
-
-# Docker
-docker run -d -p 6379:6379 redis:7-alpine
-```
-
-### Getting Help
-
-If you encounter issues:
-
-1. Check the [Troubleshooting Guide](../guides/troubleshooting.md)
-2. Search [GitHub Issues](https://github.com/traoreera/xcore/issues)
-3. Join [GitHub Discussions](https://github.com/traoreera/xcore/discussions)
-
-## Next Steps
-
-Now that XCore is installed:
-
-- [Create Your First Plugin](../guides/creating-plugins.md)
-- [Learn about Configuration](../reference/configuration.md)
-- [Explore the Architecture](../architecture/overview.md)
+For production environments, ensure you:
+- Use a production-grade WSGI/ASGI server (e.g., `gunicorn` with `uvicorn` workers).
+- Disable `debug` mode in `xcore.yaml`.
+- Secure your `SECRET_KEY`.
+- Set up proper monitoring and logging (XCore integrates with standard Python logging).
