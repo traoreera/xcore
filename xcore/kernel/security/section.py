@@ -19,6 +19,7 @@ FORBIDDEN_BUILTINS = {
 }
 
 FORBIDDEN_ATTRIBUTES = {
+    "__class__",
     "__globals__",
     "__subclasses__",
     "__code__",

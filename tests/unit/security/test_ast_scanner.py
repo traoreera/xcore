@@ -118,6 +118,13 @@ class TestSecurityVisitor:
         assert len(visitor.errors) == 1
         assert "os" in visitor.errors[0]
 
+    def test_visit_import_from_alias_bypass(self, visitor):
+        """Test detecting bypass via import alias in from ... import."""
+        code = "from pathlib import os as my_os"
+        tree = ast.parse(code)
+        visitor.visit(tree)
+        assert any("os" in e for e in visitor.errors)
+
     def test_visit_import_submodule(self, visitor):
         """Test that submodule import checks root module."""
         code = "from os.path import join"
@@ -133,6 +140,22 @@ class TestSecurityVisitor:
         visitor.visit(tree)
         assert len(visitor.errors) == 1
         assert "__import__" in visitor.errors[0]
+
+    def test_visit_attribute_bypass_module(self, visitor):
+        """Test detecting bypass via module attribute (e.g. pathlib.os)."""
+        # Note: In a real bypass attempt, 'pathlib' would be allowed but it exports 'os'
+        # which is forbidden. We want to catch the access to '.os'.
+        code = "import pathlib\npathlib.os.system('ls')"
+        tree = ast.parse(code)
+        visitor.visit(tree)
+        assert any("os" in e for e in visitor.errors)
+
+    def test_visit_attribute_bypass_class(self, visitor):
+        """Test detecting bypass via __class__ attribute."""
+        code = "obj.__class__.__base__.__subclasses__()"
+        tree = ast.parse(code)
+        visitor.visit(tree)
+        assert any("__class__" in e for e in visitor.errors)
 
 
 class TestASTScanner:
@@ -239,13 +262,10 @@ class TestASTScanner:
 
         scanner = ASTScanner()
 
-        # Mock file read to raise exception
-        with patch.object(Path, "read_text", side_effect=IOError("Permission denied")):
-            # We need to patch the specific path's read_text
-            with patch.object(
-                bad_file, "read_text", side_effect=IOError("Permission denied")
-            ):
-                result = scanner.scan(tmp_path)
+        # Mock file read to raise exception. On Python 3.12, Path.read_text is read-only on instances.
+        # Patching it via its string path is more robust.
+        with patch("xcore.kernel.security.validation.Path.read_text", side_effect=IOError("Permission denied")):
+            result = scanner.scan(tmp_path)
 
         assert result.passed is False
 
