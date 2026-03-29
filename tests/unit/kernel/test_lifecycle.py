@@ -2,6 +2,7 @@
 Tests for LifecycleManager.
 """
 
+import asyncio
 import sys
 from unittest.mock import MagicMock
 
@@ -247,6 +248,33 @@ class Plugin(BasePlugin):
 
         assert result["status"] == "error"
         assert "timeout" in result["code"].lower()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_calls(self, lifecycle_manager, tmp_path):
+        """Test that multiple calls can be made concurrently."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+import asyncio
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        await asyncio.sleep(0.1)
+        return {"status": "ok", "action": action}
+""")
+
+        lifecycle_manager.manifest.resources.timeout_seconds = 1
+        await lifecycle_manager.load()
+
+        results = await asyncio.gather(
+            lifecycle_manager.call("ping1", {}),
+            lifecycle_manager.call("ping2", {})
+        )
+
+        assert len(results) == 2
+        assert results[0]["action"] == "ping1"
+        assert results[1]["action"] == "ping2"
 
     @pytest.mark.asyncio
     async def test_reload(self, lifecycle_manager, tmp_path):
