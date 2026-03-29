@@ -587,23 +587,78 @@ async def handle_services(args) -> None:
         cfg = _load_config(args)
         from xcore.services import ServiceContainer
 
-        container = ServiceContainer(cfg.services)
-        await container.init()
-        status = container.status()
-        print(json.dumps(status, indent=2, default=str))
-        await container.shutdown()
+        is_json = getattr(args, "json", False)
+
+        if is_json:
+            container = ServiceContainer(cfg.services)
+            await container.init()
+            status = container.status()
+            await container.shutdown()
+            print(json.dumps(status, indent=2, default=str))
+            return
+
+        with console.status("[bold green]Récupération de l'état des services...[/]"):
+            container = ServiceContainer(cfg.services)
+            await container.init()
+            status = container.status()
+            await container.shutdown()
+
+        table = Table(title="État des Services Système")
+        table.add_column("Service", style="cyan")
+        table.add_column("Status", justify="center")
+        table.add_column("Détails", style="dim")
+
+        for svc_id, info in status["services"].items():
+            st = info.get("status", "unknown")
+            color = "green" if st == "ready" else "red"
+            if st in ("initializing", "uninitialized"):
+                color = "yellow"
+            elif st == "degraded":
+                color = "orange1"
+
+            # On retire les clés déjà affichées dans les colonnes
+            details = {k: v for k, v in info.items() if k not in ("name", "status")}
+            details_str = ", ".join(f"{k}={v}" for k, v in details.items())
+
+            table.add_row(
+                info.get("name", svc_id),
+                f"[{color}]{st}[/]",
+                escape(details_str),
+            )
+
+        console.print(table)
+        if status.get("registered_keys"):
+            keys = ", ".join(status["registered_keys"])
+            console.print(f"\n[bold cyan]Clés enregistrées :[/] [dim]{escape(keys)}[/]")
 
 
 async def handle_health(args) -> None:
     cfg = _load_config(args)
     from xcore.services import ServiceContainer
 
-    container = ServiceContainer(cfg.services)
-    await container.init()
-    health = await container.health()
-    symbol = "✅" if health["ok"] else "❌"
-    print(f"{symbol} Health : {'OK' if health['ok'] else 'DÉGRADÉ'}")
+    is_json = getattr(args, "json", False)
+
+    if is_json:
+        container = ServiceContainer(cfg.services)
+        await container.init()
+        health = await container.health()
+        await container.shutdown()
+        print(json.dumps(health, indent=2, default=str))
+        return
+
+    with console.status("[bold green]Exécution du Health Check global...[/]"):
+        container = ServiceContainer(cfg.services)
+        await container.init()
+        health = await container.health()
+        await container.shutdown()
+
+    table = Table(box=None, show_header=False, padding=(0, 2))
     for svc, info in health["services"].items():
         sym = "✅" if info["ok"] else "❌"
-        print(f"  {sym} {svc}: {info['msg']}")
-    await container.shutdown()
+        msg = info.get("msg", "")
+        table.add_row(sym, f"[bold]{svc}[/]", f"[dim]{escape(msg)}[/]")
+
+    status_str = "[bold green]OK[/]" if health["ok"] else "[bold red]DÉGRADÉ[/]"
+    title = f"Health Check : {status_str}"
+
+    console.print(Panel(table, title=title, expand=False, border_style="green" if health["ok"] else "red"))

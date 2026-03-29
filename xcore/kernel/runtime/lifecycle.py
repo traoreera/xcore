@@ -215,23 +215,22 @@ class LifecycleManager:
         if self._instance is None:
             raise RuntimeError(f"[{self.manifest.name}] not loaded")
 
-        self._sm.transition("call")
+        if not self._sm.is_available:
+            raise RuntimeError(f"[{self.manifest.name}] plugin in state {self._sm.state}")
+
         timeout = self.manifest.resources.timeout_seconds
         try:
             result = await asyncio.wait_for(
                 self._instance.handle(action, payload),
                 timeout=timeout if timeout > 0 else None,
             )
-            self._sm.transition("ok")
         except asyncio.TimeoutError:
-            self._sm.transition("error")
             return {
                 "status": "error",
                 "msg": f"Timeout après {timeout}s",
                 "code": "timeout",
             }
         except Exception:
-            self._sm.transition("error")
             raise
 
         return (
