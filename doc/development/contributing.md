@@ -1,226 +1,78 @@
-# Contributing Guide
+# Contributing to XCore
 
-How to contribute to XCore.
+Thank you for your interest in contributing to XCore! This guide will help you get started with our development process.
 
-## Getting Started
+## 1. Getting Started
 
 ### Fork and Clone
+1.  Fork the repository on GitHub.
+2.  Clone your fork locally:
+    ```bash
+    git clone https://github.com/your-username/xcore.git
+    cd xcore
+    ```
 
-```bash
-# Fork the repository on GitHub
-
-# Clone your fork
-git clone https://github.com/your-username/xcore.git
-cd xcore
-
-# Add upstream remote
-git remote add upstream https://github.com/traoreera/xcore.git
-```
-
-### Development Setup
-
+### Development Environment
+We use **Poetry** for dependency management.
 ```bash
 # Install dependencies
 poetry install
 
-# Install pre-commit hooks
-poetry run pre-commit install
-
-# Run tests
-poetry run pytest
+# Activate the virtual environment
+poetry shell
 ```
 
-## Development Workflow
+## 2. Development Workflow
 
-### Branch Naming
+### Branching Policy
+-   `main`: The stable branch. Do not commit directly here.
+-   `feature/your-feature`: For new features.
+-   `fix/bug-name`: For bug fixes.
+-   `docs/improvement`: For documentation updates.
 
-- `feature/description` — New features
-- `bugfix/description` — Bug fixes
-- `docs/description` — Documentation
-- `refactor/description` — Refactoring
+### Coding Standards
+We follow PEP 8 and use **Black** for formatting.
+-   Run `make lint-fix` before committing.
+-   Ensure all public classes and methods have docstrings.
+-   Use type hints wherever possible.
 
-### Making Changes
+## 3. Testing
 
+Every new feature or bug fix must include tests.
+-   **Unit Tests**: Located in `tests/unit/`.
+-   **Integration Tests**: Located in `tests/integration/`.
+
+Run the test suite:
 ```bash
-# Create a branch
-git checkout -b feature/my-feature
+# Run all tests
+make test
 
-# Make your changes
-# ...
-
-# Run tests
-poetry run pytest
-
-# Run linting
-poetry run black .
-poetry run isort .
-poetry run flake8
-
-# Commit
-poetry run cz commit
-
-# Push
-git push origin feature/my-feature
+# Run with coverage report
+poetry run pytest --cov=xcore
 ```
 
-### Commit Convention
+## 4. Documentation
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+Documentation is built with **MkDocs Material**.
+-   Source files are in the `doc/` directory.
+-   To preview documentation locally:
+    ```bash
+    poetry run mkdocs serve
+    ```
 
-```
-feat: Add new feature
-fix: Fix bug
-docs: Update documentation
-style: Fix formatting
-refactor: Refactor code
-test: Add tests
-chore: Update dependencies
-```
+## 5. Pull Request Process
 
-## Code Style
+1.  Create a new branch from `main`.
+2.  Implement your changes and add tests.
+3.  Ensure the linting and tests pass.
+4.  Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/).
+5.  Submit a Pull Request (PR) to the `main` branch.
+6.  Provide a clear description of the changes and link any related issues.
 
-### Python
+## 6. Community
 
-Follow PEP 8 with these specifics:
+-   **Issues**: Use GitHub Issues to report bugs or suggest features.
+-   **Discussions**: Join our GitHub Discussions for questions and ideas.
 
-```python
-# Imports: stdlib, third-party, local
-import json
-from typing import Any
-
-import httpx
-from fastapi import APIRouter
-
-from xcore.sdk import TrustedBase
-
-
-class Plugin(TrustedBase):
-    """Class docstring."""
-
-    def method(self, param: str) -> dict:
-        """Method docstring."""
-        return {}
-```
-
-### Formatting
-
-- **Black**: Code formatting
-- **isort**: Import sorting
-- **flake8**: Linting
-
-```bash
-# Auto-format
-make lint-fix
-
-# Check only
-make lint-check
-```
-
-## Testing
-
-### Writing Tests
-
-```python
-# tests/test_my_feature.py
-import pytest
-from xcore import Xcore
-
-
-@pytest.fixture
-async def xcore_app():
-    app = Xcore(config_path="tests/test.yaml")
-    await app.boot()
-    yield app
-    await app.shutdown()
-
-
-async def test_plugin_loading(xcore_app):
-    assert xcore_app.plugins is not None
-    plugins = xcore_app.plugins.list_plugins()
-    assert "test_plugin" in plugins
-```
-
-### Running Tests
-
-```bash
-# All tests
-poetry run pytest
-
-# With coverage
-poetry run pytest --cov=xcore --cov-report=html
-
-# Specific test
-poetry run pytest tests/test_plugin.py::test_specific
-
-# Parallel
-poetry run pytest -n auto
-```
-
-## Documentation
-
-### Building Docs
-
-```bash
-# Install docs dependencies
-poetry install --with docs
-
-# Build
-poetry run mkdocs build
-
-# Serve locally
-poetry run mkdocs serve
-```
-
-### Writing Documentation
-
-- Use clear, concise language
-- Include code examples
-- Add diagrams where helpful
-- Keep line length ≤ 100
-
-## Pull Request Process
-
-1. **Update documentation**
-2. **Add tests**
-3. **Ensure CI passes**
-4. **Request review**
-
-### PR Template
-
-```markdown
-## Description
-Brief description of changes
-
-## Type of Change
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
-- [ ] Documentation
-
-## Testing
-- [ ] Tests pass
-- [ ] Added tests for new features
-
-## Checklist
-- [ ] Code follows style guidelines
-- [ ] Self-review completed
-- [ ] Documentation updated
-```
-
-## Release Process
-
-1. Update version in `__version__.py`
-2. Update CHANGELOG.md
-3. Create release PR
-4. Merge and tag
-5. GitHub Actions builds and publishes
-
-## Code of Conduct
-
-Be respectful, constructive, and inclusive.
-
-## Questions?
-
-- GitHub Discussions
-- Discord: [invite link]
-- Email: team@example.com
+---
+By contributing, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
