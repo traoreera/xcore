@@ -582,28 +582,44 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
 
 
 async def handle_services(args) -> None:
-    sub = getattr(args, "subcommand", None)
-    if sub == "status":
+    if getattr(args, "subcommand", None) == "status":
         cfg = _load_config(args)
         from xcore.services import ServiceContainer
-
         container = ServiceContainer(cfg.services)
         await container.init()
         status = container.status()
-        print(json.dumps(status, indent=2, default=str))
+        if getattr(args, "json", False):
+            print(json.dumps(status, indent=2, default=str))
+        else:
+            table = Table(title="État des Services")
+            table.add_column("Service", style="cyan")
+            table.add_column("Status", justify="center")
+            table.add_column("Détails", style="dim")
+            for name, info in status.get("services", {}).items():
+                st = info.get("status", "unknown")
+                color = "green" if st == "ready" else "red"
+                det = ", ".join(f"{k}={v}" for k, v in info.items() if k not in ("name", "status"))
+                table.add_row(name, f"[{color}]{st}[/]", escape(det))
+            console.print(table)
         await container.shutdown()
 
 
 async def handle_health(args) -> None:
     cfg = _load_config(args)
     from xcore.services import ServiceContainer
-
     container = ServiceContainer(cfg.services)
     await container.init()
     health = await container.health()
-    symbol = "✅" if health["ok"] else "❌"
-    print(f"{symbol} Health : {'OK' if health['ok'] else 'DÉGRADÉ'}")
-    for svc, info in health["services"].items():
-        sym = "✅" if info["ok"] else "❌"
-        print(f"  {sym} {svc}: {info['msg']}")
+    if getattr(args, "json", False):
+        print(json.dumps(health, indent=2, default=str))
+    else:
+        overall = health["ok"]
+        symbol = "✅" if overall else "❌"
+        table = Table(box=None, show_header=False)
+        for svc, info in health["services"].items():
+            table.add_row("✅" if info["ok"] else "❌", svc, escape(info["msg"]))
+        console.print(Panel(
+            table, expand=False, border_style="green" if overall else "red",
+            title=f"{symbol} Health : {'[bold green]OK[/]' if overall else '[bold red]DÉGRADÉ[/]'}"
+        ))
     await container.shutdown()

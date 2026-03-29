@@ -21,3 +21,7 @@
 ## 2025-05-19 - [Escaping Markup in Rich]
 **Learning:** Dynamic content or error messages containing square brackets can be misinterpreted as `rich` markup, leading to broken layouts or missing text.
 **Action:** Always wrap dynamic or user-provided strings in `rich.markup.escape()` before passing them to `rich` renderables.
+
+## 2025-05-20 - [Machine-Readable CLI Output]
+**Learning:** When enhancing CLI output with visual elements like Tables or Panels, it's crucial to provide a `--json` flag to maintain compatibility with automation and CI/CD pipelines that rely on parsing structured data.
+**Action:** Always implement a `--json` branch in CLI command handlers when transitioning from raw text/JSON to `rich` visual components.

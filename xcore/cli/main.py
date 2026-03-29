@@ -161,9 +161,11 @@ def main() -> None:
     # ── services ──────────────────────────────────────────────
     svc_p = subparsers.add_parser("services", help="État des services")
     svc_sub = svc_p.add_subparsers(dest="subcommand")
-    svc_sub.add_parser("status")
+    svc_status = svc_sub.add_parser("status", help="Affiche l'état détaillé des services")
+    svc_status.add_argument("--json", action="store_true", help="Sortie au format JSON")
 
-    subparsers.add_parser("health", help="Health check global")
+    health_p = subparsers.add_parser("health", help="Health check global du système")
+    health_p.add_argument("--json", action="store_true", help="Sortie au format JSON")
 
     args = parser.parse_args()
 
