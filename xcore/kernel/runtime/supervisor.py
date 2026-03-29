@@ -18,6 +18,8 @@ from ..permissions.engine import PermissionDenied, PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
 from .loader import PluginLoader
 from .middleware import Middleware, MiddlewarePipeline
+from .middlewares.tracing import TracingMiddleware
+from .middlewares.retry import RetryMiddleware
 
 logger = logging.getLogger("xcore.runtime.supervisor")
 
@@ -127,8 +129,10 @@ class PluginSupervisor:
         # Initialisation du pipeline de middlewares
         self._pipeline = MiddlewarePipeline(
             middlewares=[
+                TracingMiddleware(self._tracer),
                 RateLimitMiddleware(self._rate),
                 PermissionMiddleware(self._permissions),
+                RetryMiddleware(self._loader),
             ],
             final_handler=self._dispatch,
         )
@@ -179,41 +183,25 @@ class PluginSupervisor:
         if self._loader is None:
             return self._err("Supervisor non démarré", "not_ready")
 
-        try:
-            await self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return self._err(str(e), "rate_limit_exceeded")
+        if self._pipeline is None:
+            return self._err("Pipeline non initialisé", "not_ready")
 
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
-
-        effective_resource = resource or action
-        try:
-            self._permissions.check(plugin_name, effective_resource, "execute")
-        except PermissionDenied as e:
-            return self._err(str(e), "permission_denied")
-
-        handler = self._loader.get(plugin_name)
 
         t0 = time.monotonic()
         if self._metrics:
             self._c_calls.inc()
 
-        # Span de tracing optionnel
-        if self._tracer:
-            async with self._tracer.span(f"{plugin_name}.{action}") as span:
-                span.set_attribute("plugin", plugin_name)
-                span.set_attribute("action", action)
-                result = await self._call_with_retry(plugin_name, handler, action, payload)
-                if result.get("status") == "error":
-                    span.set_status("error")
-        else:
-            result = await self._call_with_retry(plugin_name, handler, action, payload)
+        # Exécution via le pipeline de middlewares
+        result = await self._pipeline.execute(
+            plugin_name, action, payload, resource=resource
+        )
 
         elapsed = time.monotonic() - t0
         if self._metrics:
             self._h_lat.observe(elapsed)
-            if result.get("status") == "error":
+            if isinstance(result, dict) and result.get("status") == "error":
                 self._c_errors.inc()
 
         return result
@@ -223,39 +211,7 @@ class PluginSupervisor:
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
         handler = self._loader.get(plugin_name)
-        return await self._call_with_retry(plugin_name, handler, action, payload)
-
-    async def _call_with_retry(
-        self, name: str, handler, action: str, payload: dict
-    ) -> dict:
-        manifest = getattr(handler, "manifest", None)
-        retry_cfg = getattr(manifest, "runtime", None)
-        max_attempts = (
-            getattr(getattr(retry_cfg, "retry", None), "max_attempts", 1)
-            if retry_cfg
-            else 1
-        )
-        backoff = (
-            getattr(getattr(retry_cfg, "retry", None), "backoff_seconds", 0.0)
-            if retry_cfg
-            else 0.0
-        )
-
-        last_err = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                return await handler.call(action, payload)
-            except Exception as e:
-                last_err = e
-                if attempt < max_attempts:
-                    logger.warning(
-                        f"[{name}] Tentative {attempt} échouée, retry dans {backoff}s"
-                    )
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 60.0)
-
-        logger.error(f"[{name}] Toutes les tentatives échouées : {last_err}")
-        return self._err(str(last_err), "all_retries_failed")
+        return await handler.call(action, payload)
 
     # ── Gestion dynamique ─────────────────────────────────────
 

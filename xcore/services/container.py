@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
 
 # Literal dispo Python 3.8+, sinon typing_extensions
 try:
@@ -41,6 +41,71 @@ from .base import BaseService, ServiceStatus
 logger = logging.getLogger("xcore.services.container")
 
 T = TypeVar("T")
+
+
+class BaseServiceProvider(Protocol):
+    """
+    Interface pour les fournisseurs de services du framework.
+    """
+
+    async def init(self, container: ServiceContainer) -> None: ...
+
+
+class DatabaseProvider:
+    async def init(self, container: ServiceContainer) -> None:
+        if not container._config.databases:
+            return
+        from .database.manager import DatabaseManager
+
+        mgr = DatabaseManager(container._config.databases)
+        await mgr.init()
+        container._services["database"] = mgr
+        for name, adapter in mgr.adapters.items():
+            container._raw[name] = adapter
+        if mgr.adapters:
+            first = next(iter(mgr.adapters.values()))
+            container._raw.setdefault("db", first)
+        logger.info(f"Database : {list(mgr.adapters.keys())}")
+
+
+class CacheProvider:
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = container._config.cache
+        from .cache.service import CacheService
+
+        svc = CacheService(cfg)
+        await svc.init()
+        container._services["cache_service"] = svc
+        container._raw["cache"] = svc
+        logger.info(f"Cache : backend={cfg.backend}")
+
+
+class SchedulerProvider:
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = container._config.scheduler
+        if not cfg.enabled:
+            return
+        from .scheduler.service import SchedulerService
+
+        svc = SchedulerService(cfg)
+        await svc.init()
+        container._services["scheduler_service"] = svc
+        container._raw["scheduler"] = svc
+        logger.info("Scheduler : prêt")
+
+
+class ExtensionProvider:
+    async def init(self, container: ServiceContainer) -> None:
+        if not container._config.extensions:
+            return
+        from .extensions.loader import ExtensionLoader
+
+        loader = ExtensionLoader(container._config.extensions)
+        await loader.init()
+        container._services["extensions"] = loader
+        for name, ext in loader.extensions.items():
+            container._raw[f"ext.{name}"] = ext
+        logger.info(f"Extensions : {list(loader.extensions.keys())}")
 
 
 class ServiceContainer:
@@ -71,6 +136,14 @@ class ServiceContainer:
         self._raw: dict[str, Any] = {}
         self._providers: dict[str, Any] = {}
 
+        # Fournisseurs par défaut
+        self._default_providers: list[BaseServiceProvider] = [
+            DatabaseProvider(),
+            CacheProvider(),
+            SchedulerProvider(),
+            ExtensionProvider(),
+        ]
+
     def register_provider(self, name: str, provider: Any) -> None:
         """Enregistre un fournisseur de services dynamique."""
         self._providers[name] = provider
@@ -84,63 +157,11 @@ class ServiceContainer:
         logger.debug(f"Service '{name}' enregistré manuellement")
 
     async def init(self) -> None:
-        """Initialise tous les services dans l'ordre."""
-        await self._init_databases()
-        await self._init_cache()
-        await self._init_scheduler()
-        await self._init_extensions()
+        """Initialise tous les services via les providers."""
+        for provider in self._default_providers:
+            await provider.init(self)
+
         logger.info(f"✅ Services initialisés : {sorted(self._raw.keys())}")
-
-    # ── Initialisation par couche ──────────────────────────────
-
-    async def _init_databases(self) -> None:
-        if not self._config.databases:
-            return
-        from .database.manager import DatabaseManager
-
-        mgr = DatabaseManager(self._config.databases)
-        await mgr.init()
-        self._services["database"] = mgr
-        for name, adapter in mgr.adapters.items():
-            self._raw[name] = adapter
-        if mgr.adapters:
-            first = next(iter(mgr.adapters.values()))
-            self._raw.setdefault("db", first)
-        logger.info(f"Database : {list(mgr.adapters.keys())}")
-
-    async def _init_cache(self) -> None:
-        cfg = self._config.cache
-        from .cache.service import CacheService
-
-        svc = CacheService(cfg)
-        await svc.init()
-        self._services["cache_service"] = svc
-        self._raw["cache"] = svc
-        logger.info(f"Cache : backend={cfg.backend}")
-
-    async def _init_scheduler(self) -> None:
-        cfg = self._config.scheduler
-        if not cfg.enabled:
-            return
-        from .scheduler.service import SchedulerService
-
-        svc = SchedulerService(cfg)
-        await svc.init()
-        self._services["scheduler_service"] = svc
-        self._raw["scheduler"] = svc
-        logger.info("Scheduler : prêt")
-
-    async def _init_extensions(self) -> None:
-        if not self._config.extensions:
-            return
-        from .extensions.loader import ExtensionLoader
-
-        loader = ExtensionLoader(self._config.extensions)
-        await loader.init()
-        self._services["extensions"] = loader
-        for name, ext in loader.extensions.items():
-            self._raw[f"ext.{name}"] = ext
-        logger.info(f"Extensions : {list(loader.extensions.keys())}")
 
     # ── Accès typé ────────────────────────────────────────────
 

@@ -336,12 +336,18 @@ class LifecycleManager:
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         if self._registry:
+            # Récupère le scoping depuis le manifeste si défini
+            # format attendu: resources: services: { "service_name": { "scope": "private" } }
+            scoping = getattr(getattr(self.manifest, "resources", None), "services", {})
+
             for name, obj in instance_services.items():
+                scope = scoping.get(name, {}).get("scope", "public") if isinstance(scoping, dict) else "public"
                 self._registry.register_service(
                     plugin_name=self.manifest.name,
                     service_name=name,
                     service_obj=obj,
                     metadata={"reloaded": is_reload},
+                    scope=scope
                 )
 
         return self._services

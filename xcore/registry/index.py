@@ -73,11 +73,13 @@ class PluginRegistry:
         service_name: str,
         service_obj: Any,
         metadata: dict | None = None,
+        scope: str = "public",
     ) -> None:
         """Enregistre un service exporté par un plugin."""
         self._exported_services[service_name] = {
             "plugin": plugin_name,
             "obj": service_obj,
+            "scope": scope,
             **(metadata or {}),
         }
         logger.debug(

@@ -141,29 +141,19 @@ class TestServiceContainer:
         assert "str" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_init_empty_config(self, container):
-        """Test init with empty config."""
-        with patch.object(container, "_init_databases") as mock_db, patch.object(
-            container, "_init_cache"
-        ) as mock_cache, patch.object(
-            container, "_init_scheduler"
-        ) as mock_sched, patch.object(
-            container, "_init_extensions"
-        ) as mock_ext:
+    async def test_init_with_providers(self, container):
+        """Test init calls all default providers."""
+        with patch("xcore.services.container.DatabaseProvider.init", new_callable=AsyncMock) as mock_db, \
+             patch("xcore.services.container.CacheProvider.init", new_callable=AsyncMock) as mock_cache, \
+             patch("xcore.services.container.SchedulerProvider.init", new_callable=AsyncMock) as mock_sched, \
+             patch("xcore.services.container.ExtensionProvider.init", new_callable=AsyncMock) as mock_ext:
 
             await container.init()
 
-            mock_db.assert_called_once()
-            mock_cache.assert_called_once()
-            mock_sched.assert_called_once()
-            mock_ext.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_init_databases_empty(self, container):
-        """Test _init_databases with empty config."""
-        # Empty databases should return early
-        await container._init_databases()
-        assert "database" not in container._services
+            mock_db.assert_called_once_with(container)
+            mock_cache.assert_called_once_with(container)
+            mock_sched.assert_called_once_with(container)
+            mock_ext.assert_called_once_with(container)
 
     @pytest.mark.asyncio
     async def test_shutdown_empty(self, container):
@@ -275,16 +265,18 @@ class TestServiceContainerWithCache:
         return self.CacheConfig()
 
     @pytest.mark.asyncio
-    async def test_init_cache(self, cache_config):
-        """Test _init_cache with memory backend."""
+    async def test_init_cache_provider(self, cache_config):
+        """Test CacheProvider.init with memory backend."""
         config = MockConfig(cache=cache_config)
         container = ServiceContainer(config)
+        from xcore.services.container import CacheProvider
+        provider = CacheProvider()
 
         with patch("xcore.services.cache.service.CacheService") as mock_cache_class:
             mock_svc = MockService()
             mock_cache_class.return_value = mock_svc
 
-            await container._init_cache()
+            await provider.init(container)
 
             mock_cache_class.assert_called_once_with(cache_config)
             assert container.has("cache") is True
