@@ -260,4 +260,8 @@ class _SecurityVisitor(ast.NodeVisitor):
             self.errors.append(
                 f"{self.path}:{node.lineno}: accès à l'attribut sensible interdit : {node.attr!r}"
             )
+        elif node.attr in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès à un module interdit via attribut : {node.attr!r}"
+            )
         self.generic_visit(node)

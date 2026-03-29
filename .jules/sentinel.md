@@ -22,3 +22,8 @@
 **Vulnerability:** The `xcore/kernel/sandbox/worker.py` used `hashlib.md5` to generate deterministic UIDs for plugins based on their directory paths. MD5 is considered cryptographically broken and often flagged by security scanners (Bandit B324).
 **Learning:** Using legacy hashing algorithms like MD5, even for non-cryptographic purposes like identifier generation, can trigger security audits and is generally discouraged in favor of more robust algorithms.
 **Prevention:** Always prefer SHA256 or better for any hashing operation to ensure both security and compliance with modern safety standards.
+
+## 2026-04-02 - AST Sandbox Bypass via Attribute-based Module Re-exports
+**Vulnerability:** The `ASTScanner` was vulnerable to a bypass where sandboxed plugins could access forbidden modules (e.g., `os`, `sys`) if they were re-exported as attributes of allowed modules (e.g., `pathlib.os` or `importlib.sys`).
+**Learning:** In Python, many standard library modules import and expose other sensitive modules as attributes. Blocking direct `import` statements and common dunder attributes is not enough to prevent access to forbidden functionality.
+**Prevention:** Enhance the AST visitor's `visit_Attribute` method to check accessed attribute names against the full set of forbidden module names, ensuring that re-exported modules are also blocked.
