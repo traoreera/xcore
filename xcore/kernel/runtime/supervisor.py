@@ -122,13 +122,13 @@ class PluginSupervisor:
                 self._registry.register(name, self._loader.get(name))
 
         # Initialisation du pipeline de middlewares
-        # L'ordre compte : Tracing → Retry → RateLimit → Permissions → Final
+        # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
         self._pipeline = MiddlewarePipeline(
             middlewares=[
                 TracingMiddleware(self._tracer, self._metrics),
-                RetryMiddleware(),
                 RateLimitMiddleware(self._rate),
                 PermissionMiddleware(self._permissions),
+                RetryMiddleware(),
             ],
             final_handler=self._dispatch,
         )
