@@ -239,6 +239,8 @@ class _SecurityVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
             self._check(node.module, node.lineno)
+        for alias in node.names:
+            self._check(alias.name, node.lineno)
 
     def visit_Call(self, node: ast.Call) -> None:
         # __import__ est déjà capturé par visit_Name car il est dans FORBIDDEN_BUILTINS
