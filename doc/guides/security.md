@@ -1,109 +1,65 @@
-# Deep Guide: Security & Sandboxing
+# Security Deep Dive
 
-Security is the cornerstone of XCore. This guide explains the technical details of our isolation model and how to configure it for maximum protection.
-
-## 1. The Security Philosophy
-XCore operates on a **"Zero Trust"** model for plugins. Even `trusted` plugins are signed to prevent unauthorized code modification, while `sandboxed` plugins are treated as inherently unsafe and isolated at multiple levels.
+XCore follows a "Zero Trust" model for plugins. Even trusted plugins are restricted from modifying core kernel state, while sandboxed plugins are isolated at the OS and Runtime levels.
 
 ---
 
-## 2. Multi-Layer Sandboxing
+## 1. The Multi-Layer Sandbox
 
-### A. Static Code Analysis (AST)
-When a sandboxed plugin is loaded, the kernel's `ASTScanner` analyzes the source tree. It uses an `ast.NodeVisitor` to inspect every import, name access, and function call.
+When a plugin's `execution_mode` is set to `sandboxed`, the kernel applies multiple defensive layers.
 
-- **Forbidden Modules**: Blocked modules include `os`, `sys`, `subprocess`, `socket`, `ctypes`, and `requests` (to prevent unauthorized network calls).
-- **Attribute Access**: Accessing sensitive attributes like `__class__`, `__globals__`, or `__subclasses__` is blocked to prevent Python introspection escapes.
-- **Built-in Restriction**: Dangerous functions like `eval()`, `exec()`, and `__import__()` are completely removed from the worker's environment.
+### Layer 1: Static Code Analysis (AST)
+Before execution, the `ASTScanner` parses the plugin's source tree. It uses an `ast.NodeVisitor` to inspect every node.
 
-**Configuration**:
-You can extend the whitelist of imports in `plugin.yaml`:
+-   **Forbidden Names**: Accessing names like `eval`, `exec`, `globals`, `locals`, or `__import__` is blocked.
+-   **Forbidden Attributes**: Accessing sensitive attributes like `__class__`, `__globals__`, or `__subclasses__` (common in sandbox escapes) is prohibited.
+-   **Import Whitelisting**: Only modules explicitly listed in `allowed_imports` (in `plugin.yaml`) or the global kernel whitelist are allowed.
+
+### Layer 2: Process Isolation
+Sandboxed plugins run in a dedicated OS process via the `multiprocessing` module.
+-   **IPC Channel**: The only bridge between the kernel and the sandbox is a standard JSON-RPC 2.0 channel over OS pipes.
+-   **Serialization**: Only standard JSON types are passed. No Python objects (no `pickle`) are exchanged, eliminating entire classes of injection attacks.
+
+### Layer 3: OS Resource Limits
+The kernel monitors the worker process RSS (Resident Set Size) and CPU time.
+-   **Memory**: Workers are terminated if they exceed `max_memory_mb`.
+-   **Timeout**: Every IPC call has a mandatory `timeout_seconds`. If the worker hangs, it is killed.
+
+---
+
+## 2. Permission Engine
+
+Every inter-plugin call and service access is audited by the **PermissionEngine**.
+
+### Policy Evaluation
+XCore uses a "Fail-Closed" model. If no policy explicitly allows an action, it is denied.
+1.  Check for an explicit `deny`.
+2.  Check for an explicit `allow`.
+3.  Default to `deny`.
+
+### Granular Patterns
+You can use `*` wildcards for resources:
 ```yaml
-allowed_imports:
-  - math
-  - json
-  - pydantic
-  - PIL
+# Allows reading from any table in the 'users' database
+- resource: "db.users.*"
+  actions: ["read"]
+  effect: allow
 ```
-
-### B. OS Process Isolation
-Sandboxed plugins do not share memory with the kernel. They run in a separate process spawned using `multiprocessing` or `subprocess`.
-- **IPC Channel**: The only way for the kernel to talk to the sandbox is through a specialized JSON-RPC channel over OS pipes.
-- **Data Serialization**: All parameters and results are serialized to JSON, ensuring no complex Python objects (which could contain executable code) are passed between processes.
-
-### C. Resource Enforcement
-The kernel monitors the sandbox process in real-time.
-- **CPU Time**: If a call exceeds the `timeout_seconds`, the worker process is immediately sent a `SIGKILL`.
-- **Memory (RSS)**: Max memory is capped. If exceeded, the process is terminated to prevent OOM (Out of Memory) conditions on the host.
-- **Rate Limiting**: The `RateLimitMiddleware` counts calls per plugin per sliding window (e.g., 100 calls / 60s) and rejects excesses before they even reach the sandbox.
 
 ---
 
-## 3. Permission Engine & RBAC
+## 3. Trusted Plugin Signing
 
-XCore uses a **Policy-Based Access Control** system. Each plugin defines its own required permissions in the manifest.
+In production, enabling `strict_trusted` mode ensures that even plugins running in the main process haven't been tampered with.
 
-### Policy Structure:
-```yaml
-permissions:
-  - resource: "db.users.*"
-    actions: ["read"]
-    effect: allow
-  - resource: "ext.email"
-    actions: ["send"]
-    effect: deny
-```
-
-### Evaluation Logic:
-1.  **Explicit Deny**: If a policy matches with `effect: deny`, the action is blocked regardless of other policies.
-2.  **Explicit Allow**: If no deny matches, but an allow policy does, the action is permitted.
-3.  **Deny-by-Default**: If no policy matches at all, the action is denied.
+-   **Signature**: A `plugin.sig` file contains HMAC-SHA256 hashes of every file in the plugin directory.
+-   **Verification**: At boot, the kernel recalculates all hashes using a secret `SERVER_KEY`. If they don't match, the plugin refuses to load.
 
 ---
 
-## 4. Plugin Integrity (Signing)
+## 4. Best Practices for Developers
 
-To prevent code tampering in production, XCore supports HMAC-SHA256 signatures.
-
-### Signing a Plugin:
-```bash
-# Generate a plugin.sig file
-xcore plugin sign ./plugins/my_plugin --key your-secret-key
-```
-
-### Verification:
-In production, enable `strict_trusted` mode in `xcore.yaml`:
-```yaml
-plugins:
-  strict_trusted: true
-```
-The kernel will verify the signature of every file in the plugin against the `plugin.sig` manifest. If a single byte has changed, the plugin will refuse to load.
-
----
-
-## 5. Network & Filesystem Security
-
-### Logical Filesystem (Chroot-like)
-The `SandboxedActivator` validates all filesystem paths. Plugins can only access paths relative to their own `data/` directory. Attempts to use `../` or absolute paths are rejected.
-
-### Network Isolation
-By default, network modules like `socket` and `http.client` are blocked in the AST scanner. If a plugin needs to make external calls, it must use a `Trusted` proxy plugin or a dedicated kernel service.
-
----
-
-## 6. Security Audit Logs
-
-XCore maintains a detailed audit trail of every security-relevant event.
-
-- **Permission Logs**: Every `ALLOW` or `DENY` is logged with the calling plugin, target resource, and action.
-- **Scan Violations**: Any AST scan failure is logged with the specific line number and reason.
-- **CLI Audit**:
-  ```bash
-  xcore permissions audit --plugin task_manager --limit 50
-  ```
-
-## Best Practices for Plugin Developers
-1.  **Use Sandboxing**: Always use `sandboxed` mode unless you need direct access to deep kernel services.
-2.  **Minimize Permissions**: Only request the specific resources your plugin needs.
-3.  **Validate Payloads**: Use `@validate_payload` to ensure your IPC handlers don't process malformed data.
-4.  **No Secrets in Code**: Use environment variables for API keys and database credentials.
+1.  **Use Sandboxing by Default**: Only use `trusted` mode if you need access to complex kernel objects or low-level FastAPI hooks.
+2.  **Request Minimal Permissions**: Use the principle of least privilege.
+3.  **Validate All Inputs**: Use the `@validate_payload` decorator to ensure your handlers don't process malformed JSON.
+4.  **No Local State**: Treat plugins as ephemeral. Store all persistence in the shared `db` or `cache` services.

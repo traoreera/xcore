@@ -1,62 +1,65 @@
-# XCore Framework Documentation
+# XCore Framework
 
-Welcome to **XCore** — a production-grade, plugin-first Python framework built on FastAPI.
+**XCore** is a production-grade, plugin-first Python framework built on top of FastAPI. It is designed for developers who need to build highly extensible, secure, and modular applications.
 
-## What is XCore?
+---
 
-XCore is a modular orchestration framework designed to load, isolate, and manage plugins in a secure sandboxed environment. It enables building extensible applications where each feature can be developed, tested, and deployed independently.
+<div class="grid cards" hide-on-toc markdown>
 
-## Key Features
+-   :material-rocket-launch:{ .lg .middle } __High Performance__
 
-- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restarts.
-- **🔒 Sandboxing & Security** — Isolated execution with process limits, AST scanning, and permission enforcement.
-- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more.
-- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system-level hooks.
-- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints seamlessly.
-- **♻️ Hot Reloading** — Automatic file watching for rapid development.
-- **📊 Production Ready** — YAML configuration, environment variable injection, structured logging, and metrics.
+    Built on FastAPI and asyncio for maximum throughput and minimal overhead.
 
-## Quick Start
+-   :material-shield-lock:{ .lg .middle } __Secure by Design__
 
-```bash
-# Install dependencies
-poetry install
+    Multi-layer sandboxing, AST-based code validation, and granular permission engine.
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+-   :material-puzzle-outline:{ .lg .middle } __Plugin-First Architecture__
 
-# Run development server
-make run-dev
-```
+    Everything is a plugin. Load, unload, and hot-reload components without downtime.
 
-## Documentation Structure
+-   :material-lan:{ .lg .middle } __Built-in Services__
 
-- [**Getting Started**](getting-started/installation.md): Installation and first steps.
-- [**Guides**](guides/creating-plugins.md): Deep dives into plugins, services, and events.
-- [**Architecture**](architecture/overview.md): Internal design and core concepts.
-- [**Reference**](reference/configuration.md): Exhaustive API and configuration reference.
-- [**Examples**](examples/complete-plugin.md): Real-world plugin implementations.
+    Native support for SQL/NoSQL databases, Redis caching, and task scheduling.
 
-## Project Architecture
+</div>
+
+---
+
+## Why XCore?
+
+Modern applications often struggle with monolithic designs or overly complex microservices. XCore provides a middle ground: a **Modular Monolith** architecture where features are decoupled as plugins but run within a unified, orchestrated environment.
+
+### Core Philosophy
+
+1.  **Isolation**: Plugins can run in trusted mode (main process) or sandboxed mode (isolated OS process).
+2.  **Orchestration**: A central kernel manages lifecycle, dependencies (DAG), and cross-plugin communication.
+3.  **Observability**: Out-of-the-box support for structured logging, Prometheus metrics, and OpenTelemetry tracing.
+4.  **Developer Experience**: A powerful CLI and SDK make building and testing plugins a breeze.
+
+---
+
+## Technical Overview
 
 ```mermaid
 graph TB
-    subgraph XCore["XCore Framework"]
-        X[Xcore Orchestrator]
-        SC[ServiceContainer]
-        PS[PluginSupervisor]
-        EB[EventBus]
+    subgraph XCore_Kernel["XCore Kernel (Orchestrator)"]
+        X[Xcore Engine]
+        SC[Service Container]
+        PS[Plugin Supervisor]
+        EB[Event Bus]
+        PE[Permission Engine]
     end
 
-    subgraph Services["Built-in Services"]
-        DB[(Database)]
-        CACHE[(Cache)]
-        SCHED[Scheduler]
-        EXT[Extensions]
+    subgraph Infrastructure["Shared Services"]
+        DB[(SQL/NoSQL DB)]
+        CACHE[(Redis/Memory Cache)]
+        SCHED[APScheduler]
+        EXT[Custom Extensions]
     end
 
-    subgraph Plugins["Plugin Layer"]
+    subgraph Plugin_Layer["Plugin Ecosystem"]
+        direction LR
         T[Trusted Plugins]
         S[Sandboxed Plugins]
     end
@@ -64,32 +67,56 @@ graph TB
     X --> SC
     X --> PS
     X --> EB
-    SC --> Services
-    PS --> Plugins
-    EB --> PS
-    EB --> SC
+    X --> PE
+    SC --> Infrastructure
+    PS --> Plugin_Layer
+    EB -.-> Plugin_Layer
+    PE -.-> PS
 
-    FA[FastAPI App] --> X
+    FA[FastAPI Application] ==> X
 ```
 
-## Next Steps
+---
 
-- [Installation Guide](getting-started/installation.md)
-- [Creating Your First Plugin](guides/creating-plugins.md)
-- [Configuration Reference](reference/configuration.md)
-- [Architecture Overview](architecture/overview.md)
-- [Security Best Practices](guides/security.md)
+## Getting Started in 3 Steps
 
-## Versions
+### 1. Install the Framework
+```bash
+pip install xcore-framework
+# or using poetry
+poetry add xcore-framework
+```
 
-- **Current Stable**: v2.0.0 — Plugin-first architecture with advanced sandboxing.
-- [Full Changelog](versions.md)
+### 2. Configure Your App
+Create an `xcore.yaml` to define your services and plugin directory.
+```yaml
+app:
+  name: "My App"
+services:
+  cache:
+    backend: "memory"
+```
 
-## Community & Support
+### 3. Create Your First Plugin
+Define a `plugin.yaml` and a `main.py`, then boot the framework.
+```python
+from xcore import Xcore
+from fastapi import FastAPI
 
-- GitHub Issues: [Report bugs or request features](https://github.com/traoreera/xcore/issues)
-- Discussions: [Community forum](https://github.com/traoreera/xcore/discussions)
+app = FastAPI()
+core = Xcore()
 
-## License
+@app.on_event("startup")
+async def startup():
+    await core.boot(app)
+```
 
-XCore is released under the [MIT License](./LICENSE).
+---
+
+## Explore the Documentation
+
+*   [**Installation Guide**](getting-started/installation.md) - Set up your environment.
+*   [**Plugin SDK**](reference/sdk.md) - Learn how to build plugins.
+*   [**Architecture**](architecture/overview.md) - Understand the internals.
+*   [**Security**](guides/security.md) - Deep dive into the sandboxing model.
+*   [**Examples**](examples/README.md) - Real-world plugin implementations.

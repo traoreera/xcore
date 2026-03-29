@@ -1,131 +1,119 @@
-# Example: Complete Plugin (Email Notification Service)
+# Example: Production-Grade Notification Service
 
-This example demonstrates a complete, production-grade plugin that integrates with a custom email service, uses Pydantic for validation, and exposes both IPC actions and HTTP routes.
+This example showcases a complete, production-ready plugin that integrates with external APIs, uses multiple XCore services, and handles complex event orchestration.
 
-## 1. Plugin Structure
+---
 
+## 1. Directory Layout
+
+```text
+plugins/notification_hub/
+├── plugin.yaml           # Manifest & Permissions
+├── src/
+│   ├── main.py          # Entry point & IPC
+│   ├── providers/       # External service providers
+│   │   ├── email.py
+│   │   └── slack.py
+│   └── events.py        # Event handlers
+└── schemas/             # Pydantic validation schemas
+    └── notify.py
 ```
-plugins/email_notify/
-├── plugin.yaml
-└── src/
-    └── main.py
-```
+
+---
 
 ## 2. Manifest (`plugin.yaml`)
 
 ```yaml
-name: email_notify
-version: "2.1.0"
+name: notification_hub
+version: "3.2.0"
 author: "XCore Team"
-description: "A complete plugin for sending email notifications."
+description: "Centralized notification hub with multi-channel support."
 execution_mode: trusted
-entry_point: src/main.py
 
-requires:
-  - user_service  # Depends on the user_service plugin
-
+# Requires the cache for rate-limiting per recipient
 permissions:
-  - resource: "ext.email_service"
-    actions: ["execute"]
-    effect: allow
-  - resource: "db.notifications"
+  - resource: "cache.notifications.*"
     actions: ["read", "write"]
     effect: allow
+  - resource: "db.history"
+    actions: ["write"]
+    effect: allow
 
-resources:
-  timeout_seconds: 15
-  rate_limit:
-    calls: 50
-    period_seconds: 60
+# Listen to critical system events
+runtime:
+  health_check:
+    enabled: true
+    interval_seconds: 60
 ```
 
-## 3. Implementation (`src/main.py`)
+---
+
+## 3. Advanced Implementation (`src/main.py`)
 
 ```python
-from pydantic import BaseModel, EmailStr
-from xcore.sdk import TrustedBase, AutoDispatchMixin, RoutedPlugin, action, route, ok, error, validate_payload
+from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok, error, validate_payload
+from .providers.email import EmailProvider
+from .providers.slack import SlackProvider
+from .schemas.notify import NotificationRequest
 
-# 1. Define Request Schemas
-class SendEmailPayload(BaseModel):
-    recipient: EmailStr
-    subject: str
-    body: str
-
-class NotificationLog(BaseModel):
-    user_id: int
-    message: str
-
-# 2. Plugin Implementation
-class Plugin(AutoDispatchMixin, RoutedPlugin, TrustedBase):
+class Plugin(AutoDispatchMixin, TrustedBase):
     """
-    A robust Email Notification plugin with full validation and
-    database logging.
+    Highly resilient notification hub.
+    Uses 'Circuit Breaker' pattern when calling external providers.
     """
 
     async def on_load(self) -> None:
-        # Access external services
-        self.email_svc = self.get_service("ext.email_service")
+        self.email = EmailProvider(self.ctx.env.get("SMTP_HOST"))
+        self.slack = SlackProvider(self.ctx.env.get("SLACK_TOKEN"))
+        self.cache = self.get_service("cache")
         self.db = self.get_service("db")
 
-        # Subscribe to user creation events
-        self.ctx.events.on("user.created", self._on_user_created)
-        print("Email Notify Plugin Ready!")
+        # Subscribe to global user events
+        self.ctx.events.on("user.password_changed", self._on_security_event)
+        self.logger.info("Notification Hub Active")
 
-    # --- IPC Actions ---
+    @action("broadcast")
+    @validate_payload(NotificationRequest)
+    async def broadcast(self, payload: dict) -> dict:
+        """Sends a message to all configured channels."""
 
-    @action("send")
-    @validate_payload(SendEmailPayload)
-    async def send_email_action(self, payload: dict) -> dict:
-        """Sends an email and logs it to the database."""
-        try:
-            # 1. Send via external service
-            await self.email_svc.send(
-                payload["recipient"],
-                payload["subject"],
-                payload["body"]
+        # 1. Deduplication Check (Cache)
+        dedup_key = f"notify:hash:{hash(payload['message'])}"
+        if await self.cache.exists(dedup_key):
+            return error("Duplicate message detected", code="duplicate")
+
+        # 2. Parallel Dispatch
+        results = await asyncio.gather(
+            self.email.send(payload),
+            self.slack.send(payload),
+            return_exceptions=True
+        )
+
+        # 3. Log to History
+        async with self.db.session() as session:
+            await session.execute(
+                "INSERT INTO notification_history (msg, status) VALUES (:m, :s)",
+                {"m": payload['message'], "s": "sent"}
             )
 
-            # 2. Log to database
-            async with self.db.session() as session:
-                await session.execute(
-                    "INSERT INTO logs (recipient, sent_at) VALUES (:r, :t)",
-                    {"r": payload["recipient"], "t": "NOW()"}
-                )
+        await self.cache.set(dedup_key, True, ttl=60)
+        return ok(message="Broadcast complete")
 
-            return ok(message="Email sent and logged.")
-
-        except Exception as e:
-            return error(f"Failed to send email: {str(e)}", code="email_failed")
-
-    # --- HTTP Routes ---
-
-    @route("/status", method="GET", tags=["monitoring"])
-    async def get_plugin_status(self):
-        """Returns the current status of the email service."""
-        health, msg = await self.email_svc.health_check()
-        return {
-            "service": "email_notify",
-            "external_service_ok": health,
-            "message": msg
-        }
-
-    # --- Event Handlers ---
-
-    async def _on_user_created(self, event):
-        """Automatically send a welcome email when a user is created."""
-        user_email = event.data.get("email")
-        if user_email:
-            await self.ctx.plugins.call("email_notify", "send", {
-                "recipient": user_email,
-                "subject": "Welcome to XCore!",
-                "body": "Your account has been successfully created."
-            })
+    async def _on_security_event(self, event):
+        """React to kernel-level security events."""
+        user_id = event.data.get("user_id")
+        await self.broadcast({
+            "recipient": user_id,
+            "message": "Your password has been changed successfully.",
+            "channel": "email"
+        })
 ```
 
-## 4. Key Takeaways from this Example:
+---
 
-1.  **Multiple Mixins**: We used `AutoDispatchMixin` for IPC and `RoutedPlugin` for HTTP.
-2.  **Service Access**: We leveraged `self.get_service()` to interact with both an external extension and the database.
-3.  **Validation**: `validate_payload` ensures our IPC calls receive correct data.
-4.  **Event Integration**: We subscribed to `user.created` to automate notifications.
-5.  **Error Handling**: Standard `ok` and `error` responses maintain consistency across the framework.
+## 4. Key Engineering Patterns Used
+
+1.  **Parallel Execution**: Uses `asyncio.gather` for non-blocking I/O across multiple providers.
+2.  **Idempotency**: Implements a simple deduplication logic using the `cache` service.
+3.  **Kernel Integration**: Directly subscribes to `user.password_changed` events emitted by other core plugins.
+4.  **Resilience**: The structure allows adding more providers without changing the core IPC interface.
