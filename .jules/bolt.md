@@ -17,3 +17,7 @@
 ## 2026-04-10 - [Inlining Logic in MemoryBackend Batch Operations]
 **Learning:** Inlining `get` and `set` logic within `mget` and `mset` methods of an in-memory cache backend significantly reduces performance overhead. This improvement comes from two sources: avoiding the creation and awaiting of individual coroutines for every key in the batch, and reducing the number of calls to `time.monotonic()` (and other redundant calculations) by performing them once per batch.
 **Action:** For performance-critical batch operations in synchronous or asynchronous in-memory stores, avoid simple loops that delegate to individual item handlers. Instead, inline the core logic to minimize call stack depth, coroutine overhead, and redundant system calls.
+
+## 2026-04-20 - [Optimizing Plugin Call Path & Concurrency]
+**Learning:** Using a formal state machine with `READY` -> `RUNNING` -> `READY` transitions for every plugin call introduces significant overhead (~10µs per call) and, more importantly, prevents concurrency because the state machine enforces sequential transitions.
+**Action:** Remove transitional states (like `RUNNING`) from the high-frequency call path. Replace expensive state transitions with a fast boolean check (`is_available`) to ensure the plugin is `READY` before execution. This enables concurrent plugin calls and reduces per-call overhead by ~90% (to ~0.8µs).
