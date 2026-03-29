@@ -3,11 +3,13 @@ state_machine.py — Machine à états finie pour le cycle de vie d'un plugin.
 
 Transitions valides :
     UNLOADED  ──load──►  LOADING  ──►  READY
-    READY     ──call──►  RUNNING  ──►  READY
     READY     ──unload►  UNLOADING──►  UNLOADED
     READY     ──reload►  RELOADING──►  READY
     *         ──error──►  FAILED
     FAILED    ──reset──►  UNLOADED
+
+Note: The 'RUNNING' state was removed to enable concurrent plugin calls
+and reduce per-call overhead (hot path optimization).
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ class PluginState(str, Enum):
     UNLOADED = "unloaded"
     LOADING = "loading"
     READY = "ready"
-    RUNNING = "running"
     UNLOADING = "unloading"
     RELOADING = "reloading"
     FAILED = "failed"
@@ -31,12 +32,10 @@ _TRANSITIONS: dict[PluginState, dict[str, PluginState]] = {
     PluginState.UNLOADED: {"load": PluginState.LOADING},
     PluginState.LOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.READY: {
-        "call": PluginState.RUNNING,
         "unload": PluginState.UNLOADING,
         "reload": PluginState.RELOADING,
         "error": PluginState.FAILED,
     },
-    PluginState.RUNNING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.UNLOADING: {"ok": PluginState.UNLOADED, "error": PluginState.FAILED},
     PluginState.RELOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.FAILED: {"reset": PluginState.UNLOADED},
@@ -55,8 +54,6 @@ class StateMachine:
         sm = StateMachine("my_plugin")
         sm.transition("load")    # UNLOADED → LOADING
         sm.transition("ok")      # LOADING  → READY
-        sm.transition("call")    # READY    → RUNNING
-        sm.transition("ok")      # RUNNING  → READY
     """
 
     def __init__(
@@ -82,7 +79,7 @@ class StateMachine:
 
     @property
     def is_available(self) -> bool:
-        return self._state in (PluginState.READY, PluginState.RUNNING)
+        return self._state == PluginState.READY
 
     def transition(self, event: str) -> PluginState:
         """

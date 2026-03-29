@@ -19,7 +19,6 @@ class TestPluginState:
         assert PluginState.UNLOADED == "unloaded"
         assert PluginState.LOADING == "loading"
         assert PluginState.READY == "ready"
-        assert PluginState.RUNNING == "running"
         assert PluginState.UNLOADING == "unloading"
         assert PluginState.RELOADING == "reloading"
         assert PluginState.FAILED == "failed"
@@ -62,12 +61,7 @@ class TestStateMachine:
         sm.transition("ok")
         assert sm.is_available is True
 
-        # RUNNING state
-        sm.transition("call")
-        assert sm.is_available is True
-
         # Back to UNLOADED
-        sm.transition("ok")
         sm.transition("unload")
         sm.transition("ok")
         assert sm.is_available is False
@@ -90,20 +84,6 @@ class TestStateMachine:
         sm.transition("error")
         assert sm.state == PluginState.FAILED
 
-    def test_call_sequence(self, sm):
-        """Test call sequence."""
-        # First load
-        sm.transition("load")
-        sm.transition("ok")
-        assert sm.state == PluginState.READY
-
-        # Then call
-        sm.transition("call")
-        assert sm.state == PluginState.RUNNING
-
-        # Then ok
-        sm.transition("ok")
-        assert sm.state == PluginState.READY
 
     def test_unload_sequence(self, sm):
         """Test unload sequence."""
@@ -139,20 +119,6 @@ class TestStateMachine:
         assert "invalid_event" in str(exc_info.value)
         assert "unloaded" in str(exc_info.value)
 
-    def test_transition_from_running(self, sm):
-        """Test transitions from RUNNING state."""
-        sm.transition("load")
-        sm.transition("ok")
-        sm.transition("call")
-
-        assert sm.state == PluginState.RUNNING
-
-        # From RUNNING, only ok and error are valid
-        with pytest.raises(InvalidTransition):
-            sm.transition("load")
-
-        with pytest.raises(InvalidTransition):
-            sm.transition("unload")
 
     def test_transition_from_failed(self, sm):
         """Test transitions from FAILED state."""
@@ -197,29 +163,6 @@ class TestStateMachine:
 
 class TestStateMachineComplexTransitions:
     """Test complex state transition scenarios."""
-
-    def test_multiple_calls(self):
-        """Test multiple calls in sequence."""
-        sm = StateMachine("test")
-        sm.transition("load")
-        sm.transition("ok")
-
-        for _ in range(5):
-            sm.transition("call")
-            sm.transition("ok")
-
-        assert sm.state == PluginState.READY
-        assert sm.is_ready is True
-
-    def test_error_from_running(self):
-        """Test error during running."""
-        sm = StateMachine("test")
-        sm.transition("load")
-        sm.transition("ok")
-        sm.transition("call")
-        sm.transition("error")
-
-        assert sm.state == PluginState.FAILED
 
     def test_recovery_path(self):
         """Test recovery from failed state."""
