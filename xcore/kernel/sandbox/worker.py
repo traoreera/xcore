@@ -85,6 +85,7 @@ class FilesystemGuard:
             (self._plugin_dir / p).resolve() for p in (denied_paths or ["src/"])
         ]
         self._original_open = builtins_open  # sauvegarde avant patch
+        self._in_guard = False
 
     def _resolve(self, path_arg) -> Path:
         """Résout un chemin en absolu depuis le cwd (plugin_dir)."""
@@ -161,57 +162,68 @@ class FilesystemGuard:
 
         def _block(label: str, *args) -> None:
             """Log + lève PermissionError avec stack trace pour audit."""
-            stack = "".join(_traceback.format_stack()[:-1])
-            logger.warning(
-                f"[sandbox:BLOCKED] {label}\n" f"  args={args!r}\n" f"  stack:\n{stack}"
-            )
+            # Disable guard during traceback/logging to avoid recursion
+            was = guard._in_guard
+            guard._in_guard = True
+            try:
+                stack = "".join(_traceback.format_stack()[:-1])
+                logger.warning(
+                    f"[sandbox:BLOCKED] {label}\n" f"  args={args!r}\n" f"  stack:\n{stack}"
+                )
+            finally:
+                guard._in_guard = was
             raise PermissionError(f"[sandbox] {label} interdit dans le sandbox")
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
-        _real_open = builtins.open
-        _real_os_open = os.open
-        os.fdopen
-        _real_fileio = io.FileIO
+        from pathlib import Path as _Path
+        import inspect
 
-        def _guarded_open(file, mode="r", *args, **kwargs):
-            if isinstance(file, int):  # stdin/stdout/stderr → OK
-                return _real_open(file, mode, *args, **kwargs)
-            if not guard.is_allowed(file):
-                _block(f"open('{file}')", file)
-            return _real_open(file, mode, *args, **kwargs)
+        def _guarded_op(func, label):
+            sig = inspect.signature(func)
+            pnames = {"path", "file", "src", "dst", "target", "name", "self"}
 
-        def _guarded_os_open(path, flags, mode=0o777, *, dir_fd=None):
-            if not guard.is_allowed(path):
-                _block(f"os.open('{path}')", path)
-            return _real_os_open(path, flags, mode, dir_fd=dir_fd)
+            def wrapper(*args, **kwargs):
+                if guard._in_guard:
+                    return func(*args, **kwargs)
+                try:
+                    bound = sig.bind_partial(*args, **kwargs).arguments
+                    paths = [
+                        v for k, v in bound.items()
+                        if k in pnames and isinstance(v, (str, os.PathLike))
+                    ]
+                except Exception:
+                    paths = []
+                guard._in_guard = True
+                try:
+                    for p in paths:
+                        if not guard.is_allowed(p):
+                            _block(f"{label}({p!r})")
+                    return func(*args, **kwargs)
+                finally:
+                    guard._in_guard = False
 
-        def _guarded_os_fdopen(fd, *args, **kwargs):
-            # Bloquer totalement os.fdopen : un plugin sandbox n'a pas
-            # à ouvrir des FDs Unix bruts non contrôlés par le guard.
-            _block("os.fdopen()", fd)
+            return wrapper
 
-        class _GuardedFileIO(_real_fileio):
+        builtins.open = io.open = _guarded_op(builtins.open, "open")
+        os.fdopen = lambda *a, **k: _block("os.fdopen()")
+
+        class _GuardedFileIO(io.FileIO):
             def __init__(self, file, *args, **kwargs):
-                if isinstance(file, (str, os.PathLike)) and not guard.is_allowed(file):
-                    _block(f"io.FileIO('{file}')", file)
+                if not guard._in_guard and isinstance(file, (str, os.PathLike)):
+                    if not guard.is_allowed(file):
+                        _block(f"io.FileIO('{file}')")
                 super().__init__(file, *args, **kwargs)
 
-        from pathlib import Path as _Path
-
-        _real_path_open = _Path.open
-
-        def _guarded_path_open(self_path, mode="r", *args, **kwargs):
-            if not guard.is_allowed(self_path):
-                _block(f"Path.open('{self_path}')", self_path)
-            return _real_path_open(self_path, mode, *args, **kwargs)
-
-        builtins.open = _guarded_open
-        os.open = _guarded_os_open
-        os.fdopen = _guarded_os_fdopen
-        io.open = _guarded_open
         io.FileIO = _GuardedFileIO
-        _Path.open = _guarded_path_open
+
+        for op in ["open", "remove", "unlink", "rmdir", "mkdir", "makedirs", "rename", "replace", "listdir", "scandir", "stat", "lstat", "chmod"]:
+            if hasattr(os, op):
+                setattr(os, op, _guarded_op(getattr(os, op), f"os.{op}"))
+
+        for op in ["open", "unlink", "rmdir", "mkdir", "rename", "replace", "stat", "lstat", "chmod", "touch", "exists", "is_file", "is_dir"]:
+            if hasattr(_Path, op):
+                setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
 
         # ── Couche 2 : Exécution dynamique ────────────────────────────────────
 
@@ -259,6 +271,8 @@ class FilesystemGuard:
         _real_import = builtins.__import__
 
         def _guarded_import(name, *args, **kwargs):
+            if guard._in_guard:
+                return _real_import(name, *args, **kwargs)
             root = name.split(".")[0]
             if root in _FORBIDDEN_MODULES:
                 _block(f"__import__('{name}')", name)
@@ -284,28 +298,34 @@ class FilesystemGuard:
         import importlib.util as _importlib_util
 
         _real_import_module = _importlib.import_module
-        _importlib_util.spec_from_file_location
+        _real_spec_from_file = _importlib_util.spec_from_file_location
         _real_find_spec = _importlib_util.find_spec
 
         def _guarded_import_module(name, package=None):
+            if guard._in_guard:
+                return _real_import_module(name, package)
             root = name.lstrip(".").split(".")[0]
             if root in _FORBIDDEN_MODULES:
                 _block(f"importlib.import_module('{name}')", name)
             return _real_import_module(name, package)
 
-        def _blocked_spec_from_file(name, location=None, *args, **kwargs):
+        def _guarded_spec_from_file(name, location=None, *args, **kwargs):
+            if guard._in_guard:
+                return _real_spec_from_file(name, location, *args, **kwargs)
             # Un plugin sandbox ne doit pas charger de .py arbitraire depuis le
             # système de fichiers hors de son propre namespace déjà établi.
             _block(f"importlib.util.spec_from_file_location('{name}', '{location}')")
 
         def _guarded_find_spec(name, *args, **kwargs):
+            if guard._in_guard:
+                return _real_find_spec(name, *args, **kwargs)
             root = name.split(".")[0]
             if root in _FORBIDDEN_MODULES:
                 _block(f"importlib.util.find_spec('{name}')", name)
             return _real_find_spec(name, *args, **kwargs)
 
         _importlib.import_module = _guarded_import_module
-        _importlib_util.spec_from_file_location = _blocked_spec_from_file
+        _importlib_util.spec_from_file_location = _guarded_spec_from_file
         _importlib_util.find_spec = _guarded_find_spec
 
         # ── Couche 4 : ctypes — blocage complet ───────────────────────────────
