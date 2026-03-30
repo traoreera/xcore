@@ -2,87 +2,82 @@
 
 This guide covers the installation of XCore Framework for development and production environments.
 
-## Prerequisites
+---
 
-Before you begin, ensure you have the following installed on your system:
+## 1. Prerequisites
 
-- **Python 3.11+**: The core framework and plugins require Python 3.11 or newer.
-- **Poetry**: Recommended for dependency management and project isolation.
-- **Git**: For cloning the repository.
-- **Make** (Optional): For using provided shortcuts (e.g., `make init`).
+XCore requires a modern Python environment:
 
-## Standard Installation
+-   **Python 3.11+**: Built on the latest `asyncio` features.
+-   **Package Manager**: [Poetry](https://python-poetry.org/) is strongly recommended, but `pip` is also supported.
+-   **OS**: Linux or macOS are recommended for the best sandboxing experience. Windows is supported for development.
 
-To install XCore and its dependencies in a virtual environment:
+---
 
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/traoreera/xcore.git
-    cd xcore
-    ```
+## 2. Standard Installation
 
-2.  **Initialize Project with Poetry**:
-    ```bash
-    poetry install
-    ```
-    This will install the core dependencies, including FastAPI, Pydantic, and others required for basic operation.
+### Using Poetry (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/traoreera/xcore.git
+cd xcore
 
-3.  **Install Optional Extensions**:
-    Depending on your database or cache choice, you may need additional libraries:
-    ```bash
-    # For Redis support
-    poetry add aioredis
+# Install core dependencies
+poetry install
 
-    # For PostgreSQL support
-    poetry add asyncpg psycopg2-binary
-    ```
+# Activate the environment
+poetry shell
+```
 
-## Environment Configuration
+### Using Pip
+```bash
+pip install xcore-framework
+```
 
-XCore uses a `.env` file for sensitive configuration (passwords, API keys) and an `xcore.yaml` for system-wide settings.
+---
 
-1.  **Copy Example Environment**:
+## 3. Database & Service Drivers
+
+By default, XCore comes with SQLite support. For other backends, install the required drivers:
+
+```bash
+# PostgreSQL
+pip install asyncpg psycopg2-binary
+
+# MySQL
+pip install mysql-connector-python
+
+# Redis (for Cache & Scheduler)
+pip install redis hiredis
+```
+
+---
+
+## 4. Environment Configuration
+
+XCore uses a dual configuration system: `xcore.yaml` for system structure and `.env` for secrets.
+
+1.  **Initialize Configuration**:
     ```bash
     cp .env.example .env
     ```
 
-2.  **Edit `.env`**:
-    Update the values to match your local or production environment:
+2.  **Required Environment Variables**:
+    Ensure these are set in your `.env`:
     ```env
-    XCORE_ENV=development
-    DATABASE_URL=postgresql+asyncpg://user:password@localhost/xcore
-    REDIS_URL=redis://localhost:6379/0
-    SECRET_KEY=your_secure_secret_key
+    XCORE_SECRET_KEY=generate-a-secure-random-string
+    XCORE_SERVER_KEY=another-secure-random-string
+    DATABASE_URL=sqlite+aiosqlite:///./xcore.db
     ```
 
-## Initializing and Running
+---
 
-The easiest way to get started is using the `make` commands:
+## 5. Verification
+
+Run the built-in health check to ensure everything is configured correctly:
 
 ```bash
-# Install dependencies and run the development server
-make init
-
-# Alternatively, run manually
-poetry run uvicorn app:app --reload --port 8082
+xcore health
 ```
 
-## Verifying the Installation
-
-Once the server is running, you can verify the installation by accessing the health endpoint or using the CLI:
-
-- **Health Check**: `http://localhost:8082/health`
-- **CLI Check**:
-  ```bash
-  PYTHONPATH=. python -m xcore.cli.main health
-  ```
-
-If everything is configured correctly, you should see a JSON response indicating that the kernel and services are "healthy".
-
-## Production Deployment Considerations
-
-For production environments, ensure you:
-- Use a production-grade WSGI/ASGI server (e.g., `gunicorn` with `uvicorn` workers).
-- Disable `debug` mode in `xcore.yaml`.
-- Secure your `SECRET_KEY`.
-- Set up proper monitoring and logging (XCore integrates with standard Python logging).
+You should see a "Healthy" status for the Kernel and all enabled services.

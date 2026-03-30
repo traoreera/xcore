@@ -1,108 +1,120 @@
-# Advanced Architecture Deep Dive
+# Architecture Overview
 
-This guide provides an exhaustive technical analysis of XCore's internal mechanisms, intended for core developers and framework integrators.
+This document provides a deep dive into the internal architecture of XCore, explaining how the kernel, services, and plugins interact.
 
-## 1. The Kernel Orchestration
+## 1. High-Level Design
 
-The **Xcore** class is the central orchestrator. Its lifecycle involves several distinct phases:
-1.  **Configuration Loading**: Parsed via `XcoreConfig` into typed dataclasses.
-2.  **Service Initialization**: Ordered boot of Databases -> Caches -> Schedulers -> Extensions.
-3.  **Plugin Discovery**: The `PluginLoader` scans the designated directory and parses manifests.
-4.  **Dependency Resolution**: A directed acyclic graph (DAG) is built to determine the topological load order.
-5.  **Activation**: Depending on the `execution_mode`, plugins are activated via `TrustedActivator` or `SandboxedActivator`.
-6.  **FastAPI Integration**: Routers are collected and mounted under the specified prefix.
+XCore is designed around the **Modular Monolith** pattern. While all plugins run in the same orchestrated environment, they are strictly isolated through both logical (context injection) and physical (process-level sandboxing) boundaries.
 
-## 2. Plugin Supervisor & Middleware Pipeline
+### Core Components
 
-Every cross-plugin call (`supervisor.call`) is processed through a strict middleware stack to ensure security, observability, and resilience.
+-   **Xcore Engine**: The entry point that boots the system, loads configuration, and coordinates other kernel components.
+-   **PluginSupervisor**: Manages the lifecycle of all plugins. It handles loading, unloading, hot-reloading, and cross-plugin calls via a middleware pipeline.
+-   **ServiceContainer**: A centralized registry for shared infrastructure (DB, Cache, Scheduler). It enforces service scoping (public vs. private).
+-   **EventBus**: An asynchronous dispatcher for system-wide events using the Observer pattern.
+-   **PermissionEngine**: A policy-based access control system that evaluates every inter-plugin call and service access.
 
-### Middleware Execution Order:
-1.  **TracingMiddleware**: Generates or propagates OpenTelemetry spans.
-2.  **RateLimitMiddleware**: Enforces per-plugin throughput limits defined in the manifest.
-3.  **PermissionMiddleware**: Validates the caller's rights against the target resource using the `PermissionEngine`.
-4.  **RetryMiddleware**: Automatically retries failed calls based on the plugin's `runtime.retry` configuration.
-5.  **Final Dispatch**: Executes the call on the actual `PluginHandler`.
+---
 
-## 3. Sandboxing & Isolation Mechanism
+## 2. Framework Boot Flow
 
-XCore's sandboxing is multi-layered, providing a "Defense in Depth" approach.
-
-### Layer 1: Static Analysis (AST Scanner)
-Before execution, the `ASTScanner` parses the plugin's source code. It blocks:
-- **Forbidden Imports**: Modules like `os`, `subprocess`, `socket`, `shutil`.
-- **Dangerous Built-ins**: `eval`, `exec`, `__import__`, `open`.
-- **Sensitive Attribute Access**: `__class__`, `__globals__`, `__subclasses__` to prevent sandbox escapes.
-
-### Layer 2: Process Isolation
-Sandboxed plugins run in a separate OS process via `SandboxProcessManager`.
-- **Communication**: Uses a JSON-RPC 2.0 compliant protocol over dedicated IPC pipes.
-- **Worker Process**: The `SandboxWorker` acts as the shim, receiving calls, executing them in an isolated thread, and returning serialized results.
-
-### Layer 3: Resource Constraints
-Process-level limits are enforced:
-- **Memory**: Max RSS (Resident Set Size) is monitored and capped.
-- **Timeouts**: The IPC channel includes a hard timeout; if exceeded, the worker is terminated.
-- **Filesystem**: Access is restricted to the plugin's `data/` directory via logical validation.
-
-## 4. The Event System (Observer Pattern)
-
-The `EventBus` is an asynchronous implementation of the Observer pattern.
-
-### Advanced Features:
-- **Priorities**: Handlers with higher priority integers are executed first.
-- **Propagation Control**: Handlers can call `event.stop_propagation()` to prevent the event from reaching subsequent handlers.
-- **System Hooks**: Internal kernel events (e.g., `xcore.plugins.booted`) allow services to react to the framework's state changes.
-- **Async & Sync Emission**: Supports `await bus.emit()` (parallel execution) and `bus.emit_sync()` (fire-and-forget).
-
-## 5. Service Lifecycle & Dependency Injection
-
-The `ServiceContainer` manages shared resources.
-- **Init Order**: Database -> Cache -> Scheduler -> Extensions.
-- **Shutdown Order**: Inverse of initialization.
-- **Scoping**: Services can be `public` (accessible to all plugins) or `private` (restricted to the kernel).
-- **Injection**: Plugins receive a reference to the container via `self.ctx.services`.
-
-## 6. Logic Flow Diagrams
-
-### Plugin Call Sequence (JSON-RPC over IPC)
+The framework follows a strict initialization sequence to ensure all dependencies are resolved before plugins start.
 
 ```mermaid
 sequenceDiagram
-    participant K as Kernel
-    participant PS as PluginSupervisor
-    participant SM as SandboxManager
-    participant W as SandboxWorker (Sub-process)
-    participant P as Plugin Code
+    participant App as FastAPI/Main
+    participant X as Xcore Engine
+    participant S as Services (DB/Cache)
+    participant L as PluginLoader
+    participant P as Plugins
 
-    K->>PS: call("sandbox_plugin", "task", payload)
-    PS->>SM: invoke(action, payload)
-    SM->>W: Send JSON-RPC Command (Pipe)
-    W->>P: execute(action, payload)
-    P-->>W: dict result
-    W-->>SM: Send JSON-RPC Response (Pipe)
-    SM-->>PS: parse result
-    PS-->>K: return response
+    App->>X: boot(app)
+    X->>S: Initialize Infrastructure
+    S-->>X: Services Ready
+    X->>L: Discover Plugins
+    L->>L: Build Dependency DAG
+    L->>L: Topological Sort
+    loop Wave Execution
+        L->>P: Load & Activate (Trusted/Sandbox)
+        P-->>L: Registration Complete
+    end
+    X->>App: Mount Plugin Routers
+    App-->>X: Server Ready
 ```
 
-### Dependency Resolution (Kahn's Algorithm)
+---
+
+## 3. Plugin Lifecycle State Machine
+
+Each plugin is managed by a Finite State Machine (FSM) to ensure safe transitions during hot-reloads or failures.
+
+```mermaid
+stateDiagram-v2
+    [*] --> UNLOADED
+    UNLOADED --> LOADING: supervisor.load()
+    LOADING --> READY: on_load() Success
+    LOADING --> FAILED: Scan/Syntax Error
+    READY --> RELOADING: supervisor.reload()
+    RELOADING --> READY: Update Successful
+    RELOADING --> FAILED: Update Error
+    READY --> UNLOADED: supervisor.unload()
+    FAILED --> UNLOADED: Cleanup
+    FAILED --> RELOADING: Retry
+```
+
+---
+
+## 4. Cross-Plugin Communication (IPC)
+
+When Plugin A calls Plugin B, the call is never direct. It passes through the kernel's **Supervisor Pipeline**.
+
+### The Middleware Stack
+1.  **Tracing**: Generates a new span (or continues an existing one).
+2.  **Rate Limiting**: Checks if the caller has exceeded its quota.
+3.  **Permission Audit**: Validates if the caller is authorized to call the target action.
+4.  **Retry Logic**: Wraps the call to handle transient failures.
 
 ```mermaid
 graph LR
-    P1[Plugin A] --> P2[Plugin B]
-    P3[Plugin C] --> P1
-    P3 --> P2
-    P4[Plugin D] --> P3
+    subgraph Caller["Plugin A"]
+        A[Code]
+    end
 
-    subgraph "Load Wave 1"
-    P2
+    subgraph Kernel["XCore Supervisor"]
+        M1[Tracing] --> M2[Rate Limit]
+        M2 --> M3[Permissions]
+        M3 --> M4[Retry]
     end
-    subgraph "Load Wave 2"
-    P1
+
+    subgraph Target["Plugin B"]
+        B[Handler]
     end
-    subgraph "Load Wave 3"
-    P3
-    end
-    subgraph "Load Wave 4"
-    P4
-    end
+
+    A -- "ctx.plugins.call()" --> M1
+    M4 -- "execute" --> B
+    B -- "result" --> A
 ```
+
+---
+
+## 5. Sandboxing Model
+
+Sandboxed plugins run in a dedicated OS process. This provides the highest level of isolation.
+
+-   **Transport**: JSON-RPC 2.0 over OS Pipes (stdin/stdout).
+-   **Security**: The kernel performs AST (Abstract Syntax Tree) scanning on the plugin code before spawning the process to block dangerous modules (e.g., `os`, `subprocess`) and attributes (e.g., `__class__`).
+-   **Resources**: Memory and execution time are monitored by the kernel; workers are killed if they exceed limits.
+
+---
+
+## 6. Service Scoping
+
+Services registered in the `ServiceContainer` can have different visibility levels:
+
+| Scope | Description | Access |
+| :--- | :--- | :--- |
+| **Public** | General infrastructure. | All plugins + Kernel. |
+| **Private** | Kernel-internal services. | Kernel only. |
+| **Scoped** | Restricted to specific plugins. | Authorized plugins only. |
+
+By default, core services like `db` and `cache` are **Public**, allowing all plugins to benefit from shared connections and caching strategies.
