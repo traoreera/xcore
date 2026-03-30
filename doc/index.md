@@ -1,65 +1,67 @@
-# XCore Framework
+# XCore Framework Documentation
 
-**XCore** is a production-grade, plugin-first Python framework built on top of FastAPI. It is designed for developers who need to build highly extensible, secure, and modular applications.
+Welcome to **XCore** — a production-grade, plugin-first Python framework built on FastAPI.
 
----
+## What is XCore?
 
-<div class="grid cards" hide-on-toc markdown>
+XCore is a modular orchestration framework designed to load, isolate, and manage plugins in a secure sandboxed environment. It enables building extensible applications where each feature can be developed, tested, and deployed independently.
 
--   :material-rocket-launch:{ .lg .middle } __High Performance__
+## Key Features
 
-    Built on FastAPI and asyncio for maximum throughput and minimal overhead.
+- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restart
+- **🔒 Sandboxing & Security** — Isolated execution with process limits, timeouts, and automatic restarts
+- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more
+- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system events
+- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints
+- **♻️ Hot Reloading** — Automatic file watching for development
+- **📊 Production Ready** — YAML configuration, environment variables, structured logging, metrics
 
--   :material-shield-lock:{ .lg .middle } __Secure by Design__
+## Quick Start
 
-    Multi-layer sandboxing, AST-based code validation, and granular permission engine.
+```bash
+# Install dependencies
+poetry install
 
--   :material-puzzle-outline:{ .lg .middle } __Plugin-First Architecture__
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
 
-    Everything is a plugin. Load, unload, and hot-reload components without downtime.
+# Run development server
+poetry run uvicorn app:app --reload --port 8082
+```
 
--   :material-lan:{ .lg .middle } __Built-in Services__
+## Documentation Structure
 
-    Native support for SQL/NoSQL databases, Redis caching, and task scheduling.
+```
+docs/
+├── getting-started/     # Installation and first steps
+├── guides/             # How-to guides
+├── reference/          # API reference and configuration
+├── architecture/       # System architecture and design
+├── development/        # Development guidelines
+├── deployment/         # Production deployment
+└── examples/           # Code examples and tutorials
+```
 
-</div>
-
----
-
-## Why XCore?
-
-Modern applications often struggle with monolithic designs or overly complex microservices. XCore provides a middle ground: a **Modular Monolith** architecture where features are decoupled as plugins but run within a unified, orchestrated environment.
-
-### Core Philosophy
-
-1.  **Isolation**: Plugins can run in trusted mode (main process) or sandboxed mode (isolated OS process).
-2.  **Orchestration**: A central kernel manages lifecycle, dependencies (DAG), and cross-plugin communication.
-3.  **Observability**: Out-of-the-box support for structured logging, Prometheus metrics, and OpenTelemetry tracing.
-4.  **Developer Experience**: A powerful CLI and SDK make building and testing plugins a breeze.
-
----
-
-## Technical Overview
+## Project Architecture
 
 ```mermaid
 graph TB
-    subgraph XCore_Kernel["XCore Kernel (Orchestrator)"]
-        X[Xcore Engine]
-        SC[Service Container]
-        PS[Plugin Supervisor]
-        EB[Event Bus]
-        PE[Permission Engine]
+    subgraph XCore["XCore Framework"]
+        X[Xcore Orchestrator]
+        SC[ServiceContainer]
+        PS[PluginSupervisor]
+        EB[EventBus]
     end
 
-    subgraph Infrastructure["Shared Services"]
-        DB[(SQL/NoSQL DB)]
-        CACHE[(Redis/Memory Cache)]
-        SCHED[APScheduler]
-        EXT[Custom Extensions]
+    subgraph Services["Built-in Services"]
+        DB[(Database)]
+        CACHE[(Cache)]
+        SCHED[Scheduler]
+        EXT[Extensions]
     end
 
-    subgraph Plugin_Layer["Plugin Ecosystem"]
-        direction LR
+    subgraph Plugins["Plugin Layer"]
         T[Trusted Plugins]
         S[Sandboxed Plugins]
     end
@@ -67,56 +69,32 @@ graph TB
     X --> SC
     X --> PS
     X --> EB
-    X --> PE
-    SC --> Infrastructure
-    PS --> Plugin_Layer
-    EB -.-> Plugin_Layer
-    PE -.-> PS
+    SC --> Services
+    PS --> Plugins
+    EB --> PS
+    EB --> SC
 
-    FA[FastAPI Application] ==> X
+    FA[FastAPI App] --> X
 ```
 
----
+## Next Steps
 
-## Getting Started in 3 Steps
+- [Installation Guide](getting-started/installation.md)
+- [Creating Your First Plugin](guides/creating-plugins.md)
+- [Configuration Reference](reference/configuration.md)
+- [Architecture Overview](architecture/overview.md)
+- [Versions & Changelog](versions.md)
 
-### 1. Install the Framework
-```bash
-pip install xcore-framework
-# or using poetry
-poetry add xcore-framework
-```
+## Versions
 
-### 2. Configure Your App
-Create an `xcore.yaml` to define your services and plugin directory.
-```yaml
-app:
-  name: "My App"
-services:
-  cache:
-    backend: "memory"
-```
+- **Stable**: v2.0.0 — Architecture plugin-first avec sandboxing
+- [Historique complet](versions.md)
 
-### 3. Create Your First Plugin
-Define a `plugin.yaml` and a `main.py`, then boot the framework.
-```python
-from xcore import Xcore
-from fastapi import FastAPI
+## Community & Support
 
-app = FastAPI()
-core = Xcore()
+- GitHub Issues: [Report bugs or request features](https://github.com/traoreera/xcore/issues)
+- Discussions: [Community forum](https://github.com/traoreera/xcore/discussions)
 
-@app.on_event("startup")
-async def startup():
-    await core.boot(app)
-```
+## License
 
----
-
-## Explore the Documentation
-
-*   [**Installation Guide**](getting-started/installation.md) - Set up your environment.
-*   [**Plugin SDK**](reference/sdk.md) - Learn how to build plugins.
-*   [**Architecture**](architecture/overview.md) - Understand the internals.
-*   [**Security**](guides/security.md) - Deep dive into the sandboxing model.
-*   [**Examples**](examples/README.md) - Real-world plugin implementations.
+XCore is released under the [MIT License](./LICENSE).

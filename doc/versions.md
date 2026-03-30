@@ -1,228 +1,228 @@
-# XCore Versions
+# Versions de XCore
 
-This page lists the version history of the XCore framework, major changes, and update notes.
+Cette page liste l'historique des versions du framework XCore, les changements majeurs et les notes de mise à jour.
 
-## Current Version
+## Version Actuelle
 
 ### XCore v2.0.0 (Stable)
 
-**Release Date**: March 2025
+**Date de sortie** : Mars 2025
 
-**Status**: ✅ Stable and Recommended
+**Statut** : ✅ Stable et recommandée
 
-Version 2.0 is a complete rewrite of the framework with a plugin-first architecture, a reinforced sandboxing system, and native service integration.
+La version 2.0 est une refonte complète du framework avec une architecture plugin-first, un système de sandboxing renforcé et une intégration native des services.
 
-#### Main Features
+#### Fonctionnalités principales
 
-- **🏗️ Plugin-First Architecture** — The core is minimal; all features are implemented as plugins.
-- **🔒 Sandboxing System** — Isolated plugin execution with AST and IPC restrictions.
-- **⚡ Native FastAPI Integration** — Plugins can expose their own HTTP routes seamlessly.
-- **🔄 Hot Reloading** — Dynamic plugin reloading without server restarts.
-- **📊 Built-in Observability** — Structured logging, Prometheus metrics, and OpenTelemetry tracing.
-- **🗄️ Multi-Database Support** — Support for PostgreSQL, MySQL, SQLite, MongoDB, and Redis.
-- **⏰ Integrated Scheduler** — APScheduler with Redis persistence.
-- **🔐 Reinforced Security** — HMAC signatures, granular permissions, and rate limiting.
+- **🏗️ Architecture Plugin-First** — Le noyau est minimal, toutes les fonctionnalités sont des plugins
+- **🔒 Système de Sandboxing** — Exécution isolée des plugins avec restrictions AST et IPC
+- **⚡ Intégration FastAPI native** — Les plugins peuvent exposer leurs propres routes HTTP
+- **🔄 Hot Reloading** — Rechargement à chaud des plugins sans redémarrage serveur
+- **📊 Observabilité intégrée** — Logs structurés, métriques Prometheus, tracing OpenTelemetry
+- **🗄️ Multi-base de données** — Support PostgreSQL, MySQL, SQLite, MongoDB, Redis
+- **⏰ Scheduler intégré** — APScheduler avec persistance Redis
+- **🔐 Sécurité renforcée** — Signatures HMAC, permissions granulaires, rate limiting
 
-#### Changes from v1.x
+#### Changements par rapport à v1.x
 
-| Feature | v1.x | v2.0 |
-|---------|------|------|
-| Architecture | Monolithic | Plugin-first |
-| Isolation | Basic Process | AST Sandboxing + IPC |
-| HTTP Routes | Limited | Full via `get_router()` |
-| Plugin Types | Trusted Only | Trusted + Sandboxed |
-| Configuration | Python-only | YAML + Environment |
-| Database | SQL Only | SQL + NoSQL + Cache |
-| EventBus | Basic | Priorities + Hooks |
-| Reloading | Manual | Automatic (Watchdog) |
+| Fonctionnalité | v1.x | v2.0 |
+|----------------|------|------|
+| Architecture | Monolithique | Plugin-first |
+| Isolation | Processus basique | Sandboxing AST + IPC |
+| Routes HTTP | Limité | Complet via `get_router()` |
+| Types de plugins | Trusted uniquement | Trusted + Sandboxed |
+| Configuration | Python-only | YAML + Environnement |
+| Base de données | SQL uniquement | SQL + NoSQL + Cache |
+| EventBus | Basique | Priorités + Hooks |
+| Reloading | Manuel | Automatique (watchdog) |
 
-#### Migration from v1.x
+#### Migration depuis v1.x
 
-See the detailed migration guide in [Migrations](#migration-from-v1x).
+Voir le guide de migration détaillé dans [Migrations](#migration-depuis-v1x).
 
 ---
 
-## Version History
+## Historique des versions
 
 ### v2.0.0 (2025-03-21)
 
-**Major New Features**
+**Nouveautés majeures**
 
-- Complete architectural shift to plugin-first.
-- Introduction of the sandboxing system with process-level isolation.
-- Support for Sandboxed plugins via IPC.
-- Full FastAPI integration with automatic router mounting.
-- ServiceContainer with typed dependency injection.
-- EventBus with priorities (HIGH, NORMAL, LOW).
-- HookManager for filters and actions.
-- PermissionEngine for granular access control.
-- Per-plugin RateLimiter with YAML configuration.
-- Integrated health checks for all services.
-- Redis support as a cache and scheduler backend.
-- Comprehensive CLI (`xcore plugin`, `xcore sandbox`, `xcore services`).
-- Auto-discovery and automatic plugin loading.
+- Refonte complète de l'architecture vers plugin-first
+- Introduction du système de sandboxing avec isolation par processus
+- Support des plugins Sandboxed via IPC
+- Intégration complète de FastAPI avec montage automatique des routers
+- ServiceContainer avec injection de dépendances typée
+- EventBus avec priorités (HIGH, NORMAL, LOW)
+- HookManager pour filtres et actions
+- PermissionEngine pour contrôle d'accès granulaire
+- RateLimiter par plugin avec configuration YAML
+- Health checks intégrés pour tous les services
+- Support Redis comme backend de cache et scheduler
+- CLI complet (`xcore plugin`, `xcore sandbox`, `xcore services`)
+- Auto-discovery et chargement automatique des plugins
 
 **Breaking Changes**
 
-- The `Plugin` class from v1 is replaced by `TrustedBase`.
-- Imports have changed: `from xcore import Xcore, TrustedBase`.
-- Configuration file moved from `config.py` to `xcore.yaml`.
-- Plugins must now define a `plugin.yaml` manifest.
+- La classe `Plugin` de v1 est remplacée par `TrustedBase`
+- Les imports ont changé : `from xcore import Xcore, TrustedBase`
+- Le fichier de configuration passe de `config.py` à `xcore.yaml`
+- Les plugins doivent maintenant définir un `plugin.yaml`
 
-**Fixes**
+**Corrections**
 
-- Complete plugin isolation (no module name conflicts).
-- Clean lifecycle management (load/reload/unload).
-- Memory leaks fixed during reloading.
+- Isolation complète des plugins (pas de conflits de noms de modules)
+- Gestion propre du cycle de vie (load/reload/unload)
+- Memory leaks corrigés lors du rechargement
 
 ---
 
 ### v1.2.0 (2024-11-15)
 
-**New Features**
+**Nouveautés**
 
-- Support for Python 3.12.
-- Performance improvements for PluginLoader.
-- New CLI commands.
+- Support Python 3.12
+- Améliorations de performance du PluginLoader
+- Nouvelles commandes CLI
 
-**Fixes**
+**Corrections**
 
-- Memory leak in plugin reloading.
-- Race condition in EventBus.
+- Fuite mémoire dans le rechargement des plugins
+- Race condition dans l'EventBus
 
 ---
 
 ### v1.1.0 (2024-08-20)
 
-**New Features**
+**Nouveautés**
 
-- Redis support for distributed cache.
-- Logging system improvements.
-- MkDocs documentation.
+- Support Redis pour le cache distribué
+- Améliorations du système de logs
+- Documentation MkDocs
 
-**Fixes**
+**Corrections**
 
-- Async DB connection issue.
-- Timeouts too short for some plugins.
+- Problème de connexion DB en async
+- Timeout trop court pour certains plugins
 
 ---
 
 ### v1.0.0 (2024-06-01)
 
-**First Stable Version**
+**Première version stable**
 
-- Basic plugin system.
-- Support for PostgreSQL and SQLite.
-- Simple EventBus.
-- Python-based configuration.
-- Minimal CLI.
+- Système de plugins basique
+- Support PostgreSQL et SQLite
+- EventBus simple
+- Configuration par code Python
+- CLI minimal
 
 ---
 
 ### v0.9.0-beta (2024-04-10)
 
-**Initial Beta Version**
+**Version bêta initiale**
 
-- Core architecture.
-- Dynamic plugin loading.
-- Basic FastAPI support.
-
----
-
-## Roadmap
-
-### v2.1.0 (Planned - Q2 2025)
-
-**Planned Features**
-
-- [ ] Integrated Plugin Marketplace.
-- [ ] GraphQL support for plugins.
-- [ ] Native WebSocket for real-time communication.
-- [ ] Automatic auto-scaling of sandbox workers.
-- [ ] Web-based monitoring dashboard.
-
-### v2.2.0 (Planned - Q3 2025)
-
-**Planned Features**
-
-- [ ] gRPC support for inter-service communication.
-- [ ] Integrated Circuit Breaker.
-- [ ] End-to-end encryption for IPC.
-- [ ] Plugin marketplace with automatic verification.
-
-### v3.0.0 (Planned - 2026)
-
-**Long-term Goals**
-
-- WebAssembly support for ultra-isolated plugins.
-- Distributed XCore (multi-node cluster).
-- Integrated Machine Learning for auto-scaling.
+- Architecture de base
+- Chargement dynamique de plugins
+- Support FastAPI basique
 
 ---
 
-## Support Policy
+## Feuille de route
 
-| Version | Status | Supported Until |
+### v2.1.0 (Prévue - Q2 2025)
+
+**Fonctionnalités prévues**
+
+- [ ] Marketplace de plugins intégré
+- [ ] Support GraphQL pour les plugins
+- [ ] WebSocket natif pour communication temps réel
+- [ ] Autoscaling automatique des workers sandbox
+- [ ] Dashboard web de monitoring
+
+### v2.2.0 (Prévue - Q3 2025)
+
+**Fonctionnalités prévues**
+
+- [ ] Support gRPC pour communication inter-services
+- [ ] Circuit breaker intégré
+- [ ] Chiffrement de bout en bout pour IPC
+- [ ] Plugin marketplace avec vérification automatique
+
+### v3.0.0 (Prévue - 2026)
+
+**Objectifs à long terme**
+
+- Support WebAssembly pour plugins ultra-isolés
+- Distributed XCore (cluster multi-nœuds)
+- Machine Learning intégré pour auto-scaling
+
+---
+
+## Politique de support
+
+| Version | Statut | Support jusqu'au |
 |---------|--------|------------------|
-| v2.0.x | ✅ Active | March 2026 |
-| v1.2.x | 🛟 Maintenance | June 2025 |
-| v1.1.x | ❌ End of Life | November 2024 |
-| v1.0.x | ❌ End of Life | August 2024 |
-| < v1.0 | ❌ End of Life | June 2024 |
+| v2.0.x | ✅ Active | Mars 2026 |
+| v1.2.x | 🛟 Maintenance | Juin 2025 |
+| v1.1.x | ❌ Fin de vie | Novembre 2024 |
+| v1.0.x | ❌ Fin de vie | Août 2024 |
+| < v1.0 | ❌ Fin de vie | Juin 2024 |
 
-**Legend**:
+**Légende** :
 
-- ✅ **Active** — Receives all fixes and new features.
-- 🛟 **Maintenance** — Security fixes only.
-- ❌ **End of Life** — No longer supported; update recommended.
+- ✅ **Active** — Reçoit toutes les corrections et nouvelles fonctionnalités
+- 🛟 **Maintenance** — Corrections de sécurité uniquement
+- ❌ **Fin de vie** — Plus de support, mise à jour recommandée
 
 ---
 
-## Detailed Release Notes
+## Notes de publication détaillées
 
 ### XCore v2.0.0
 
-#### Kernel Architecture
+#### Architecture Kernel
 
-The XCore v2 kernel is designed around several key components:
+Le noyau XCore v2 est conçu autour de plusieurs composants clés :
 
 ```
 XCore
-├── PluginSupervisor      # Plugin orchestration
-├── ServiceContainer      # Service management
-├── EventBus             # Event-driven communication
-├── HookManager          # Hooks and filters
-└── PluginRegistry       # Plugin registry
+├── PluginSupervisor      # Orchestration des plugins
+├── ServiceContainer      # Gestion des services
+├── EventBus             # Communication événementielle
+├── HookManager          # Hooks et filtres
+└── PluginRegistry       # Registre des plugins
 ```
 
-#### Plugin Types
+#### Types de plugins
 
 **Trusted Plugins**
 
-- Run in the main process.
-- Full access to services.
-- Can expose HTTP routes.
-- HMAC signature required in strict mode.
+- Exécution dans le processus principal
+- Accès complet aux services
+- Peuvent exposer des routes HTTP
+- Signature HMAC requise en mode strict
 
 **Sandboxed Plugins**
 
-- Run in isolated processes.
-- AST restrictions on imports.
-- Communication via IPC.
-- Resource limits (memory, CPU, time).
+- Exécution dans processus isolé
+- Restrictions AST sur les imports
+- Communication via IPC
+- Limites de ressources (mémoire, CPU, temps)
 
-#### Integrated Services
+#### Services intégrés
 
 | Service | Description | Configuration |
 |---------|-------------|---------------|
-| Database | SQL and NoSQL | `services.databases` |
-| Cache | Memory or Redis | `services.cache` |
-| Scheduler | Scheduled tasks | `services.scheduler` |
-| Extensions | Custom services | `services.extensions` |
+| Database | SQL et NoSQL | `services.databases` |
+| Cache | Memory ou Redis | `services.cache` |
+| Scheduler | Tâches planifiées | `services.scheduler` |
+| Extensions | Services custom | `services.extensions` |
 
-#### Migration from v1.x
+#### Migration depuis v1.x
 
-**Step 1**: Update imports
+**Étape 1** : Mettre à jour les imports
 
 ```python
 # v1.x
@@ -232,20 +232,20 @@ from xcore import Plugin
 from xcore import TrustedBase
 ```
 
-**Step 2**: Create `plugin.yaml`
+**Étape 2** : Créer le fichier `plugin.yaml`
 
 ```yaml
 # plugin.yaml
-name: my_plugin
+name: mon_plugin
 version: "2.0.0"
 execution_mode: trusted
 entry_point: src/main.py
 ```
 
-**Step 3**: Migrate configuration
+**Étape 3** : Migrer la configuration
 
 ```yaml
-# xcore.yaml (new)
+# xcore.yaml (nouveau)
 app:
   name: my-app
   env: production
@@ -260,7 +260,7 @@ services:
       url: "${DATABASE_URL}"
 ```
 
-**Step 4**: Adapt lifecycle hooks
+**Étape 4** : Adapter le cycle de vie
 
 ```python
 # v1.x
@@ -279,65 +279,65 @@ class Plugin(TrustedBase):
 
 ---
 
-## Specific Version Installation
+## Installation des versions spécifiques
 
 ### Via Poetry
 
 ```bash
-# Latest version
+# Dernière version
 poetry add xcore
 
-# Specific version
+# Version spécifique
 poetry add xcore@2.0.0
 
-# Version constraint
+# Version avec contrainte
 poetry add "xcore@^2.0"
 ```
 
 ### Via pip
 
 ```bash
-# Latest version
+# Dernière version
 pip install xcore
 
-# Specific version
+# Version spécifique
 pip install xcore==2.0.0
 
-# Minimum version
+# Version minimale
 pip install "xcore>=2.0.0"
 ```
 
 ### Via git
 
 ```bash
-# Latest stable version
+# Dernière version stable
 git clone https://github.com/traoreera/xcore.git
 cd xcore
 poetry install
 
-# Specific tag
+# Tag spécifique
 git checkout v2.0.0
 poetry install
 ```
 
 ---
 
-## Reporting Issues
+## Signalement de problèmes
 
-If you encounter issues with a specific version:
+Si vous rencontrez des problèmes avec une version spécifique :
 
-1. Check [GitHub issues](https://github.com/traoreera/xcore/issues).
-2. Verify if the issue exists in the latest version.
-3. Create an issue including:
-   - XCore version.
-   - Python version.
-   - Operating system.
-   - Description of the issue.
-   - Reproduction code.
+1. Consultez les [issues GitHub](https://github.com/traoreera/xcore/issues)
+2. Vérifiez si le problème existe dans la dernière version
+3. Créez une issue avec :
+   - Version de XCore
+   - Version de Python
+   - Système d'exploitation
+   - Description du problème
+   - Code de reproduction
 
 ---
 
-## Verify Your Version
+## Vérifier votre version
 
 ```python
 import xcore
@@ -346,7 +346,7 @@ print(xcore.__version__)       # "2.0.0"
 print(xcore.__version_info__)  # (2, 0, 0)
 ```
 
-Via CLI:
+Via CLI :
 
 ```bash
 poetry run xcore --version
@@ -355,7 +355,7 @@ poetry run xcore --version
 
 ---
 
-## Compatibility
+## Compatibilité
 
 ### Python
 
@@ -366,7 +366,7 @@ poetry run xcore --version
 | v1.1.x | ✅ | ⚠️ | ❌ |
 | v1.0.x | ✅ | ❌ | ❌ |
 
-### Major Dependencies
+### Dépendances majeures
 
 | XCore | FastAPI | SQLAlchemy | Pydantic |
 |-------|---------|------------|----------|
@@ -377,18 +377,18 @@ poetry run xcore --version
 
 ---
 
-## Contributing
+## Contribuer
 
-To contribute to XCore development:
+Pour contribuer au développement de XCore :
 
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing`).
-3. Commit your changes (`git commit -m 'Add amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing`).
-5. Open a Pull Request.
+1. Fork le repository
+2. Créez une branche feature (`git checkout -b feature/amazing`)
+3. Committez vos changements (`git commit -m 'Add amazing feature'`)
+4. Push vers la branche (`git push origin feature/amazing`)
+5. Ouvrez une Pull Request
 
-See the [contribution guide](development/contributing.md) for more details.
+Voir le [guide de contribution](development/contributing.md) pour plus de détails.
 
 ---
 
-*Last updated: March 21, 2025*
+*Dernière mise à jour de cette page : 21 Mars 2025*

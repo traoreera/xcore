@@ -1,40 +1,39 @@
-# XCore Plugin Examples
+# Exemples de Plugins XCore
 
-This directory contains complete examples of plugins for the XCore framework, illustrating different execution modes and advanced patterns.
+Ce répertoire contient des exemples complets de plugins pour le framework XCore, illustrant les différents modes d'exécution et les patterns avancés.
 
-## Table of Contents
+## Table des Matières
 
-| Example | Mode | Complexity | Description |
+| Exemple | Mode | Complexité | Description |
 |---------|------|------------|-------------|
-| [Basic Plugin](./basic-plugin.md) | Trusted | Beginner | Simple calculator plugin with HTTP and IPC endpoints. |
-| [Trusted Plugin](./trusted-plugin.md) | **Trusted** | Advanced | Task manager with separate `router.py` and `.env` configuration. |
-| [Sandboxed Plugin](./sandboxed-plugin.md) | **Sandboxed** | Advanced | Secure document converter with process isolation. |
-| [Complete Plugin](./complete-plugin.md) | **Trusted** | Advanced | Email notification service with event integration. |
+| [basic-plugin](./basic-plugin.md) | Trusted | Débutant | Plugin calculatrice simple avec HTTP et IPC |
+| [trusted-plugin](./trusted-plugin.md) | **Trusted** | Avancé | Gestionnaire de tâches avec router.py séparé et .env |
+| [sandboxed-plugin](./sandboxed-plugin.md) | **Sandboxed** | Avancé | Convertisseur de documents sécurisé |
 
 ---
 
-## Choosing the Execution Mode
+## Choix du Mode d'Exécution
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Which mode to choose?                        │
+│                    Quel mode choisir ?                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌──────────────┐          ┌──────────────────┐               │
 │  │   Trusted    │          │    Sandboxed     │               │
 │  │              │          │                  │               │
-│  │ • DB Access  │          │ • Max Isolation  │               │
-│  │ • Services   │          │ • Resource       │               │
-│  │ • Extended   │          │   Limits         │               │
-│  │   Filesystem │          │ • Import         │               │
-│  │              │          │   Whitelist      │               │
+│  │ • Accès DB   │          │ • Isolation max  │               │
+│  │ • Services   │          │ • Ressources     │               │
+│  │ • Filesystem │          │   limitées       │               │
+│  │   étendu     │          │ • Liste blanche  │               │
+│  │              │          │   imports        │               │
 │  └──────┬───────┘          └────────┬─────────┘               │
 │         │                           │                          │
 │         ▼                           ▼                          │
 │  ┌─────────────────┐      ┌────────────────────┐              │
-│  │ User Management │      │ File Processing    │              │
-│  │ Notifications   │      │ Doc Conversion     │              │
-│  │ Complex Caching │      │ Code Execution     │              │
+│  │ Gestion users   │      │ Traitement fichiers│              │
+│  │ Notifications   │      │ Conversion docs    │              │
+│  │ Cache complexe  │      │ Exécution code     │              │
 │  │ Analytics       │      │ Compression        │              │
 │  └─────────────────┘      └────────────────────┘              │
 │                                                                 │
@@ -43,56 +42,56 @@ This directory contains complete examples of plugins for the XCore framework, il
 
 ---
 
-## Typical Plugin Structure
+## Structure Type d'un Plugin
 
-### Trusted Mode (with .env)
+### Mode Trusted (avec .env)
 
 ```
-plugins/my_plugin/
-├── plugin.yaml          # Manifest + structural config
-├── .env                 # Sensitive variables (not committed)
+plugins/mon_plugin/
+├── plugin.yaml          # Manifest + config structurelle
+├── .env                 # Variables sensibles (non commité)
 ├── src/
 │   ├── __init__.py
-│   ├── main.py         # Entry point, lifecycle
-│   ├── router.py       # FastAPI HTTP routes
-│   ├── services.py     # Business logic
-│   └── models.py       # Dataclasses/Pydantic models
-└── data/               # Local persistence
+│   ├── main.py         # Point d'entrée, cycle de vie
+│   ├── router.py       # Routes HTTP FastAPI
+│   ├── services.py     # Logique métier
+│   └── models.py       # Dataclasses/Pydantic
+└── data/               # Persistence locale
     └── ...
 ```
 
-### Sandboxed Mode
+### Mode Sandboxed
 
 ```
-plugins/my_plugin/
-├── plugin.yaml          # Manifest with restrictions
+plugins/mon_plugin/
+├── plugin.yaml          # Manifest avec restrictions
 ├── src/
 │   ├── __init__.py
-│   ├── main.py         # Sandboxed Plugin
-│   ├── router.py       # HTTP Routes
-│   └── logic.py        # Isolated logic
-└── data/temp/          # Temporary workspace
+│   ├── main.py         # Plugin Sandboxed
+│   ├── router.py       # Routes HTTP
+│   └── converter.py    # Logique isolée
+└── data/temp/          # Zone de travail temporaire
 ```
 
 ---
 
-## Pattern: Separate Router.py
+## Pattern Router.py Séparé
 
-Advanced examples utilize a pattern of separating HTTP routes from core logic.
+Les deux exemples avancés utilisent un pattern de séparation des routes HTTP :
 
-### Benefits
+### Avantages
 
-1.  **Separation of Concerns**: HTTP routing is isolated from business logic.
-2.  **Testability**: Routes can be tested independently.
-3.  **Readability**: `main.py` remains focused on lifecycle and IPC actions.
-4.  **Reusability**: Business logic can be used without the HTTP layer.
+1. **Séparation des responsabilités** : Le routage HTTP est isolé de la logique métier
+2. **Testabilité** : Les routes peuvent être testées indépendamment
+3. **Lisibilité** : Le fichier `main.py` reste concentré sur le cycle de vie et les actions IPC
+4. **Réutilisation** : La logique métier peut être utilisée sans HTTP
 
-### Implementation
+### Implémentation
 
 ```python
 # src/router.py
 def create_router(plugin_instance) -> APIRouter:
-    router = APIRouter(prefix="/api", tags=["my-plugin"])
+    router = APIRouter(prefix="/api", tags=["mon-plugin"])
 
     @router.get("/items")
     async def list_items():
@@ -109,7 +108,7 @@ class Plugin(TrustedBase):
 
 ---
 
-## Pattern: Configuration via .env (Trusted only)
+## Pattern Configuration via .env (Trusted uniquement)
 
 ### Structure
 
@@ -120,18 +119,18 @@ env:
   API_KEY: ""
 
 envconfiguration:
-  inject: true        # Injects variables into ctx.env
-  required: true      # Fails if .env is missing
+  inject: true        # Injecte les variables dans ctx.env
+  required: true    # Échoue si .env manquant
 ```
 
 ```bash
-# .env (not committed)
+# .env (non commité)
 DB_POOL_SIZE=20
 API_KEY=sk_live_xxx
 SECRET_KEY=super_secret
 ```
 
-### Usage
+### Utilisation
 
 ```python
 async def on_load(self):
@@ -143,66 +142,77 @@ async def on_load(self):
 
 ---
 
-## Key Points by Mode
+## Points Clés par Mode
 
 ### Trusted
 
-- ✅ Full access to services (DB, Cache, Email, Scheduler).
-- ✅ Configurable filesystem access.
-- ✅ Unlimited Python imports.
-- ✅ Configuration via `.env`.
-- ⚠️ Beware of SQL injection and XSS.
-- ⚠️ Validate all user inputs.
+- ✅ Accès complet aux services (DB, Cache, Email, Scheduler)
+- ✅ Filesystem configurable
+- ✅ Imports Python illimités
+- ✅ Configuration via `.env`
+- ⚠️ Attention aux injections SQL et XSS
+- ⚠️ Valider toutes les entrées utilisateur
 
 ### Sandboxed
 
-- 🔒 Complete system isolation.
-- 🔒 Limited resources (memory, CPU, disk).
-- 🔒 Import whitelisting.
-- 🔒 Operation timeouts.
-- ✅ Ideal for file processing.
-- ❌ No direct DB access.
+- 🔒 Isolation complète du système
+- 🔒 Ressources limitées (mémoire, CPU, disque)
+- 🔒 Liste blanche d'imports
+- 🔒 Timeout sur les opérations
+- ✅ Idéal pour le traitement de fichiers
+- ❌ Pas d'accès DB direct
 
 ---
 
-## Quick Commands
+## Commandes Rapides
 
-### Create a New Plugin
+### Créer un nouveau plugin
 
 ```bash
-# Basic structure
-mkdir -p plugins/my_plugin/src plugins/my_plugin/data
+# Structure de base
+mkdir -p plugins/mon_plugin/src plugins/mon_plugin/data
 
-# Necessary files
-touch plugins/my_plugin/plugin.yaml
-touch plugins/my_plugin/src/__init__.py
-touch plugins/my_plugin/src/main.py
+# Fichiers nécessaires
+touch plugins/mon_plugin/plugin.yaml
+touch plugins/mon_plugin/src/__init__.py
+touch plugins/mon_plugin/src/main.py
 
-# If Trusted with .env
-touch plugins/my_plugin/.env
-echo ".env" >> plugins/my_plugin/.gitignore
+# Si Trusted avec .env
+touch plugins/mon_plugin/.env
+echo ".env" >> plugins/mon_plugin/.gitignore
 ```
 
-### Test a Plugin
+### Tester un plugin
 
 ```bash
-# Start XCore
-make run-dev
+# Démarrer XCore
+python -m xcore.server
 
-# Test HTTP
-curl http://localhost:8082/plugins/my_plugin/health
+# Tester HTTP
+curl http://localhost:8082/plugins/mon_plugin/health
 
-# Test IPC
-curl -X POST http://localhost:8082/app/my_plugin/action \
+# Tester IPC
+curl -X POST http://localhost:8082/app/mon_plugin/action \
   -H "Content-Type: application/json" \
   -d '{"key": "value"}'
 ```
 
 ---
 
-## Additional Resources
+## Ressources Complémentaires
 
-- [Main Documentation](../index.md)
-- [SDK Reference](../reference/sdk.md)
-- [Security Guide](../guides/security.md)
-- [Troubleshooting](../guides/troubleshooting.md)
+- [Documentation Principale](../README.md)
+- [Référence API du SDK](../../xcore/sdk/)
+- [Guide de Sécurité](../security.md)
+- [Dépannage](../troubleshooting.md)
+
+---
+
+## Contributions
+
+Ces exemples sont maintenus par l'équipe XCore. Pour suggérer des améliorations ou signaler des problèmes :
+
+1. Forker le dépôt
+2. Créer une branche (`git checkout -b improve-examples`)
+3. Commiter vos changements
+4. Ouvrir une Pull Request
