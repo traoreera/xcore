@@ -36,11 +36,70 @@ if TYPE_CHECKING:
     from .database.adapters.sql import SQLAdapter
     from .scheduler.service import SchedulerService
 
-from .base import BaseService, ServiceStatus
+from .base import BaseService, BaseServiceProvider, ServiceStatus
 
 logger = logging.getLogger("xcore.services.container")
 
 T = TypeVar("T")
+
+
+class DatabaseServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        if not container._config.databases:
+            return
+        from .database.manager import DatabaseManager
+
+        mgr = DatabaseManager(container._config.databases)
+        await mgr.init()
+        container._services["database"] = mgr
+        for name, adapter in mgr.adapters.items():
+            container._raw[name] = adapter
+        if mgr.adapters:
+            first = next(iter(mgr.adapters.values()))
+            container._raw.setdefault("db", first)
+        logger.info(f"Database : {list(mgr.adapters.keys())}")
+
+
+class CacheServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = container._config.cache
+        if not cfg:
+            return
+        from .cache.service import CacheService
+
+        svc = CacheService(cfg)
+        await svc.init()
+        container._services["cache_service"] = svc
+        container._raw["cache"] = svc
+        logger.info(f"Cache : backend={cfg.backend}")
+
+
+class SchedulerServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = container._config.scheduler
+        if not cfg or not cfg.enabled:
+            return
+        from .scheduler.service import SchedulerService
+
+        svc = SchedulerService(cfg)
+        await svc.init()
+        container._services["scheduler_service"] = svc
+        container._raw["scheduler"] = svc
+        logger.info("Scheduler : prêt")
+
+
+class ExtensionServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        if not container._config.extensions:
+            return
+        from .extensions.loader import ExtensionLoader
+
+        loader = ExtensionLoader(container._config.extensions)
+        await loader.init()
+        container._services["extensions"] = loader
+        for name, ext in loader.extensions.items():
+            container._raw[f"ext.{name}"] = ext
+        logger.info(f"Extensions : {list(loader.extensions.keys())}")
 
 
 class ServiceContainer:
@@ -63,18 +122,23 @@ class ServiceContainer:
         await container.shutdown()
     """
 
-    INIT_ORDER = ["database", "cache", "scheduler", "extensions"]
+    DEFAULT_PROVIDERS = [
+        DatabaseServiceProvider(),
+        CacheServiceProvider(),
+        SchedulerServiceProvider(),
+        ExtensionServiceProvider(),
+    ]
 
     def __init__(self, config: "ServicesConfig") -> None:
         self._config = config
         self._services: dict[str, BaseService] = {}
         self._raw: dict[str, Any] = {}
-        self._providers: dict[str, Any] = {}
+        self._lazy_providers: dict[str, Any] = {}
 
     def register_provider(self, name: str, provider: Any) -> None:
-        """Enregistre un fournisseur de services dynamique."""
-        self._providers[name] = provider
-        logger.debug(f"Provider '{name}' enregistré")
+        """Enregistre un fournisseur de services dynamique (lazy)."""
+        self._lazy_providers[name] = provider
+        logger.debug(f"Lazy Provider '{name}' enregistré")
 
     def register_service(self, name: str, service: Any) -> None:
         """Enregistre manuellement un service dans le conteneur."""
@@ -83,64 +147,15 @@ class ServiceContainer:
             self._services[name] = service
         logger.debug(f"Service '{name}' enregistré manuellement")
 
-    async def init(self) -> None:
-        """Initialise tous les services dans l'ordre."""
-        await self._init_databases()
-        await self._init_cache()
-        await self._init_scheduler()
-        await self._init_extensions()
+    async def init(self, providers: list[BaseServiceProvider] | None = None) -> None:
+        """Initialise tous les services via les providers."""
+        if providers is None:
+            providers = self.DEFAULT_PROVIDERS
+
+        for provider in providers:
+            await provider.init(self)
+
         logger.info(f"✅ Services initialisés : {sorted(self._raw.keys())}")
-
-    # ── Initialisation par couche ──────────────────────────────
-
-    async def _init_databases(self) -> None:
-        if not self._config.databases:
-            return
-        from .database.manager import DatabaseManager
-
-        mgr = DatabaseManager(self._config.databases)
-        await mgr.init()
-        self._services["database"] = mgr
-        for name, adapter in mgr.adapters.items():
-            self._raw[name] = adapter
-        if mgr.adapters:
-            first = next(iter(mgr.adapters.values()))
-            self._raw.setdefault("db", first)
-        logger.info(f"Database : {list(mgr.adapters.keys())}")
-
-    async def _init_cache(self) -> None:
-        cfg = self._config.cache
-        from .cache.service import CacheService
-
-        svc = CacheService(cfg)
-        await svc.init()
-        self._services["cache_service"] = svc
-        self._raw["cache"] = svc
-        logger.info(f"Cache : backend={cfg.backend}")
-
-    async def _init_scheduler(self) -> None:
-        cfg = self._config.scheduler
-        if not cfg.enabled:
-            return
-        from .scheduler.service import SchedulerService
-
-        svc = SchedulerService(cfg)
-        await svc.init()
-        self._services["scheduler_service"] = svc
-        self._raw["scheduler"] = svc
-        logger.info("Scheduler : prêt")
-
-    async def _init_extensions(self) -> None:
-        if not self._config.extensions:
-            return
-        from .extensions.loader import ExtensionLoader
-
-        loader = ExtensionLoader(self._config.extensions)
-        await loader.init()
-        self._services["extensions"] = loader
-        for name, ext in loader.extensions.items():
-            self._raw[f"ext.{name}"] = ext
-        logger.info(f"Extensions : {list(loader.extensions.keys())}")
 
     # ── Accès typé ────────────────────────────────────────────
 
@@ -177,7 +192,7 @@ class ServiceContainer:
             return self._raw[name]
 
         # Recherche dans les providers (Lazy loading)
-        for provider_name, provider in self._providers.items():
+        for provider_name, provider in self._lazy_providers.items():
             if hasattr(provider, "provide"):
                 svc = provider.provide(name)
                 if svc is not None:
@@ -188,7 +203,7 @@ class ServiceContainer:
         raise KeyError(
             f"Service '{name}' indisponible.\n"
             f"  Disponibles : {sorted(self._raw.keys())}\n"
-            f"  Providers actifs : {list(self._providers.keys())}\n"
+            f"  Providers actifs : {list(self._lazy_providers.keys())}\n"
             f"  Conseil : vérifiez le nom exact dans votre xcore.yaml → databases / services."
         )
 
@@ -255,4 +270,5 @@ class ServiceContainer:
         return {
             "services": {name: svc.status() for name, svc in self._services.items()},
             "registered_keys": sorted(self._raw.keys()),
+            "lazy_providers": list(self._lazy_providers.keys()),
         }

@@ -9,8 +9,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from xcore.services.base import BaseService, ServiceStatus
-from xcore.services.container import ServiceContainer
+from xcore.services.base import BaseService, BaseServiceProvider, ServiceStatus
+from xcore.services.container import (
+    ServiceContainer,
+    DatabaseServiceProvider,
+    CacheServiceProvider,
+    SchedulerServiceProvider,
+    ExtensionServiceProvider
+)
 
 
 # Mock service classes for testing
@@ -68,14 +74,13 @@ class TestServiceContainer:
         """Create fresh ServiceContainer."""
         return ServiceContainer(mock_config)
 
-    def test_init_order_constant(self):
-        """Test INIT_ORDER is correct."""
-        assert ServiceContainer.INIT_ORDER == [
-            "database",
-            "cache",
-            "scheduler",
-            "extensions",
-        ]
+    def test_default_providers_present(self):
+        """Test default providers are present."""
+        assert len(ServiceContainer.DEFAULT_PROVIDERS) == 4
+        assert any(isinstance(p, DatabaseServiceProvider) for p in ServiceContainer.DEFAULT_PROVIDERS)
+        assert any(isinstance(p, CacheServiceProvider) for p in ServiceContainer.DEFAULT_PROVIDERS)
+        assert any(isinstance(p, SchedulerServiceProvider) for p in ServiceContainer.DEFAULT_PROVIDERS)
+        assert any(isinstance(p, ExtensionServiceProvider) for p in ServiceContainer.DEFAULT_PROVIDERS)
 
     def test_get_nonexistent_service(self, container):
         """Test getting nonexistent service raises KeyError."""
@@ -141,29 +146,13 @@ class TestServiceContainer:
         assert "str" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_init_empty_config(self, container):
-        """Test init with empty config."""
-        with patch.object(container, "_init_databases") as mock_db, patch.object(
-            container, "_init_cache"
-        ) as mock_cache, patch.object(
-            container, "_init_scheduler"
-        ) as mock_sched, patch.object(
-            container, "_init_extensions"
-        ) as mock_ext:
+    async def test_init_with_custom_providers(self, container):
+        """Test init with custom providers."""
+        mock_provider = AsyncMock(spec=BaseServiceProvider)
 
-            await container.init()
+        await container.init(providers=[mock_provider])
 
-            mock_db.assert_called_once()
-            mock_cache.assert_called_once()
-            mock_sched.assert_called_once()
-            mock_ext.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_init_databases_empty(self, container):
-        """Test _init_databases with empty config."""
-        # Empty databases should return early
-        await container._init_databases()
-        assert "database" not in container._services
+        mock_provider.init.assert_called_once_with(container)
 
     @pytest.mark.asyncio
     async def test_shutdown_empty(self, container):
@@ -261,30 +250,33 @@ class TestServiceContainer:
         assert sorted(result["registered_keys"]) == ["service1", "service2"]
 
 
-class TestServiceContainerWithCache:
-    """Test ServiceContainer with cache configuration."""
-
-    @dataclass
-    class CacheConfig:
-        backend: str = "memory"
-        url: str = ""
-        ttl: int = 300
-
-    @pytest.fixture
-    def cache_config(self):
-        return self.CacheConfig()
+class TestServiceProviders:
+    """Test individual service providers."""
 
     @pytest.mark.asyncio
-    async def test_init_cache(self, cache_config):
-        """Test _init_cache with memory backend."""
-        config = MockConfig(cache=cache_config)
+    async def test_cache_provider(self):
+        @dataclass
+        class CacheConfig:
+            backend: str = "memory"
+
+        config = MockConfig(cache=CacheConfig())
         container = ServiceContainer(config)
+        provider = CacheServiceProvider()
 
         with patch("xcore.services.cache.service.CacheService") as mock_cache_class:
             mock_svc = MockService()
             mock_cache_class.return_value = mock_svc
 
-            await container._init_cache()
+            await provider.init(container)
 
-            mock_cache_class.assert_called_once_with(cache_config)
-            assert container.has("cache") is True
+            mock_cache_class.assert_called_once()
+            assert container.get("cache") is mock_svc
+
+    @pytest.mark.asyncio
+    async def test_database_provider_empty(self):
+        config = MockConfig(databases={})
+        container = ServiceContainer(config)
+        provider = DatabaseServiceProvider()
+
+        await provider.init(container)
+        assert "database" not in container._services

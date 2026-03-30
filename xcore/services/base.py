@@ -6,7 +6,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .container import ServiceContainer
 
 
 class ServiceStatus(str, Enum):
@@ -77,3 +80,15 @@ class BaseService(ABC):
     @property
     def service_status(self) -> ServiceStatus:
         return self._status
+
+
+class BaseServiceProvider(ABC):
+    """
+    ABC pour les fournisseurs de services xcore.
+    Permet d'encapsuler la logique d'initialisation d'un groupe de services.
+    """
+
+    @abstractmethod
+    async def init(self, container: ServiceContainer) -> None:
+        """Initialise les services et les enregistre dans le conteneur."""
+        ...

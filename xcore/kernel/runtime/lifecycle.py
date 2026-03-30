@@ -176,8 +176,14 @@ class LifecycleManager:
             # rétro-compatibilité v1
             await self._instance.env_variable(self.manifest.env)
 
+        if hasattr(self._instance, "on_init"):
+            await self._instance.on_init()
+
         if hasattr(self._instance, "on_load"):
             await self._instance.on_load()
+
+        if hasattr(self._instance, "on_start"):
+            await self._instance.on_start()
 
         # Collecte le router HTTP custom si le plugin en expose un
         self._collect_router()
@@ -268,8 +274,11 @@ class LifecycleManager:
             raise
 
     async def _do_unload(self) -> None:
-        if self._instance and hasattr(self._instance, "on_unload"):
-            await self._instance.on_unload()
+        if self._instance:
+            if hasattr(self._instance, "on_stop"):
+                await self._instance.on_stop()
+            if hasattr(self._instance, "on_unload"):
+                await self._instance.on_unload()
         module_name = f"xcore_plugin_{self.manifest.name}"
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
@@ -317,7 +326,14 @@ class LifecycleManager:
         if self._instance is None:
             return self._services
 
+        # Récupère les services depuis l'instance (convention _services)
         instance_services: dict = getattr(self._instance, "_services", {})
+
+        # Récupère aussi les services déclarés dans le manifeste (ressources)
+        manifest_services_config = {}
+        if hasattr(self.manifest, "resources") and hasattr(self.manifest.resources, "services"):
+            manifest_services_config = self.manifest.resources.services
+
         if not instance_services:
             return self._services
 
@@ -329,6 +345,26 @@ class LifecycleManager:
                 f"par le noyau : {collisions}"
             )
 
+        # Enregistrement explicite dans le registre pour le scoping/discovery
+        # On le fait AVANT de mettre à jour self._services pour que le registre soit
+        # la source de vérité.
+        if self._registry:
+            for name, obj in instance_services.items():
+                svc_meta = manifest_services_config.get(name, {})
+                scope = svc_meta.get("scope", "public")
+
+                self._registry.register_service(
+                    plugin_name=self.manifest.name,
+                    service_name=name,
+                    service_obj=obj,
+                    metadata={
+                        "reloaded": is_reload,
+                        "scope": scope,
+                        "description": svc_meta.get("description", ""),
+                    },
+                )
+
+        # Mise à jour du container local (rétro-compatibilité et accès rapide)
         if is_reload:
             self._services.update(instance_services)
             logger.info(
@@ -342,16 +378,6 @@ class LifecycleManager:
             if new_keys:
                 logger.info(
                     f"[{self.manifest.name}] 📦 nouveaux services : {sorted(new_keys)}"
-                )
-
-        # Enregistrement explicite dans le registre pour le scoping/discovery
-        if self._registry:
-            for name, obj in instance_services.items():
-                self._registry.register_service(
-                    plugin_name=self.manifest.name,
-                    service_name=name,
-                    service_obj=obj,
-                    metadata={"reloaded": is_reload},
                 )
 
         return self._services
