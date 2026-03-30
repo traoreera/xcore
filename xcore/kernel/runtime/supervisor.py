@@ -152,8 +152,8 @@ class PluginSupervisor:
 
         # 1. Rate limiting
         try:
-            print(plugin_name, action)
-            await self._rate.check(plugin_name)
+            # self._rate.check est synchrone (optimisation performance)
+            self._rate.check(plugin_name)
         except RateLimitExceeded as e:
             return self._err(str(e), "rate_limit_exceeded")
 

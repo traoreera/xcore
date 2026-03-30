@@ -21,3 +21,7 @@
 ## 2026-04-20 - [Optimizing Plugin Call Path & Concurrency]
 **Learning:** Using a formal state machine with `READY` -> `RUNNING` -> `READY` transitions for every plugin call introduces significant overhead (~10µs per call) and, more importantly, prevents concurrency because the state machine enforces sequential transitions.
 **Action:** Remove transitional states (like `RUNNING`) from the high-frequency call path. Replace expensive state transitions with a fast boolean check (`is_available`) to ensure the plugin is `READY` before execution. This enables concurrent plugin calls and reduces per-call overhead by ~90% (to ~0.8µs).
+
+## 2026-05-10 - [Synchronous Rate Limiting in Hot-Path]
+**Learning:** Using `async` methods and `asyncio.Lock` for purely in-memory rate limiting operations in the plugin call hot-path introduces significant coroutine scheduling and locking overhead (~0.2s for 100k calls). Since `asyncio` is single-threaded, fast in-memory operations are effectively atomic if they don't contain `await` points, making the lock redundant.
+**Action:** Convert in-memory rate limiters and similar hot-path components to synchronous methods without locks to eliminate `asyncio` overhead. This yielded a ~55% performance gain in the rate-limiting check.
