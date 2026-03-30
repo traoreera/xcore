@@ -25,3 +25,7 @@
 ## 2025-05-20 - [Backward Compatibility in CLI UX]
 **Learning:** Replacing raw JSON or plain-text CLI output with structured `rich` components (like Tables or Panels) improves human readability but breaks automation/scripts (e.g., `jq` pipes).
 **Action:** When adding visual enhancements to CLI commands that return structured data, always provide a `--json` flag to maintain machine-readability.
+
+## 2025-05-21 - [Perceived Responsiveness with Status Spinners]
+**Learning:** Using `rich.console.Status` context managers to wrap long-running operations (like sandbox startup or network calls) provides immediate visual feedback, making the application feel faster and more responsive even if the actual execution time remains the same.
+**Action:** Wrap any operation expected to take >500ms in a `console.status` spinner with a descriptive message.

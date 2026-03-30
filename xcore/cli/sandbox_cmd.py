@@ -76,9 +76,12 @@ async def _sandbox_run(args) -> None:
         SandboxProcessManager,
     )
 
-    print(f"🚀  Lancement sandbox : {name}")
-    print(f"    mémoire max : {manifest.resources.max_memory_mb}MB")
-    print(f"    timeout     : {manifest.resources.timeout_seconds}s")
+    info = [
+        f"[bold cyan]Mémoire max :[/][magenta] {manifest.resources.max_memory_mb}MB[/]",
+        f"[bold cyan]Timeout     :[/][magenta] {manifest.resources.timeout_seconds}s[/]",
+    ]
+    title = f"[bold green]🚀 Lancement sandbox : {escape(name)}[/]"
+    console.print(Panel(Group(*info), title=title, expand=False, border_style="cyan"))
 
     config = SandboxConfig(
         timeout=manifest.resources.timeout_seconds,
@@ -88,30 +91,34 @@ async def _sandbox_run(args) -> None:
     mgr = SandboxProcessManager(manifest, config)
 
     try:
-        await mgr.start()
-        status = mgr.status()
-        print(f"✅  Sandbox démarré")
-        print(f"    PID   : {status['pid']}")
-        print(f"    État  : {status['state']}")
-        print(
-            f"    Disque: {status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB"
-        )
+        with console.status(f"[bold green]Démarrage de la sandbox {escape(name)}...[/]"):
+            await mgr.start()
+            status = mgr.status()
 
-        # Ping de confirmation
-        from xcore.kernel.sandbox.ipc import IPCChannel
+            # Ping de confirmation
+            from xcore.kernel.sandbox.ipc import IPCChannel
+            resp = await mgr._channel.call("ping", {})
 
-        resp = await mgr._channel.call("ping", {})
         if resp.success:
-            print(f"✅  Ping OK — plugin opérationnel")
+            console.print(f"✅ [bold green]Sandbox opérationnelle[/]")
         else:
-            print(f"⚠️   Ping échoué : {resp.data}")
+            console.print(f"⚠️  [yellow]Sandbox démarrée mais ping échoué : {escape(str(resp.data))}[/]")
+
+        table = Table(box=None, show_header=False, padding=(0, 2))
+        table.add_row("[bold cyan]PID   :[/]", f"[magenta]{status['pid']}[/]")
+        table.add_row("[bold cyan]État  :[/]", f"[yellow]{status['state']}[/]")
+        table.add_row(
+            "[bold cyan]Disque:[/]",
+            f"[magenta]{status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB[/]"
+        )
+        console.print(table)
 
     except Exception as e:
-        print(f"❌  Échec démarrage sandbox : {e}", file=sys.stderr)
+        error_console.print(f"[bold red]❌ Échec démarrage sandbox :[/] {escape(str(e))}")
         sys.exit(1)
     finally:
         await mgr.stop()
-        print(f"🛑  Sandbox arrêté.")
+        console.print(f"[bold red]🛑 Sandbox {escape(name)} arrêtée.[/]")
 
 
 # ── limits ────────────────────────────────────────────────────
