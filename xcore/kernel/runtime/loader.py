@@ -22,7 +22,7 @@ from ...kernel.security.validation import ManifestValidator
 
 # from ...sdk.plugin_base import PluginDependency
 from ..api.contract import PluginHandler
-from .activator import SandboxedActivator, TrustedActivator
+from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
 from .dependency import DependencyGraph
 from .lifecycle import LifecycleManager, LoadError
 from .state_machine import PluginState
@@ -69,11 +69,10 @@ class PluginLoader:
         self._handlers: dict[str, PluginHandler] = {}
 
         # Activator registry (Strategy Pattern)
-        self._activators = {
-            ExecutionMode.TRUSTED: TrustedActivator(),
-            ExecutionMode.SANDBOXED: SandboxedActivator(),
-            ExecutionMode.LEGACY: TrustedActivator(),
-        }
+        self._activators = ActivatorRegistry()
+        self._activators.register(ExecutionMode.TRUSTED, TrustedActivator())
+        self._activators.register(ExecutionMode.SANDBOXED, SandboxedActivator())
+        self._activators.register(ExecutionMode.LEGACY, TrustedActivator())
 
         self._validator = ManifestValidator()
 

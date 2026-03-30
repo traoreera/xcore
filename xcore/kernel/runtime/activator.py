@@ -15,6 +15,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger("xcore.runtime.activator")
 
 
+class ActivatorRegistry:
+    """Registre des activateurs de plugins par mode d'exécution."""
+
+    def __init__(self) -> None:
+        self._activators: dict[Any, PluginActivator] = {}
+
+    def register(self, mode: Any, activator: PluginActivator) -> None:
+        self._activators[mode] = activator
+        logger.debug(f"Activateur enregistré pour le mode : {mode}")
+
+    def get(self, mode: Any) -> PluginActivator | None:
+        return self._activators.get(mode)
+
+
 class PluginActivator(ABC):
     """Interface de base pour les stratégies d'activation."""
 

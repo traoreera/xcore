@@ -86,16 +86,24 @@ class PluginRegistry:
 
     def get_service(self, service_name: str, requester: str | None = None) -> Any:
         """
-        Récupère un service avec vérification de scoping optionnelle.
+        Récupère un service avec vérification de scoping.
+        Scoping supporté :
+          - 'public' (défaut) : accessible par tous les plugins.
+          - 'private' : accessible uniquement par le plugin propriétaire.
         """
         if service_name not in self._exported_services:
             raise KeyError(f"Service '{service_name}' non trouvé.")
 
         meta = self._exported_services[service_name]
+        scope = meta.get("scope", "public")
+        owner = meta.get("plugin")
 
-        # Exemple de scoping : si le service est marqué 'private', seul le plugin créateur y a accès
-        if meta.get("scope") == "private" and requester != meta.get("plugin"):
-            raise PermissionError(f"Accès refusé au service privé '{service_name}'")
+        # Vérification du scope private
+        if scope == "private" and requester != owner:
+            raise PermissionError(
+                f"Accès refusé au service privé '{service_name}'. "
+                f"Propriétaire: '{owner}', Requérant: '{requester}'"
+            )
 
         return meta["obj"]
 
