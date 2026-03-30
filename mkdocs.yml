@@ -68,15 +68,19 @@ nav:
       - Creating Plugins: guides/creating-plugins.md
       - Create Services: guides/creating-services.md
       - Working with Services: guides/services.md
-      - Event System: guides/events.md
+      - Event & Hook System: guides/events.md
+      - Marketplace Guide: guides/marketplace.md
       - Monitoring: guides/monitoring.md
-      - Security Best Practices: guides/security.md
+      - Security Deep Dive: guides/security.md
+      - Scaling: guides/scaling.md
       - Troubleshooting: guides/troubleshooting.md
   - Architecture:
       - Overview: architecture/overview.md
+      - Technical Decisions: architecture/decisions.md
   - Reference:
       - Configuration: reference/configuration.md
-      - Development Kit: reference/sdk.md
+      - CLI Reference: reference/cli.md
+      - SDK Reference: reference/sdk.md
       - API Reference: reference/api.md
   - Development:
       - Contributing: development/contributing.md
@@ -85,13 +89,14 @@ nav:
       - Deployment Guide: deployment/guide.md
   
   - Examples:
-      - Readme: examples/README.md
+      - Overview: examples/README.md
       - Basic Plugin: examples/basic-plugin.md
       - Complete Plugin: examples/complete-plugin.md
       - Trusted Plugin: examples/trusted-plugin.md
       - Sandbox plugin: examples/sandboxed-plugin.md
   - About:
-      - versions: versions.md
+      - Versions: versions.md
+      - License: LICENSE
 
 
 extra:

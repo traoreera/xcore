@@ -35,6 +35,10 @@ class PluginContext:
     config: dict[str, Any] = field(default_factory=dict)
     caller: Callable[[str, str, dict], Awaitable[dict]] | None = None
 
+    metrics: Any = None   # MetricsRegistry
+    tracer: Any = None    # Tracer
+    health: Any = None    # HealthChecker
+
     def get_service(self, name: str) -> Any:
         """Accès sécurisé à un service avec message d'erreur clair."""
         svc = self.services.get(name)

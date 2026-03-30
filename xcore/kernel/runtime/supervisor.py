@@ -17,8 +17,37 @@ if TYPE_CHECKING:
 from ..permissions.engine import PermissionDenied, PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
 from .loader import PluginLoader
+from .middleware import Middleware, MiddlewarePipeline
+from .middlewares.retry import RetryMiddleware
+from .middlewares.tracing import TracingMiddleware
 
 logger = logging.getLogger("xcore.runtime.supervisor")
+
+
+class RateLimitMiddleware(Middleware):
+    def __init__(self, rate):
+        self._rate = rate
+
+    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+        try:
+            await self._rate.check(plugin_name)
+        except RateLimitExceeded as e:
+            return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
+        return await next_call(plugin_name, action, payload, **kwargs)
+
+
+class PermissionMiddleware(Middleware):
+    def __init__(self, permissions):
+        self._permissions = permissions
+
+    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+        resource = kwargs.get("resource") or f"{action}"
+        try:
+            self._permissions.check(plugin_name, resource, "execute")
+        except PermissionDenied as e:
+            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
+            return {"status": "error", "msg": str(e), "code": "permission_denied"}
+        return await next_call(plugin_name, action, payload, **kwargs)
 
 
 class PluginSupervisor:
@@ -42,6 +71,9 @@ class PluginSupervisor:
         events=None,
         hooks=None,
         registry=None,
+        metrics = None,
+        tracer = None,
+        health = None,
     ) -> None:
         self._config = config
         self._services = services
@@ -52,6 +84,11 @@ class PluginSupervisor:
         self._permissions = PermissionEngine(events=events)
 
         self._loader: PluginLoader | None = None
+        self._pipeline: MiddlewarePipeline | None = None
+
+        self._metrics = metrics
+        self._tracer = tracer
+        self._health = health
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
@@ -83,6 +120,18 @@ class PluginSupervisor:
         if self._registry:
             for name in report["loaded"]:
                 self._registry.register(name, self._loader.get(name))
+
+        # Initialisation du pipeline de middlewares
+        # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
+        self._pipeline = MiddlewarePipeline(
+            middlewares=[
+                TracingMiddleware(self._tracer, self._metrics),
+                RateLimitMiddleware(self._rate),
+                PermissionMiddleware(self._permissions),
+                RetryMiddleware(),
+            ],
+            final_handler=self._dispatch,
+        )
 
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
@@ -124,88 +173,34 @@ class PluginSupervisor:
 
     # ── Appel ─────────────────────────────────────────────────
 
-    async def call(
-        self,
-        plugin_name: str,
-        action: str,
-        payload: dict,
-        *,
-        resource: str | None = None,
-    ) -> dict:
+    async def call(self, plugin_name, action, payload, *, resource=None) -> dict:
         """
-        Route un appel vers le plugin approprié.
-
-        Applique dans l'ordre :
-          1. Rate limiting
-          2. Vérification permissions (resource = action par défaut)
-          3. Retry + gestion d'erreur standardisée
-
-        Args:
-            plugin_name: nom du plugin cible
-            action: action à exécuter
-            payload: données de l'appel
-            resource: ressource ciblée pour la vérification de permission.
-                      Si absent, utilise "action.<action>" comme ressource.
+        Appelle une action sur un plugin via la pipeline de middlewares.
         """
-        if self._loader is None:
+        if self._loader is None or self._pipeline is None:
             return self._err("Supervisor non démarré", "not_ready")
 
-        # 1. Rate limiting
-        try:
-            print(plugin_name, action)
-            await self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return self._err(str(e), "rate_limit_exceeded")
-
-        # 2. Plugin existe ?
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
 
-        # 3. Vérification des permissions
-        # La ressource par défaut est "action.<action>" ce qui permet aux plugins
-        # de déclarer : resource: "action.*" effect: allow
-        effective_resource = resource or f"{action}"
-        try:
-            self._permissions.check(plugin_name, effective_resource, "execute")
-        except PermissionDenied as e:
-            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
-            return self._err(str(e), "permission_denied")
-
-        # 4. Appel avec retry
         handler = self._loader.get(plugin_name)
-        return await self._call_with_retry(plugin_name, handler, action, payload)
 
-    async def _call_with_retry(
-        self, name: str, handler, action: str, payload: dict
+        # Exécution de la pipeline (inclut tracing, retry, rate limit et permissions)
+        return await self._pipeline.execute(
+            plugin_name,
+            action,
+            payload,
+            handler=handler,
+            resource=resource
+        )
+
+    async def _dispatch(
+        self, plugin_name: str, action: str, payload: dict, *, handler=None, **kwargs
     ) -> dict:
-        manifest = getattr(handler, "manifest", None)
-        retry_cfg = getattr(manifest, "runtime", None)
-        max_attempts = (
-            getattr(getattr(retry_cfg, "retry", None), "max_attempts", 1)
-            if retry_cfg
-            else 1
-        )
-        backoff = (
-            getattr(getattr(retry_cfg, "retry", None), "backoff_seconds", 0.0)
-            if retry_cfg
-            else 0.0
-        )
-
-        last_err = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                return await handler.call(action, payload)
-            except Exception as e:
-                last_err = e
-                if attempt < max_attempts:
-                    logger.warning(
-                        f"[{name}] Tentative {attempt} échouée, retry dans {backoff}s"
-                    )
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 60.0)
-
-        logger.error(f"[{name}] Toutes les tentatives échouées : {last_err}")
-        return self._err(str(last_err), "all_retries_failed")
+        """Dernière étape du pipeline : exécution réelle."""
+        if handler is None:
+            handler = self._loader.get(plugin_name)
+        return await handler.call(action, payload)
 
     # ── Gestion dynamique ─────────────────────────────────────
 

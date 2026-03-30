@@ -21,7 +21,8 @@ if TYPE_CHECKING:
 from ...kernel.security.validation import ManifestValidator
 
 # from ...sdk.plugin_base import PluginDependency
-from ..sandbox.process_manager import SandboxProcessManager
+from ..api.contract import PluginHandler
+from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
 from .dependency import DependencyGraph
 from .lifecycle import LifecycleManager, LoadError
 from .state_machine import PluginState
@@ -55,6 +56,8 @@ class PluginLoader:
         registry=None,
         caller=None,
     ) -> None:
+        from ...kernel.api.contract import ExecutionMode
+
         self._config = config
         self._services = services
         self._events = events
@@ -62,8 +65,15 @@ class PluginLoader:
         self._registry = registry
         self._caller = caller
 
-        self._trusted: dict[str, LifecycleManager] = {}
-        self._sandboxed: dict[str, SandboxProcessManager] = {}
+        # handlers: name -> PluginHandler (Trusted or Sandboxed)
+        self._handlers: dict[str, PluginHandler] = {}
+
+        # Activator registry (Strategy Pattern)
+        self._activators = ActivatorRegistry()
+        self._activators.register(ExecutionMode.TRUSTED, TrustedActivator())
+        self._activators.register(ExecutionMode.SANDBOXED, SandboxedActivator())
+        self._activators.register(ExecutionMode.LEGACY, TrustedActivator())
+
         self._validator = ManifestValidator()
 
     # ── Chargement global ─────────────────────────────────────
@@ -188,56 +198,15 @@ class PluginLoader:
             return manifest, False
 
     async def _activate(self, manifest) -> None:
-        from ...kernel.api.contract import ExecutionMode  # évite import circulaire
-
         mode = manifest.execution_mode
-        if mode in (ExecutionMode.TRUSTED, ExecutionMode.LEGACY):
-            await self._activate_trusted(manifest)
-        else:
-            await self._activate_sandboxed(manifest)
+        activator = self._activators.get(mode)
 
-    async def _activate_trusted(self, manifest) -> None:
-        from ...kernel.security.signature import SignatureError, verify_plugin
-        from ...kernel.security.validation import ASTScanner
+        if not activator:
+            raise ValueError(f"Aucun activateur trouvé pour le mode {mode}")
 
-        if self._config.strict_trusted or manifest.execution_mode.value == "trusted":
-            try:
-                verify_plugin(manifest, self._config.secret_key)
-            except SignatureError as e:
-                raise LoadError(str(e)) from e
-
-        scanner = ASTScanner()
-        scan = scanner.scan(manifest.plugin_dir, whitelist=manifest.allowed_imports)
-        if not scan.passed:
-            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
-
-        lm = LifecycleManager(
-            manifest,
-            services=self._services,
-            events=self._events,
-            hooks=self._hooks,
-            registry=self._registry,
-            caller=self._caller,
-        )
-        await lm.load()
-        self._trusted[manifest.name] = lm
-        logger.info(f"[{manifest.name}] ✅ TRUSTED")
-
-    async def _activate_sandboxed(self, manifest) -> None:
-        from ...kernel.sandbox.process_manager import SandboxConfig
-        from ...kernel.security.validation import ASTScanner
-
-        scanner = ASTScanner()
-        scan = scanner.scan(manifest.plugin_dir, whitelist=manifest.allowed_imports)
-        if not scan.passed:
-            raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
-
-        from ...kernel.sandbox.process_manager import SandboxProcessManager
-
-        mgr = SandboxProcessManager(manifest)
-        await mgr.start()
-        self._sandboxed[manifest.name] = mgr
-        logger.info(f"[{manifest.name}] ✅ SANDBOXED")
+        handler = await activator.activate(manifest, self)
+        self._handlers[manifest.name] = handler
+        logger.info(f"[{manifest.name}] ✅ {mode.value.upper()}")
 
     # ── Chargement individuel ─────────────────────────────────
 
@@ -247,70 +216,64 @@ class PluginLoader:
             raise FileNotFoundError(f"Dossier plugin introuvable : {plugin_dir}")
 
         manifest = self._validator.load_and_validate(plugin_dir)
-        already_loaded = set(self._trusted) | set(self._sandboxed)
 
         for dep in manifest.requires:
-            if dep not in already_loaded:
-                logger.info(f"[{plugin_name}] Dépendance '{dep}' → chargement...")
-                await self.load(dep)
+            dep_name = dep.name if hasattr(dep, "name") else str(dep)
+            if dep_name not in self._handlers:
+                logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
+                await self.load(dep_name)
 
         await self._activate(manifest)
         self._flush_services([plugin_name])
         logger.info(f"[{plugin_name}] ✅ chargé")
 
     async def reload(self, plugin_name: str) -> None:
-        if plugin_name in self._trusted:
-            await self._trusted[plugin_name].reload()
-            self._flush_services([plugin_name])
-        elif plugin_name in self._sandboxed:
-            manifest = self._sandboxed[plugin_name].manifest
-            await self._sandboxed[plugin_name].stop()
-            del self._sandboxed[plugin_name]
-            await self._activate_sandboxed(manifest)
-        else:
+        if plugin_name not in self._handlers:
             await self.load(plugin_name)
+            return
+
+        handler = self._handlers[plugin_name]
+        if hasattr(handler, "reload") and callable(handler.reload):
+            await handler.reload()
+            self._flush_services([plugin_name])
+        else:
+            manifest = handler.manifest
+            await handler.stop()
+            await self._activate(manifest)
+            self._flush_services([plugin_name])
 
     async def unload(self, plugin_name: str) -> None:
-        if plugin_name in self._trusted:
-            await self._trusted[plugin_name].unload()
-            del self._trusted[plugin_name]
-        elif plugin_name in self._sandboxed:
-            await self._sandboxed[plugin_name].stop()
-            del self._sandboxed[plugin_name]
+        if plugin_name in self._handlers:
+            await self._handlers[plugin_name].stop()
+            del self._handlers[plugin_name]
         else:
             raise KeyError(f"Plugin '{plugin_name}' non chargé")
 
     # ── Accès ─────────────────────────────────────────────────
 
-    def get(self, name: str) -> LifecycleManager | SandboxProcessManager:
-        if name in self._trusted:
-            return self._trusted[name]
-        if name in self._sandboxed:
-            return self._sandboxed[name]
-        available = sorted(list(self._trusted) + list(self._sandboxed))
+    def get(self, name: str) -> PluginHandler:
+        if name in self._handlers:
+            return self._handlers[name]
+        available = sorted(list(self._handlers.keys()))
         raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
 
     def has(self, name: str) -> bool:
-        return name in self._trusted or name in self._sandboxed
+        return name in self._handlers
 
     def all_names(self) -> list[str]:
-        return sorted(list(self._trusted) + list(self._sandboxed))
+        return sorted(list(self._handlers.keys()))
 
     def status(self) -> list[dict]:
-        result = []
-        for lm in self._trusted.values():
-            result.append(lm.status())
-        for sm in self._sandboxed.values():
-            result.append(sm.status())
-        return result
+        return [h.status() for h in self._handlers.values()]
 
     # ── Flush services ────────────────────────────────────────
 
     def _flush_services(self, plugin_names: list[str]) -> None:
         """Propage les services exposés par chaque plugin vers le container partagé."""
         for name in plugin_names:
-            if name in self._trusted:
-                updated = self._trusted[name].mems(is_reload=False)
+            handler = self._handlers.get(name)
+            if handler and hasattr(handler, "mems"):
+                updated = handler.mems(is_reload=False)
                 logger.debug(
                     f"[{name}] 📦 services disponibles : {sorted(updated.keys())}"
                 )
@@ -334,17 +297,15 @@ class PluginLoader:
 
     async def shutdown(self) -> None:
         """Décharge tous les plugins proprement."""
-        trusted_tasks = [lm.unload() for lm in self._trusted.values()]
-        sandbox_tasks = [sm.stop() for sm in self._sandboxed.values()]
+        tasks = [h.stop() for h in self._handlers.values()]
 
-        for coro in trusted_tasks + sandbox_tasks:
+        for coro in tasks:
             try:
                 await asyncio.wait_for(coro, timeout=10.0)
             except Exception as e:
                 logger.error(f"Erreur déchargement : {e}")
 
-        self._trusted.clear()
-        self._sandboxed.clear()
+        self._handlers.clear()
         logger.info("Tous les plugins déchargés.")
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
@@ -357,7 +318,7 @@ class PluginLoader:
         Utilisé par Xcore._attach_router() pour monter les routes sur l'app FastAPI.
         """
         routers = []
-        for name, lm in self._trusted.items():
-            if lm.plugin_router is not None:
-                routers.append((name, lm.plugin_router))
+        for name, handler in self._handlers.items():
+            if hasattr(handler, "plugin_router") and handler.plugin_router is not None:
+                routers.append((name, handler.plugin_router))
         return routers

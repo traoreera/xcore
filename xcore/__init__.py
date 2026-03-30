@@ -21,7 +21,7 @@ from .__version__ import __version__
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
-from .kernel.observability.logging import configure_logging, get_logger
+from .kernel.observability import configure_logging, get_logger, HealthChecker, Tracer, MetricsRegistry
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor
@@ -104,7 +104,15 @@ class Xcore:
         self._logger.info(f"━━━ xcore v{__version__} démarrage ━━━")
 
         # 0. Validation clés secrètes en production
-        self._validate_secret_keys()
+        if self._config.app.env == "production": 
+            self._validate_secret_keys()
+
+        # etape intermediare
+        # configuration de l'observabilite 
+        self.metrics = MetricsRegistry()
+        self.tracer = Tracer(self._config.observability.tracing.service_name)
+        self.health = HealthChecker()
+
 
         # 1. Services (BDD, cache, scheduler)
         from .services import ServiceContainer
@@ -126,6 +134,9 @@ class Xcore:
             events=self.events,
             hooks=self.hooks,
             registry=self.registry,
+            metrics = MetricsRegistry(),
+            tracer = Tracer(self._config.observability.tracing.service_name),
+            health = HealthChecker(),
         )
         await self.plugins.boot()
 
@@ -166,6 +177,8 @@ class Xcore:
             secret_key=self._config.app.secret_key,
             server_key=self._config.app.server_key,
             prefix=self._config.app.plugin_prefix,
+            health_checker=self.health,       # ← nouveau
+            metrics_registry=self.metrics,    # ← nouveau
             tags=(self._config.app.plugin_tags or []) + (tags or []),
         )
         app.include_router(system_router)

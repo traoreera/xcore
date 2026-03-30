@@ -65,10 +65,7 @@ class HealthChecker:
         for name, (fn, is_async) in self._checks.items():
             start = time.monotonic()
             try:
-                if is_async:
-                    ok, msg = await asyncio.wait_for(fn(), timeout=timeout)
-                else:
-                    ok, msg = fn()
+                ok, msg = await asyncio.wait_for(fn(), timeout=timeout) if is_async else fn()
                 status = HealthStatus.HEALTHY if ok else HealthStatus.DEGRADED
             except asyncio.TimeoutError:
                 status, msg = HealthStatus.UNHEALTHY, f"Timeout après {timeout}s"
