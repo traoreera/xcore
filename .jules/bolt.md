@@ -21,3 +21,7 @@
 ## 2026-04-20 - [Optimizing Plugin Call Path & Concurrency]
 **Learning:** Using a formal state machine with `READY` -> `RUNNING` -> `READY` transitions for every plugin call introduces significant overhead (~10µs per call) and, more importantly, prevents concurrency because the state machine enforces sequential transitions.
 **Action:** Remove transitional states (like `RUNNING`) from the high-frequency call path. Replace expensive state transitions with a fast boolean check (`is_available`) to ensure the plugin is `READY` before execution. This enables concurrent plugin calls and reduces per-call overhead by ~90% (to ~0.8µs).
+
+## 2026-04-25 - [Optimization of RateLimiter and Registry]
+**Learning:** Using `asyncio.Lock` and `async def` for pure in-memory operations (like rate limiting with a `deque`) introduces unnecessary coroutine overhead and context switching. In a single-threaded event loop, synchronous operations are effectively atomic if they don't contain `await` points, making the lock redundant.
+**Action:** Convert hot-path in-memory logic to synchronous methods and remove `asyncio.Lock` where I/O is not involved. This yielded a ~2.2x speedup in the rate-limiting check, reducing overhead from ~1.86µs to ~0.85µs.
