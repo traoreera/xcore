@@ -6,6 +6,7 @@ FORBIDDEN_BUILTINS = {
     "eval",
     "exec",
     "compile",
+    "hasattr",
     "getattr",
     "setattr",
     "delattr",
