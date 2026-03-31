@@ -27,3 +27,8 @@
 **Vulnerability:** The `ASTScanner` was vulnerable to a bypass where sandboxed plugins could access forbidden modules (e.g., `os`, `sys`) if they were re-exported as attributes of allowed modules (e.g., `pathlib.os` or `importlib.sys`).
 **Learning:** In Python, many standard library modules import and expose other sensitive modules as attributes. Blocking direct `import` statements and common dunder attributes is not enough to prevent access to forbidden functionality.
 **Prevention:** Enhance the AST visitor's `visit_Attribute` method to check accessed attribute names against the full set of forbidden module names, ensuring that re-exported modules are also blocked.
+
+## 2026-04-10 - AST Sandbox Probing via `hasattr`
+**Vulnerability:** The `ASTScanner` allowed the use of the `hasattr` built-in, enabling sandboxed plugins to probe for the existence of sensitive internal attributes (e.g., `__class__`, `__subclasses__`) without triggering an access error.
+**Learning:** Security sandboxes that block attribute access (like `getattr` or direct attribute access) can still be "fingerprinted" or probed using `hasattr`. This allows an attacker to discover which objects might be vulnerable to escape before attempting a blocked operation.
+**Prevention:** Always include `hasattr` in the list of forbidden built-ins for restricted execution environments, alongside `getattr`, `setattr`, and `delattr`.
