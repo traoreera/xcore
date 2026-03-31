@@ -29,3 +29,11 @@
 ## 2025-05-21 - [Perceived Responsiveness with Status Spinners]
 **Learning:** Using `rich.console.Status` context managers to wrap long-running operations (like sandbox startup or network calls) provides immediate visual feedback, making the application feel faster and more responsive even if the actual execution time remains the same.
 **Action:** Wrap any operation expected to take >500ms in a `console.status` spinner with a descriptive message.
+
+## 2025-05-22 - [Batch Operation Summaries]
+**Learning:** Adding a summary line after a table in batch CLI operations (like a health check) provides an immediate "TL;DR" for the user, especially when dealing with many items, improving scanability.
+**Action:** Provide a concise summary (e.g., success/failure counts) after rendering tables for batch operations.
+
+## 2025-05-23 - [Language Consistency in CLI]
+**Learning:** Mixing languages (e.g., French and English) in CLI outputs creates a fragmented and confusing user experience.
+**Action:** Maintain strict language consistency across all user-facing strings, adhering to the primary language of the codebase (English).

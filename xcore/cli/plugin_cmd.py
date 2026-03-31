@@ -146,34 +146,44 @@ async def _plugin_health(args) -> None:
     from xcore.kernel.security.signature import is_signed
     from xcore.kernel.security.validation import ASTScanner, ManifestValidator
 
-    for plugin_dir_entry in plugins:
-        name = plugin_dir_entry.name
-        try:
-            validator = ManifestValidator()
-            manifest = validator.load_and_validate(plugin_dir_entry)
+    ok_count = 0
+    err_count = 0
 
-            # Signature
-            signed = "✅" if is_signed(manifest) else "⚠️ "
+    with console.status("[bold green]Analyzing plugin health...") as status:
+        for plugin_dir_entry in plugins:
+            name = plugin_dir_entry.name
+            status.update(f"[bold green]Analyzing {escape(name)}...")
+            try:
+                validator = ManifestValidator()
+                manifest = validator.load_and_validate(plugin_dir_entry)
 
-            # AST scan
-            scanner = ASTScanner()
-            result = scanner.scan(plugin_dir_entry, whitelist=manifest.allowed_imports)
-            ast_ok = "✅" if result.passed else "❌"
+                # Signature
+                signed = "✅" if is_signed(manifest) else "⚠️ "
 
-            mode = manifest.execution_mode.value
-            table.add_row(name, mode, signed, ast_ok, "✅", "[green]OK[/]")
+                # AST scan
+                scanner = ASTScanner()
+                result = scanner.scan(plugin_dir_entry, whitelist=manifest.allowed_imports)
+                ast_ok = "✅" if result.passed else "❌"
 
-        except Exception as e:
-            table.add_row(
-                name,
-                "[red]?[/]",
-                "[red]?[/]",
-                "[red]?[/]",
-                "❌",
-                f"[red]Erreur: {e}[/]",
-            )
+                mode = manifest.execution_mode.value
+                table.add_row(name, mode, signed, ast_ok, "✅", "[green]OK[/]")
+                ok_count += 1
+
+            except Exception as e:
+                table.add_row(
+                    name,
+                    "[red]?[/]",
+                    "[red]?[/]",
+                    "[red]?[/]",
+                    "❌",
+                    f"[red]Error: {e}[/]",
+                )
+                err_count += 1
 
     console.print(table)
+    console.print(
+        f"\n[bold]Result: [green]{ok_count} OK[/], [red]{err_count} Error(s)[/][/]"
+    )
 
 
 # ── install ───────────────────────────────────────────────────
