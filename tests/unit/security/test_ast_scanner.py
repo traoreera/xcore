@@ -141,6 +141,17 @@ class TestSecurityVisitor:
         assert len(visitor.errors) == 1
         assert "__import__" in visitor.errors[0]
 
+    def test_visit_call_hasattr(self, visitor):
+        """Test detecting hasattr() call."""
+        # hasattr is now in FORBIDDEN_BUILTINS
+        from xcore.kernel.security.section import FORBIDDEN_BUILTINS
+        visitor.forbidden_builtins = FORBIDDEN_BUILTINS
+
+        code = "hasattr(obj, '__class__')"
+        tree = ast.parse(code)
+        visitor.visit(tree)
+        assert any("hasattr" in e for e in visitor.errors)
+
     def test_visit_attribute_bypass_module(self, visitor):
         """Test detecting bypass via module attribute (e.g. pathlib.os)."""
         # Note: In a real bypass attempt, 'pathlib' would be allowed but it exports 'os'
