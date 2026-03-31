@@ -1,44 +1,46 @@
-# Architecture Overview
+# Présentation de l'Architecture
 
-Understanding XCore's architecture and design principles.
+Comprendre l'architecture et les principes de conception de XCore v2.
 
-## Design Philosophy
+## Philosophie de Conception
 
-XCore follows these principles:
+XCore suit ces principes fondamentaux :
 
-1. **Plugin-First**: Everything is a plugin. Core functionality is minimal.
-2. **Security by Default**: Sandboxed execution with resource limits.
-3. **Service-Oriented**: Shared services for common needs.
-4. **Event-Driven**: Loose coupling via events.
-5. **Production Ready**: Observability, metrics, and logging built-in.
+1. **Plugin-First** : Tout est un plugin. Les fonctionnalités du noyau sont minimales.
+2. **Sécurité par Défaut** : Exécution sandboxée avec limites de ressources strictes.
+3. **Orienté Services** : Services partagés pour les besoins courants (DB, Cache, Scheduler).
+4. **Piloté par les Événements** : Couplage faible via un bus d'événements haute performance.
+5. **Prêt pour la Production** : Observabilité, métriques et journalisation structurée intégrées.
 
-## System Architecture
+## Architecture Système
 
 ```mermaid
 flowchart TB
-    subgraph XCore["XCore Framework"]
+    subgraph XCore["Framework XCore"]
         direction TB
 
-        subgraph Core["Core"]
+        subgraph Core["Noyau (Core)"]
             X[Xcore]
             Config[Configuration]
-            Registry[Plugin Registry]
+            Registry[Registre de Plugins]
         end
 
-        subgraph Runtime["Runtime"]
+        subgraph Runtime["Exécution (Runtime)"]
             PS[PluginSupervisor]
             PL[PluginLoader]
             LM[LifecycleManager]
             SM[StateMachine]
+            MP[MiddlewarePipeline]
         end
 
-        subgraph Sandbox["Sandbox"]
+        subgraph Sandbox["Bac à sable (Sandbox)"]
             PM[ProcessManager]
             IPC[IPC]
             Limits[RateLimiter]
+            Guard[FilesystemGuard]
         end
 
-        subgraph Events["Events"]
+        subgraph Events["Événements"]
             EB[EventBus]
             HM[HookManager]
             ED[EventDispatcher]
@@ -46,27 +48,28 @@ flowchart TB
 
         subgraph Services["Services"]
             SC[ServiceContainer]
-            DB[(Database)]
+            DB[(Base de données)]
             Cache[(Cache)]
             Sched[Scheduler]
             Ext[Extensions]
         end
 
-        subgraph Security["Security"]
+        subgraph Security["Sécurité"]
             Sig[Signature]
-            Val[Validation]
-            Hash[Hashing]
+            Val[Validation AST]
+            Hash[Hachage SHA256]
+            Perm[Moteur de Permissions]
         end
 
-        subgraph API["API Layer"]
-            Router[Router Builder]
-            Context[PluginContext]
+        subgraph API["Couche API"]
+            Router[Constructeur de Router]
+            Context[Contexte du Plugin]
         end
     end
 
-    subgraph External["External"]
-        FastAPI[FastAPI App]
-        Plugins[Plugin Directory]
+    subgraph External["Externe"]
+        FastAPI[Application FastAPI]
+        Plugins[Répertoire de Plugins]
     end
 
     X --> Config
@@ -76,6 +79,7 @@ flowchart TB
 
     PS --> PL
     PS --> LM
+    PS --> MP
     PL --> Sandbox
     LM --> SM
 
@@ -88,25 +92,26 @@ flowchart TB
     SC --> Ext
 
     PL --> Security
+    MP --> Security
 
     PS --> API
     API --> FastAPI
     PL --> Plugins
 ```
 
-## Component Details
+## Détails des Composants
 
-### Core Components
+### Composants du Noyau
 
-#### Xcore (Orchestrator)
+#### Xcore (Orchestrateur)
 
-**Location**: `xcore/__init__.py`
+**Emplacement** : `xcore/__init__.py`
 
-The main orchestrator that:
-- Loads configuration
-- Initializes services
-- Boots the plugin system
-- Attaches FastAPI routers
+L'orchestrateur principal qui :
+- Charge la configuration.
+- Initialise les services.
+- Démarre le système de plugins.
+- Attache les routeurs FastAPI.
 
 ```mermaid
 sequenceDiagram
@@ -125,7 +130,7 @@ sequenceDiagram
     SC->>SC: init_databases()
     SC->>SC: init_cache()
     SC->>SC: init_scheduler()
-    SC-->>-X: services ready
+    SC-->>-X: services prêts
 
     X->>X: init_events()
     X->>X: init_hooks()
@@ -133,466 +138,156 @@ sequenceDiagram
 
     X->>+PS: boot()
     PS->>PS: load_all_plugins()
-    PS-->>-X: plugins ready
+    PS-->>-X: plugins prêts
 
     X->>FA: attach_router()
-    X-->>-App: ready
+    X-->>-App: prêt
 ```
 
-#### Configuration
-
-**Location**: `xcore/configurations/`
-
-Configuration system:
-- YAML parsing
-- Environment variable substitution
-- Validation
-- Runtime access
-
-```mermaid
-flowchart LR
-    A[Config File] --> B[ConfigLoader]
-    B --> C[Environment]
-    B --> D[Validation]
-    D --> E[Config Objects]
-    E --> F[Xcore]
-```
-
-### Runtime Components
+### Composants Runtime
 
 #### PluginSupervisor
 
-**Location**: `xcore/kernel/runtime/supervisor.py`
+**Emplacement** : `xcore/kernel/runtime/supervisor.py`
 
-High-level plugin management:
-- Plugin lifecycle
-- Action routing
-- Rate limiting
-- Retry logic
+Gestion de haut niveau des plugins via un pipeline de middlewares :
+- Cycle de vie des plugins.
+- Routage des actions.
+- Limites de débit (Rate limiting).
+- Logique de tentative (Retry) avec backoff exponentiel.
+- Vérification des permissions.
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant PS as PluginSupervisor
+    participant MP as MiddlewarePipeline
     participant RL as RateLimiter
+    participant PE as PermissionEngine
     participant PL as PluginLoader
     participant P as Plugin
 
     Client->>+PS: call(plugin, action, payload)
-    PS->>+RL: check(plugin)
-    RL-->>-PS: allowed
+    PS->>+MP: execute()
 
-    PS->>+PL: get(plugin)
-    PL-->>-PS: handler
+    MP->>+RL: check(plugin)
+    RL-->>-MP: autorisé
 
-    PS->>+P: call(action, payload)
-    P-->>-PS: result
-    PS-->>-Client: result
+    MP->>+PE: check(plugin, resource, action)
+    PE-->>-MP: autorisé
+
+    MP->>+PL: get(plugin)
+    PL-->>-MP: handler
+
+    MP->>+P: call(action, payload)
+    P-->>-MP: résultat
+
+    MP-->>-PS: résultat
+    PS-->>-Client: résultat
 ```
 
 #### PluginLoader
 
-**Location**: `xcore/kernel/runtime/loader.py`
+**Emplacement** : `xcore/kernel/runtime/loader.py`
 
-Plugin loading logic:
-- Directory scanning
-- Manifest parsing
-- Dependency resolution
-- Topological sorting
-- Mode-specific loading
+Logique de chargement des plugins :
+- Scan des répertoires.
+- Analyse des manifestes (YAML/JSON).
+- Résolution des dépendances.
+- Tri topologique pour l'ordre de chargement.
+- Chargement spécifique au mode (Trusted/Sandboxed).
 
-```mermaid
-flowchart TD
-    A[Scan plugins/] --> B[Parse Manifests]
-    B --> C[Validate]
-    C --> D[Resolve Dependencies]
-    D --> E[Topological Sort]
-    E --> F[Load Trusted]
-    E --> G[Load Sandboxed]
-    E --> H[Load Legacy]
-    F --> I[Inject Services]
-    G --> J[Start Process]
-    H --> I
-    I --> K[Call on_load]
-    J --> K
-```
-
-#### LifecycleManager
-
-**Location**: `xcore/kernel/runtime/lifecycle.py`
-
-Plugin lifecycle management:
-- Context injection
-- Hook execution
-- State transitions
-
-### Sandbox Components
+### Composants Sandbox
 
 #### ProcessManager
 
-**Location**: `xcore/kernel/sandbox/process_manager.py`
+**Emplacement** : `xcore/kernel/sandbox/process_manager.py`
 
-Isolated execution:
-- Process spawning
-- IPC communication
-- Resource monitoring
-- Timeout handling
+Exécution isolée :
+- Lancement de sous-processus.
+- Communication IPC via JSON-RPC.
+- Surveillance des ressources (Mémoire via RLIMIT_AS).
+- Gestion des délais d'expiration (Timeouts).
 
 ```mermaid
 flowchart LR
-    subgraph Main["Main Process"]
+    subgraph Main["Processus Principal"]
         PM[ProcessManager]
-        IPC[IPC Handler]
+        IPC_H[IPC Handler]
     end
 
-    subgraph Worker["Worker Process"]
+    subgraph Worker["Processus Worker"]
         W[Worker]
-        P[Plugin Instance]
+        Guard[FilesystemGuard]
+        Hook[Import Hook]
+        P[Instance du Plugin]
     end
 
-    PM --> IPC
-    IPC -->|pipe/socket| IPC
-    IPC --> W
-    W --> P
+    PM --> IPC_H
+    IPC_H -->|pipe/socket| IPC_H
+    IPC_H --> W
+    W --> Guard
+    W --> Hook
+    Hook --> P
 ```
 
-### Event System
+### Système de Sécurité
 
-#### EventBus
+#### FilesystemGuard
 
-**Location**: `xcore/kernel/events/bus.py`
+**Emplacement** : `xcore/kernel/sandbox/worker.py`
 
-Event handling:
-- Subscription management
-- Priority-based execution
-- Synchronous/asynchronous emission
-- Error handling
+Protection du système de fichiers par monkey-patching :
+- Intercepte `open()`, `os.open()`, `pathlib.Path.open()`, etc.
+- Valide les chemins par rapport à une politique `allowed_paths` / `denied_paths`.
+- Empêche l'évasion par résolution de chemins absolus ou relatifs complexes.
 
-```mermaid
-flowchart TB
-    A[Event Source] -->|emit| B[EventBus]
-    B --> C[Priority Queue]
-    C -->|High Priority| D[Handler 1]
-    C -->|Medium| E[Handler 2]
-    C -->|Low| F[Handler 3]
-    D --> G[Results]
-    E --> G
-    F --> G
-```
+#### ASTScanner
 
-### Service Container
+**Emplacement** : `xcore/kernel/security/validation.py`
 
-**Location**: `xcore/services/container.py`
+Analyse statique du code source :
+- Bloque les imports dangereux (`os`, `sys`, `subprocess`).
+- Interdit les built-ins sensibles (`eval`, `exec`, `getattr`, `hasattr`).
+- Empêche l'accès aux attributs internes (`__class__`, `__globals__`, `__subclasses__`).
 
-Service management:
-- Initialization order
-- Dependency injection
-- Health monitoring
-- Graceful shutdown
+## Flux de Données
 
-```mermaid
-flowchart TD
-    subgraph Init["Initialization"]
-        A[Database] --> B[Cache]
-        B --> C[Scheduler]
-        C --> D[Extensions]
-    end
-
-    subgraph Shutdown["Shutdown"]
-        D2[Extensions] --> C2[Scheduler]
-        C2 --> B2[Cache]
-        B2 --> A2[Database]
-    end
-```
-
-## Data Flow
-
-### Plugin Action Flow
+### Flux d'Action de Plugin (IPC)
 
 ```mermaid
 sequenceDiagram
-    participant HTTP as HTTP Client
+    participant HTTP as Client HTTP
     participant FA as FastAPI
     participant R as Router
     participant PS as PluginSupervisor
-    participant PL as PluginLoader
+    participant MP as Pipeline
     participant Handler as Plugin Handler
 
     HTTP->>FA: POST /app/plugin/action
-    FA->>R: Route Request
+    FA->>R: Route la requête
     R->>PS: call(plugin, action, payload)
 
-    PS->>PL: Get Plugin
-    PL-->>PS: Handler
+    PS->>MP: execute(middlewares)
 
-    PS->>PS: Check Rate Limit
-    PS->>PS: Apply Retry Logic
-
-    alt Trusted Plugin
-        PS->>Handler: Direct Call
-        Handler-->>PS: Result
-    else Sandboxed Plugin
-        PS->>Handler: IPC Call
-        Handler-->>PS: Result
+    alt Mode Trusted
+        MP->>Handler: Appel direct (In-process)
+        Handler-->>MP: Résultat
+    else Mode Sandboxed
+        MP->>Handler: Appel IPC (Subprocess)
+        Handler-->>MP: Résultat
     end
 
-    PS-->>R: Result
-    R-->>FA: JSON Response
-    FA-->>HTTP: Response
+    MP-->>PS: Résultat
+    PS-->>R: Résultat
+    R-->>FA: Réponse JSON
+    FA-->>HTTP: Réponse
 ```
 
-### HTTP Route Flow
+## Performance et Optimisations
 
-```mermaid
-sequenceDiagram
-    participant HTTP as Client
-    participant FA as FastAPI
-    participant PR as Plugin Router
-    participant P as Plugin Code
-    participant S as Services
-
-    HTTP->>FA: GET /plugins/name/endpoint
-    FA->>PR: Route to Plugin
-    PR->>P: Handler Function
-
-    P->>S: get_service("db")
-    S-->>P: Database Connection
-
-    P->>S: Query Data
-    S-->>P: Results
-
-    P-->>PR: Response
-    PR-->>FA: JSON
-    FA-->>HTTP: Response
-```
-
-### Event Flow
-
-```mermaid
-sequenceDiagram
-    participant P1 as Plugin A
-    participant EB as EventBus
-    participant P2 as Plugin B
-    participant P3 as Plugin C
-
-    P1->>EB: emit("user.created", data)
-
-    EB->>P2: Handler (Priority 100)
-    P2-->>EB: Ack
-
-    EB->>P3: Handler (Priority 50)
-    P3->>P3: Process Event
-    P3->>EB: emit("notification.sent")
-    P3-->>EB: Ack
-
-    EB-->>P1: Results
-```
-
-## Security Architecture
-
-### Sandboxing
-
-```mermaid
-flowchart TB
-    subgraph Trusted["Trusted Plugin"]
-        T[Runs in Main Process]
-        T1[Full Access]
-    end
-
-    subgraph Sandboxed["Sandboxed Plugin"]
-        S[Runs in Subprocess]
-        subgraph Restrictions
-            AST[AST Validation]
-            IMP[Import Whitelist]
-            MEM[Memory Limits]
-            CPU[CPU Limits]
-            DISK[Disk Quota]
-        end
-        S --> Restrictions
-    end
-
-    subgraph Communication["IPC"]
-        P[Pipe/Socket]
-        SER[Serialization]
-    end
-
-    Sandboxed --> Communication
-```
-
-### Signature Verification
-
-```mermaid
-flowchart LR
-    A[Plugin Files] -->|Hash| B[HMAC-SHA256]
-    K[Secret Key] --> B
-    B --> C[Signature]
-    C --> D[plugin.sig]
-
-    A2[Plugin] --> E[Verification]
-    D2[plugin.sig] --> E
-    K2[Secret Key] --> E
-    E -->|Match| F[Load]
-    E -->|No Match| G[Reject]
-```
-
-## Plugin Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Discovered: Scan Directory
-    Discovered --> Validated: Parse Manifest
-    Validated --> Resolved: Check Dependencies
-    Resolved --> Loading: Begin Load
-    Loading --> Loaded: on_load()
-    Loading --> Failed: Error
-    Loaded --> Active: Ready
-    Active --> Reloading: Reload Request
-    Reloading --> Loading: on_reload()
-    Reloading --> Failed: Error
-    Active --> Unloading: Unload Request
-    Unloading --> Unloaded: on_unload()
-    Unloaded --> [*]
-    Failed --> [*]
-```
-
-## Threading Model
-
-```mermaid
-flowchart TB
-    subgraph Main["Main Thread"]
-        X[Xcore]
-        EB[EventBus]
-        SC[ServiceContainer]
-        PS[PluginSupervisor]
-    end
-
-    subgraph Async["Async Event Loop"]
-        FA[FastAPI]
-        R[Router]
-        Handler[Trusted Plugins]
-    end
-
-    subgraph Workers["Worker Processes"]
-        W1[Sandboxed Plugin 1]
-        W2[Sandboxed Plugin 2]
-    end
-
-    X --> SC
-    X --> EB
-    X --> PS
-    FA --> R
-    R --> Handler
-    PS -->|IPC| Workers
-```
-
-## Directory Structure
-
-```
-xcore/
-├── __init__.py                 # Main orchestrator
-├── __version__.py              # Version info
-│
-├── kernel/                     # Core framework
-│   ├── api/                    # API layer
-│   │   ├── contract.py         # Plugin contracts
-│   │   ├── context.py          # Plugin context
-│   │   ├── router.py           # FastAPI router builder
-│   │   └── versioning.py       # API versioning
-│   │
-│   ├── runtime/                # Plugin runtime
-│   │   ├── loader.py           # Plugin loader
-│   │   ├── supervisor.py         # High-level management
-│   │   ├── lifecycle.py        # Lifecycle management
-│   │   └── state_machine.py    # State management
-│   │
-│   ├── sandbox/                # Sandboxed execution
-│   │   ├── process_manager.py  # Process management
-│   │   ├── worker.py             # Worker process
-│   │   ├── ipc.py              # Inter-process communication
-│   │   ├── limits.py             # Rate limiting
-│   │   └── isolation.py        # Resource isolation
-│   │
-│   ├── events/                   # Event system
-│   │   ├── bus.py                # EventBus
-│   │   ├── dispatcher.py         # Event dispatcher
-│   │   └── hooks.py            # Hook manager
-│   │
-│   ├── security/               # Security
-│   │   ├── signature.py        # Plugin signing
-│   │   ├── validation.py       # AST validation
-│   │   └── hashing.py          # Hash utilities
-│   │
-│   └── observability/          # Observability
-│       ├── logging.py          # Structured logging
-│       ├── metrics.py          # Metrics collection
-│       ├── tracing.py          # Distributed tracing
-│       └── health.py           # Health checks
-│
-├── configurations/             # Configuration
-│   ├── loader.py               # Config loader
-│   └── sections.py             # Config dataclasses
-│
-├── services/                   # Built-in services
-│   ├── container.py            # Service container
-│   ├── base.py                 # Base service class
-│   ├── cache/                  # Cache service
-│   ├── database/               # Database service
-│   ├── scheduler/              # Scheduler service
-│   └── extensions/             # Extension loader
-│
-├── registry/                   # Plugin registry
-│   ├── index.py                # Registry index
-│   ├── resolver.py             # Dependency resolver
-│   └── versioning.py           # Version management
-│
-├── sdk/                        # Plugin SDK
-│   ├── __init__.py
-│   ├── plugin_base.py          # Plugin manifest
-│   └── decorators.py           # SDK decorators
-│
-└── cli/                        # Command line
-    ├── main.py                 # CLI entry point
-    ├── plugin_cmd.py           # Plugin commands
-    └── validate_cmd.py         # Validation commands
-```
-
-## Performance Considerations
-
-### Trusted Plugins
-- Run in main process (fastest)
-- Direct service access
-- No serialization overhead
-- Shared memory
-
-### Sandboxed Plugins
-- Process isolation
-- IPC overhead (~1-5ms)
-- Serialization cost
-- Memory copying
-
-### Scaling Strategies
-
-```mermaid
-flowchart TB
-    subgraph Single["Single Instance"]
-        A[Process] --> B[Plugins]
-    end
-
-    subgraph Multi["Multi-Process"]
-        C[Load Balancer] --> D[Instance 1]
-        C --> E[Instance 2]
-        C --> F[Instance N]
-    end
-
-    subgraph Distributed["Distributed"]
-        G[API Gateway] --> H[Plugin Service A]
-        G --> I[Plugin Service B]
-        G --> J[Plugin Service C]
-    end
-```
-
-## Next Steps
-
-- [Plugin Development](../guides/creating-plugins.md)
-- [Service Integration](../guides/services.md)
-- [Configuration Reference](../reference/configuration.md)
+XCore est optimisé pour les environnements à haute charge :
+- **Appels concurrents** : La machine à états a été simplifiée pour permettre plusieurs appels simultanés sur le même plugin.
+- **Overhead minimal** : Un appel en mode Trusted prend environ **~0.8µs** (hors logique métier).
+- **Batching** : Support des opérations groupées (`mget`, `mset`) pour réduire la latence réseau des services (Redis).
+- **Caching** : Mémoïsation des vérifications de permissions et des types de fonctions.

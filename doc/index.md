@@ -1,69 +1,61 @@
-# XCore Framework Documentation
+# XCore Framework - Documentation Officielle
 
-Welcome to **XCore** — a production-grade, plugin-first Python framework built on FastAPI.
+Bienvenue dans la documentation de **XCore** — le framework Python "plugin-first" de qualité production, bâti sur FastAPI.
 
-## What is XCore?
+## Qu'est-ce que XCore ?
 
-XCore is a modular orchestration framework designed to load, isolate, and manage plugins in a secure sandboxed environment. It enables building extensible applications where each feature can be developed, tested, and deployed independently.
+XCore est un orchestrateur modulaire conçu pour charger, isoler et gérer des plugins dans un environnement sécurisé et performant. Il permet de construire des applications extensibles où chaque fonctionnalité peut être développée, testée et déployée indépendamment.
 
-## Key Features
+## Fonctionnalités Clés
 
-- **🚀 Dynamic Plugin System** — Load, unload, and hot-reload plugins without server restart
-- **🔒 Sandboxing & Security** — Isolated execution with process limits, timeouts, and automatic restarts
-- **🔌 Native Service Integration** — Built-in support for SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Task Scheduling (APScheduler), and more
-- **📡 Event-Driven Architecture** — Powerful event bus enabling inter-plugin communication and system events
-- **🌐 Custom HTTP Routes** — Plugins can expose their own FastAPI endpoints
-- **♻️ Hot Reloading** — Automatic file watching for development
-- **📊 Production Ready** — YAML configuration, environment variables, structured logging, metrics
+- **🚀 Système de Plugins Dynamique** — Chargement, déchargement et rechargement à chaud sans redémarrage.
+- **🔒 Sandboxing & Sécurité** — Isolation par processus, limites de ressources, timeouts et scan AST.
+- **🔌 Intégration Native de Services** — Support SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Planification (APScheduler).
+- **📡 Architecture Pilotée par les Événements** — Bus d'événements haute performance pour la communication inter-plugins.
+- **🌐 Routes HTTP Personnalisées** — Les plugins exposent leurs propres endpoints FastAPI.
+- **♻️ Hot Reloading** — Surveillance des fichiers pour un développement fluide.
+- **📊 Prêt pour la Production** — Configuration YAML, variables d'env, logs structurés, métriques.
 
-## Quick Start
+## Démarrage Rapide
 
 ```bash
-# Install dependencies
+# Installation des dépendances
 poetry install
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-# Run development server
-poetry run uvicorn app:app --reload --port 8082
+# Lancement du serveur de développement
+make run-dev
 ```
 
-## Documentation Structure
+## Structure de la Documentation
 
-```
-docs/
-├── getting-started/     # Installation and first steps
-├── guides/             # How-to guides
-├── reference/          # API reference and configuration
-├── architecture/       # System architecture and design
-├── development/        # Development guidelines
-├── deployment/         # Production deployment
-└── examples/           # Code examples and tutorials
-```
+-   **[Installation](getting-started/installation.md)** : Guide de mise en route.
+-   **[Architecture](architecture/overview.md)** : Plongeon dans les concepts internes.
+-   **[Guide de Création de Plugins](guides/creating-plugins.md)** : Créez votre première extension.
+-   **[Référence SDK](reference/sdk.md)** : Liste exhaustive des APIs pour développeurs.
+-   **[Sécurité](guides/security.md)** : Détails sur l'isolation et les permissions.
 
-## Project Architecture
+---
+
+## Architecture simplifiée
 
 ```mermaid
 graph TB
-    subgraph XCore["XCore Framework"]
+    subgraph XCore["Framework XCore"]
         X[Xcore Orchestrator]
         SC[ServiceContainer]
         PS[PluginSupervisor]
         EB[EventBus]
     end
 
-    subgraph Services["Built-in Services"]
-        DB[(Database)]
+    subgraph Services["Services Intégrés"]
+        DB[(Base de données)]
         CACHE[(Cache)]
         SCHED[Scheduler]
-        EXT[Extensions]
     end
 
-    subgraph Plugins["Plugin Layer"]
-        T[Trusted Plugins]
-        S[Sandboxed Plugins]
+    subgraph Plugins["Couche Plugins"]
+        T[Plugins Trusted]
+        S[Plugins Sandboxed]
     end
 
     X --> SC
@@ -77,24 +69,16 @@ graph TB
     FA[FastAPI App] --> X
 ```
 
-## Next Steps
-
-- [Installation Guide](getting-started/installation.md)
-- [Creating Your First Plugin](guides/creating-plugins.md)
-- [Configuration Reference](reference/configuration.md)
-- [Architecture Overview](architecture/overview.md)
-- [Versions & Changelog](versions.md)
-
 ## Versions
 
-- **Stable**: v2.0.0 — Architecture plugin-first avec sandboxing
-- [Historique complet](versions.md)
+-   **Stable** : v2.0.0 — Architecture plugin-first avec sandboxing.
+-   [Historique complet](versions.md)
 
-## Community & Support
+## Support et Communauté
 
-- GitHub Issues: [Report bugs or request features](https://github.com/traoreera/xcore/issues)
-- Discussions: [Community forum](https://github.com/traoreera/xcore/discussions)
+-   Issues GitHub : [Signaler un bug](https://github.com/traoreera/xcore/issues)
+-   Discussions : [Forum communautaire](https://github.com/traoreera/xcore/discussions)
 
-## License
+## Licence
 
-XCore is released under the [MIT License](./LICENSE).
+XCore est distribué sous licence [MIT](./LICENSE).
