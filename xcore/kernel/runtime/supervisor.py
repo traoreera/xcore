@@ -30,7 +30,7 @@ class RateLimitMiddleware(Middleware):
 
     async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
         try:
-            await self._rate.check(plugin_name)
+            self._rate.check(plugin_name)
         except RateLimitExceeded as e:
             return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
         return await next_call(plugin_name, action, payload, **kwargs)
