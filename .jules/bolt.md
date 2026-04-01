@@ -25,3 +25,7 @@
 ## 2026-04-25 - [Optimization of RateLimiter and Registry]
 **Learning:** Using `asyncio.Lock` and `async def` for pure in-memory operations (like rate limiting with a `deque`) introduces unnecessary coroutine overhead and context switching. In a single-threaded event loop, synchronous operations are effectively atomic if they don't contain `await` points, making the lock redundant.
 **Action:** Convert hot-path in-memory logic to synchronous methods and remove `asyncio.Lock` where I/O is not involved. This yielded a ~2.2x speedup in the rate-limiting check, reducing overhead from ~1.86µs to ~0.85µs.
+
+## 2026-05-01 - [Pre-compiling Middleware Chains]
+**Learning:** Defining local recursive functions and lambdas inside a hot-path `execute` method for a middleware pipeline is expensive. It forces the interpreter to allocate new function objects and closures for every single execution, increasing latency and GC pressure.
+**Action:** Pre-compile the middleware pipeline into a single nested closure during the initialization/setup phase. By using a static chain, per-call overhead was reduced by ~40% (from ~12.8µs to ~7.8µs for 5 middlewares), making the dispatch path significantly leaner.

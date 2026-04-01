@@ -38,6 +38,41 @@ class MiddlewarePipeline:
     def __init__(self, middlewares: List[Middleware], final_handler: Callable):
         self._middlewares = middlewares
         self._final_handler = final_handler
+        self._compiled_chain = self._build_chain()
+
+    def _build_chain(self) -> Callable:
+        """
+        Compile la chaîne de middlewares en une seule fonction imbriquée.
+        Cela évite de recréer la chaîne à chaque appel.
+        """
+        handler = self._final_handler
+
+        for middleware in reversed(self._middlewares):
+            handler = self._bind(middleware, handler)
+
+        return handler
+
+    def _bind(self, middleware: Middleware, next_step: Callable) -> Callable:
+        """Lie un middleware à l'étape suivante de la chaîne."""
+
+        async def wrapper(
+            plugin_name: str,
+            action: str,
+            payload: dict,
+            *,
+            handler: PluginHandler | None = None,
+            **kwargs
+        ) -> dict:
+            return await middleware(
+                plugin_name,
+                action,
+                payload,
+                next_step,
+                handler=handler,
+                **kwargs
+            )
+
+        return wrapper
 
     async def execute(
         self,
@@ -48,19 +83,7 @@ class MiddlewarePipeline:
         handler: PluginHandler | None = None,
         **kwargs
     ) -> dict:
-        """Démarre l'exécution de la chaîne."""
-
-        async def _chain(index: int, p_name: str, act: str, pay: dict, h: PluginHandler | None, **kw) -> dict:
-            if index < len(self._middlewares):
-                middleware = self._middlewares[index]
-                return await middleware(
-                    p_name,
-                    act,
-                    pay,
-                    lambda pn, a, pl, **k: _chain(index + 1, pn, a, pl, h, **k),
-                    handler=h,
-                    **kw
-                )
-            return await self._final_handler(p_name, act, pay, handler=h, **kw)
-
-        return await _chain(0, plugin_name, action, payload, handler, **kwargs)
+        """Exécute la chaîne pré-compilée."""
+        return await self._compiled_chain(
+            plugin_name, action, payload, handler=handler, **kwargs
+        )
