@@ -1045,8 +1045,8 @@ class WellDesignedPlugin(TrustedBase):
 
 ## Next Steps
 
-- [Creating Plugins](./creating-plugins.md) — Créer des plugins pas à pas
-- [Creating Services](./creating-services.md) — Créer des services personnalisés
-- [Events](./events.md) — Système d'événements
-- [Services](./services.md) — Utiliser les services
-- [Monitoring](./monitoring.md) — Monitorer vos plugins
+- [Creating Plugins](../guides/creating-plugins.md) — Créer des plugins pas à pas
+- [Creating Services](../guides/creating-services.md) — Créer des services personnalisés
+- [Events](../guides/events.md) — Système d'événements
+- [Services](../guides/services.md) — Utiliser les services
+- [Monitoring](../guides/monitoring.md) — Monitorer vos plugins

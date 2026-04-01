@@ -201,10 +201,10 @@ curl -X POST http://localhost:8082/app/mon_plugin/action \
 
 ## Ressources Complémentaires
 
-- [Documentation Principale](../README.md)
-- [Référence API du SDK](../../xcore/sdk/)
-- [Guide de Sécurité](../security.md)
-- [Dépannage](../troubleshooting.md)
+- [Documentation Principale](../index.md)
+- [Référence API du SDK](../reference/sdk.md)
+- [Guide de Sécurité](../guides/security.md)
+- [Dépannage](../guides/troubleshooting.md)
 
 ---
 
