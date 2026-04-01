@@ -84,7 +84,6 @@ class TestStateMachine:
         sm.transition("error")
         assert sm.state == PluginState.FAILED
 
-
     def test_unload_sequence(self, sm):
         """Test unload sequence."""
         # Load first
@@ -118,7 +117,6 @@ class TestStateMachine:
 
         assert "invalid_event" in str(exc_info.value)
         assert "unloaded" in str(exc_info.value)
-
 
     def test_transition_from_failed(self, sm):
         """Test transitions from FAILED state."""

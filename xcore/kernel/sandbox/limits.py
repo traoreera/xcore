@@ -4,7 +4,6 @@ limits.py — Rate limiting par plugin (fenêtre glissante).
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass

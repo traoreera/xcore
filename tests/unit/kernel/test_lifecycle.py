@@ -268,8 +268,7 @@ class Plugin(BasePlugin):
         await lifecycle_manager.load()
 
         results = await asyncio.gather(
-            lifecycle_manager.call("ping1", {}),
-            lifecycle_manager.call("ping2", {})
+            lifecycle_manager.call("ping1", {}), lifecycle_manager.call("ping2", {})
         )
 
         assert len(results) == 2

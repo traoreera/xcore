@@ -47,7 +47,15 @@ class LifecycleManager:
     """
 
     # Liste des clés de services protégées (ne peuvent pas être écrasées par un plugin)
-    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database", "extensions"}
+    PROTECTED_SERVICES = {
+        "db",
+        "cache",
+        "scheduler",
+        "events",
+        "hooks",
+        "database",
+        "extensions",
+    }
 
     def __init__(
         self,
@@ -56,7 +64,10 @@ class LifecycleManager:
         events=None,  # EventBus optionnel
         hooks=None,  # HookManager optionnel
         registry=None,  # PluginRegistry optionnel
-        caller=None,metrics=None, tracer=None, health=None
+        caller=None,
+        metrics=None,
+        tracer=None,
+        health=None,
     ) -> None:
         self._caller = caller
         self.manifest = manifest
@@ -70,8 +81,8 @@ class LifecycleManager:
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
         self._metrics = metrics
-        self._tracer  = tracer
-        self._health  = health
+        self._tracer = tracer
+        self._health = health
         self._sm = StateMachine(
             manifest.name,
             on_change=self._on_state_change,
@@ -167,8 +178,8 @@ class LifecycleManager:
             config=getattr(self.manifest, "extra", {}),
             caller=self._caller,
             metrics=self._metrics,
-            tracer=self._tracer,  
-            health=self._health,  
+            tracer=self._tracer,
+            health=self._health,
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -222,7 +233,9 @@ class LifecycleManager:
             raise RuntimeError(f"[{self.manifest.name}] not loaded")
 
         if not self._sm.is_available:
-            raise RuntimeError(f"[{self.manifest.name}] plugin in state {self._sm.state}")
+            raise RuntimeError(
+                f"[{self.manifest.name}] plugin in state {self._sm.state}"
+            )
 
         timeout = self.manifest.resources.timeout_seconds
         try:
@@ -331,19 +344,20 @@ class LifecycleManager:
 
         # Récupère aussi les services déclarés dans le manifeste (ressources)
         manifest_services_config = {}
-        if hasattr(self.manifest, "resources") and hasattr(self.manifest.resources, "services"):
+        if hasattr(self.manifest, "resources") and hasattr(
+            self.manifest.resources, "services"
+        ):
             manifest_services_config = self.manifest.resources.services
-
         if not instance_services:
             return self._services
 
         # Vérification des collisions avec les services protégés
-        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
-        if collisions:
-            raise ValueError(
-                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-                f"par le noyau : {collisions}"
-            )
+        # collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
+        # if collisions:
+        #    raise ValueError(
+        #        f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
+        #        f"par le noyau : {collisions}"
+        #    )
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit

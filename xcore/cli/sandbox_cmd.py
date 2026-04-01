@@ -91,30 +91,37 @@ async def _sandbox_run(args) -> None:
     mgr = SandboxProcessManager(manifest, config)
 
     try:
-        with console.status(f"[bold green]Démarrage de la sandbox {escape(name)}...[/]"):
+        with console.status(
+            f"[bold green]Démarrage de la sandbox {escape(name)}...[/]"
+        ):
             await mgr.start()
             status = mgr.status()
 
             # Ping de confirmation
             from xcore.kernel.sandbox.ipc import IPCChannel
+
             resp = await mgr._channel.call("ping", {})
 
         if resp.success:
             console.print(f"✅ [bold green]Sandbox opérationnelle[/]")
         else:
-            console.print(f"⚠️  [yellow]Sandbox démarrée mais ping échoué : {escape(str(resp.data))}[/]")
+            console.print(
+                f"⚠️  [yellow]Sandbox démarrée mais ping échoué : {escape(str(resp.data))}[/]"
+            )
 
         table = Table(box=None, show_header=False, padding=(0, 2))
         table.add_row("[bold cyan]PID   :[/]", f"[magenta]{status['pid']}[/]")
         table.add_row("[bold cyan]État  :[/]", f"[yellow]{status['state']}[/]")
         table.add_row(
             "[bold cyan]Disque:[/]",
-            f"[magenta]{status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB[/]"
+            f"[magenta]{status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB[/]",
         )
         console.print(table)
 
     except Exception as e:
-        error_console.print(f"[bold red]❌ Échec démarrage sandbox :[/] {escape(str(e))}")
+        error_console.print(
+            f"[bold red]❌ Échec démarrage sandbox :[/] {escape(str(e))}"
+        )
         sys.exit(1)
     finally:
         await mgr.stop()
@@ -131,7 +138,9 @@ async def _sandbox_limits(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
+        error_console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable."
+        )
         sys.exit(1)
 
     try:
@@ -156,7 +165,9 @@ async def _sandbox_limits(args) -> None:
         info.append(f"    [dim]intervalle     : {rt.health_check.interval_seconds}s[/]")
         info.append(f"    [dim]timeout        : {rt.health_check.timeout_seconds}s[/]")
 
-    info.append(f"  [cyan]Retry            :[/][yellow] {rt.retry.max_attempts} tentative(s)[/]")
+    info.append(
+        f"  [cyan]Retry            :[/][yellow] {rt.retry.max_attempts} tentative(s)[/]"
+    )
     if rt.retry.max_attempts > 1:
         info.append(f"    [dim]backoff        : {rt.retry.backoff_seconds}s[/]")
 
@@ -193,7 +204,9 @@ async def _sandbox_network(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
+        error_console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable."
+        )
         sys.exit(1)
 
     try:
@@ -226,12 +239,16 @@ async def _sandbox_network(args) -> None:
     ]
 
     if allowed_network:
-        info.append(f"⚠️  [yellow]Imports réseau autorisés (whitelist) :[/] {escape(str(allowed_network))}")
+        info.append(
+            f"⚠️  [yellow]Imports réseau autorisés (whitelist) :[/] {escape(str(allowed_network))}"
+        )
     else:
         info.append("✅ [green]Aucun import réseau autorisé[/]")
 
     if blocked_by_ast:
-        info.append("\n❌ [bold red]Imports réseau détectés et bloqués par AST scan :[/]")
+        info.append(
+            "\n❌ [bold red]Imports réseau détectés et bloqués par AST scan :[/]"
+        )
         for b in blocked_by_ast:
             info.append(f"   [red]→ {escape(str(b))}[/]")
     else:
@@ -255,7 +272,9 @@ async def _sandbox_fs(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        error_console.print(f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable.")
+        error_console.print(
+            f"[bold red]❌ Erreur :[/] Plugin '{escape(name)}' introuvable."
+        )
         sys.exit(1)
 
     try:
@@ -277,7 +296,11 @@ async def _sandbox_fs(args) -> None:
     else:
         for p in fs.allowed_paths:
             abs_path = plugin_dir / p
-            status = "[green]✅ existe[/]" if abs_path.exists() else "[yellow]⚠️  manquant[/]"
+            status = (
+                "[green]✅ existe[/]"
+                if abs_path.exists()
+                else "[yellow]⚠️  manquant[/]"
+            )
             table.add_row(escape(str(p)), status)
         info.append(table)
 
@@ -301,7 +324,7 @@ async def _sandbox_fs(args) -> None:
         console.print("")
         create = Confirm.ask(
             f"[yellow]⚠️  Le dossier {escape(str(data_dir.relative_to(plugin_dir.parent)))} n'existe pas. Créer ?[/]",
-            default=False
+            default=False,
         )
         if create:
             data_dir.mkdir(parents=True)

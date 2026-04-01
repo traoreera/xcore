@@ -1,10 +1,10 @@
-import os
 import builtins
-import io
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pytest
+
 from xcore.kernel.sandbox.worker import FilesystemGuard
+
 
 class TestFilesystemGuardEnhanced:
     @pytest.fixture
@@ -28,17 +28,19 @@ class TestFilesystemGuardEnhanced:
         # This makes it hard to test in isolation without running install().
         # Let's verify if I can test it by running install() on a Mock object instead of global builtins.
 
-        mock_builtins = MagicMock()
-        mock_io = MagicMock()
+        MagicMock()
+        MagicMock()
         mock_os = MagicMock()
-        mock_path = MagicMock()
+        MagicMock()
 
         # We'll test the logic by manually installing it on our mocks
         def _guarded_op(func, label, is_method=False):
             def wrapper(*args, **kwargs):
-                if guard._in_guard: return func(*args, **kwargs)
+                if guard._in_guard:
+                    return func(*args, **kwargs)
                 path = args[0] if args else None
-                if not is_method and isinstance(path, int): return func(*args, **kwargs)
+                if not is_method and isinstance(path, int):
+                    return func(*args, **kwargs)
                 guard._in_guard = True
                 try:
                     if path is not None and not guard.is_allowed(path):
@@ -46,6 +48,7 @@ class TestFilesystemGuardEnhanced:
                     return func(*args, **kwargs)
                 finally:
                     guard._in_guard = False
+
             return wrapper
 
         mock_os.remove = MagicMock()
@@ -60,19 +63,21 @@ class TestFilesystemGuardEnhanced:
         denied_path = str(plugin_dir / "src" / "secret.py")
         with pytest.raises(PermissionError):
             guarded_remove(denied_path)
-        assert mock_os.remove.call_count == 1 # only from the first call
+        assert mock_os.remove.call_count == 1  # only from the first call
 
     def test_recursion_guard(self, guard, plugin_dir):
         mock_func = MagicMock(return_value="done")
 
         def _guarded_op(func, label, is_method=False):
             def wrapper(*args, **kwargs):
-                if guard._in_guard: return func(*args, **kwargs)
+                if guard._in_guard:
+                    return func(*args, **kwargs)
                 guard._in_guard = True
                 try:
                     return func(*args, **kwargs)
                 finally:
                     guard._in_guard = False
+
             return wrapper
 
         guarded = _guarded_op(mock_func, "test_op")

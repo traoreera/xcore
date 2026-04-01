@@ -130,7 +130,9 @@ class MarketplaceClient:
     def _http_get(self, url: str) -> Any:
         scheme = urlparse(url).scheme
         if scheme not in ("http", "https"):
-            raise MarketplaceError(f"Sécurité : protocole '{scheme}' non autorisé pour {url}")
+            raise MarketplaceError(
+                f"Sécurité : protocole '{scheme}' non autorisé pour {url}"
+            )
         req = Request(url, headers=self._headers())
         try:
             with urlopen(req, timeout=self._timeout) as resp:
@@ -145,7 +147,9 @@ class MarketplaceClient:
     def _http_post(self, url: str, body: dict) -> Any:
         scheme = urlparse(url).scheme
         if scheme not in ("http", "https"):
-            raise MarketplaceError(f"Sécurité : protocole '{scheme}' non autorisé pour {url}")
+            raise MarketplaceError(
+                f"Sécurité : protocole '{scheme}' non autorisé pour {url}"
+            )
         data = json.dumps(body).encode("utf-8")
         req = Request(
             url,

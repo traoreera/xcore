@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import builtins as _builtins_module
+import contextlib
 import importlib.machinery
 import importlib.util
 import json
@@ -103,20 +104,14 @@ class FilesystemGuard:
 
         # 1. Vérifie denied en premier
         for denied in self._denied:
-            try:
+            with contextlib.suppress(ValueError):
                 target.relative_to(denied)
                 return False  # dans un chemin denied → bloqué
-            except ValueError:
-                pass
-
         # 2. Vérifie allowed
         for allowed in self._allowed:
-            try:
+            with contextlib.suppress(ValueError):
                 target.relative_to(allowed)
                 return True  # dans un chemin allowed → autorisé
-            except ValueError:
-                pass
-
         # 3. Fail-closed
         return False
 
@@ -168,7 +163,9 @@ class FilesystemGuard:
             try:
                 stack = "".join(_traceback.format_stack()[:-1])
                 logger.warning(
-                    f"[sandbox:BLOCKED] {label}\n" f"  args={args!r}\n" f"  stack:\n{stack}"
+                    f"[sandbox:BLOCKED] {label}\n"
+                    f"  args={args!r}\n"
+                    f"  stack:\n{stack}"
                 )
             finally:
                 guard._in_guard = was
@@ -176,8 +173,8 @@ class FilesystemGuard:
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
-        from pathlib import Path as _Path
         import inspect
+        from pathlib import Path as _Path
 
         def _guarded_op(func, label):
             sig = inspect.signature(func)
@@ -189,7 +186,8 @@ class FilesystemGuard:
                 try:
                     bound = sig.bind_partial(*args, **kwargs).arguments
                     paths = [
-                        v for k, v in bound.items()
+                        v
+                        for k, v in bound.items()
                         if k in pnames and isinstance(v, (str, os.PathLike))
                     ]
                 except Exception:
@@ -217,11 +215,39 @@ class FilesystemGuard:
 
         io.FileIO = _GuardedFileIO
 
-        for op in ["open", "remove", "unlink", "rmdir", "mkdir", "makedirs", "rename", "replace", "listdir", "scandir", "stat", "lstat", "chmod"]:
+        for op in [
+            "open",
+            "remove",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "makedirs",
+            "rename",
+            "replace",
+            "listdir",
+            "scandir",
+            "stat",
+            "lstat",
+            "chmod",
+        ]:
             if hasattr(os, op):
                 setattr(os, op, _guarded_op(getattr(os, op), f"os.{op}"))
 
-        for op in ["open", "unlink", "rmdir", "mkdir", "rename", "replace", "stat", "lstat", "chmod", "touch", "exists", "is_file", "is_dir"]:
+        for op in [
+            "open",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "rename",
+            "replace",
+            "stat",
+            "lstat",
+            "chmod",
+            "touch",
+            "exists",
+            "is_file",
+            "is_dir",
+        ]:
             if hasattr(_Path, op):
                 setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
 
@@ -331,8 +357,9 @@ class FilesystemGuard:
         # ── Couche 4 : ctypes — blocage complet ───────────────────────────────
         # ctypes.CDLL/cdll déjà bloqués → on ferme les APIs restantes.
 
-        try:
+        with contextlib.suppress(ImportError):
             import ctypes as _ctypes
+            import sys
 
             def _blocked_ctypes_api(label):
                 def _inner(*args, **kwargs):
@@ -343,9 +370,10 @@ class FilesystemGuard:
             # Chargement de bibliothèques natives
             _ctypes.CDLL = _blocked_ctypes_api("CDLL")
             _ctypes.cdll = _blocked_ctypes_api("cdll")
-            _ctypes.WinDLL = _blocked_ctypes_api("WinDLL")  # Windows
-            _ctypes.OleDLL = _blocked_ctypes_api("OleDLL")  # Windows
             _ctypes.PyDLL = _blocked_ctypes_api("PyDLL")
+            if sys.platform == "win32":
+                _ctypes.WinDLL = _blocked_ctypes_api("WinDLL")  # Windows
+                _ctypes.OleDLL = _blocked_ctypes_api("OleDLL")  # Windows
 
             # Manipulation mémoire brute
             _ctypes.cast = _blocked_ctypes_api("cast")
@@ -355,18 +383,10 @@ class FilesystemGuard:
             _ctypes.wstring_at = _blocked_ctypes_api("wstring_at")
 
             # Accès Python C-API et libc
-            try:
+            with contextlib.suppress(AttributeError):
                 _ctypes.pythonapi = _blocked_ctypes_api("pythonapi")
-            except AttributeError:
-                pass
-            try:
+            with contextlib.suppress(AttributeError):
                 _ctypes.cdll.LoadLibrary = _blocked_ctypes_api("cdll.LoadLibrary")
-            except AttributeError:
-                pass
-
-        except ImportError:
-            pass  # ctypes non disponible → rien à bloquer
-
         logger.debug(
             f"[sandbox] Guard installé (4 couches) — "
             f"allowed={[str(p) for p in self._allowed]}, "
@@ -430,7 +450,7 @@ class _PluginImportHook:
 
     def _owns(self, fullname: str) -> bool:
         return fullname == self._pkg_prefix or fullname.startswith(
-            self._pkg_prefix + "."
+            f"{self._pkg_prefix}."
         )
 
     def _spec_for(self, fullname: str, relative: str):
@@ -442,12 +462,11 @@ class _PluginImportHook:
         """
         if not relative:
             # Package racine namespace (pas de __init__.py requis)
-            spec = importlib.util.spec_from_file_location(
+            if spec := importlib.util.spec_from_file_location(
                 fullname,
                 origin=None,
                 submodule_search_locations=[str(self._src_dir)],
-            )
-            if spec:
+            ):
                 return spec
 
         parts = relative.split(".")
@@ -520,7 +539,7 @@ class _PluginImportHook:
         to_remove = [
             k
             for k in sys.modules
-            if k == self._pkg_prefix or k.startswith(self._pkg_prefix + ".")
+            if k == self._pkg_prefix or k.startswith(f"{self._pkg_prefix}.")
         ]
         for key in to_remove:
             del sys.modules[key]
@@ -639,36 +658,40 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         if not manifest_path.exists():
             continue
         try:
-            if fname.endswith(".yaml"):
-                import yaml
-
-                with open(manifest_path, encoding="utf-8") as f:
-                    raw = yaml.safe_load(f) or {}
-            else:
-                import json as _json
-
-                with open(manifest_path, encoding="utf-8") as f:
-                    raw = _json.load(f)
-
-            if ep := raw.get("entry_point"):
-                manifest.entry_point = ep.strip()
-
-            fs = raw.get("filesystem", {})
-            if ap := fs.get("allowed_paths"):
-                manifest.allowed_paths = ap
-            if dp := fs.get("denied_paths"):
-                manifest.denied_paths = dp
-
-            logger.debug(
-                f"Manifeste chargé : entry_point={manifest.entry_point!r}, "
-                f"allowed={manifest.allowed_paths}, denied={manifest.denied_paths}"
-            )
-            return manifest
-
+            return _extracted_from__load_manifest_20(fname, manifest_path, manifest)
         except Exception as e:
             logger.warning(f"Impossible de lire le manifeste ({fname}) : {e}")
 
     logger.warning(f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
+    return manifest
+
+
+# TODO Rename this here and in `_load_manifest`
+def _extracted_from__load_manifest_20(fname, manifest_path, manifest):
+    if fname.endswith(".yaml"):
+        import yaml
+
+        with open(manifest_path, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    else:
+        import json as _json
+
+        with open(manifest_path, encoding="utf-8") as f:
+            raw = _json.load(f)
+
+    if ep := raw.get("entry_point"):
+        manifest.entry_point = ep.strip()
+
+    fs = raw.get("filesystem", {})
+    if ap := fs.get("allowed_paths"):
+        manifest.allowed_paths = ap
+    if dp := fs.get("denied_paths"):
+        manifest.denied_paths = dp
+
+    logger.debug(
+        f"Manifeste chargé : entry_point={manifest.entry_point!r}, "
+        f"allowed={manifest.allowed_paths}, denied={manifest.denied_paths}"
+    )
     return manifest
 
 
