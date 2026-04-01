@@ -32,3 +32,8 @@
 **Vulnerability:** The `ASTScanner` allowed the use of the `hasattr` built-in, enabling sandboxed plugins to probe for the existence of sensitive internal attributes (e.g., `__class__`, `__subclasses__`) without triggering an access error.
 **Learning:** Security sandboxes that block attribute access (like `getattr` or direct attribute access) can still be "fingerprinted" or probed using `hasattr`. This allows an attacker to discover which objects might be vulnerable to escape before attempting a blocked operation.
 **Prevention:** Always include `hasattr` in the list of forbidden built-ins for restricted execution environments, alongside `getattr`, `setattr`, and `delattr`.
+
+## 2026-04-15 - AST Sandbox Escape via Reflection Built-ins
+**Vulnerability:** The `ASTScanner` allowed the use of `vars()`, `dir()`, `input()`, and `help()`. `vars()` and `dir()` enable object introspection, which can be used to discover hidden attributes or internal state to bypass security checks. `input()` and `help()` can cause DoS or information leakage in restricted environments.
+**Learning:** Blacklisting a few obvious built-ins like `eval` and `exec` is insufficient. Reflection and introspection tools are equally dangerous in a sandbox as they provide the roadmap for more complex escapes. Interactive built-ins can also disrupt the sandboxed process.
+**Prevention:** Maintain a comprehensive and frequently updated list of forbidden built-ins. Always include any function that allows introspection (`vars`, `dir`, `getattr`, `hasattr`, etc.) or interaction (`input`, `help`).

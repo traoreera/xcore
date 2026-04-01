@@ -152,6 +152,20 @@ class TestSecurityVisitor:
         visitor.visit(tree)
         assert any("hasattr" in e for e in visitor.errors)
 
+    def test_visit_call_forbidden_builtins(self, visitor):
+        """Test detecting new forbidden built-ins: vars, dir, input, help."""
+        for name in ["vars", "dir", "input", "help"]:
+            code = f"{name}()"
+            tree = ast.parse(code)
+            v = _SecurityVisitor(
+                forbidden=visitor.forbidden,
+                allowed=visitor.allowed,
+                filename="test.py",
+                path=Path("/test/test.py"),
+            )
+            v.visit(tree)
+            assert any(name in e for e in v.errors), f"{name} should be blocked"
+
     def test_visit_attribute_bypass_module(self, visitor):
         """Test detecting bypass via module attribute (e.g. pathlib.os)."""
         # Note: In a real bypass attempt, 'pathlib' would be allowed but it exports 'os'
