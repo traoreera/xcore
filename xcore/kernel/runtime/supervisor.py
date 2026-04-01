@@ -7,7 +7,6 @@ C'est lui qu'expose Xcore via xcore.plugins.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +27,9 @@ class RateLimitMiddleware(Middleware):
     def __init__(self, rate):
         self._rate = rate
 
-    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+    async def __call__(
+        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
+    ):
         try:
             self._rate.check(plugin_name)
         except RateLimitExceeded as e:
@@ -40,7 +41,9 @@ class PermissionMiddleware(Middleware):
     def __init__(self, permissions):
         self._permissions = permissions
 
-    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+    async def __call__(
+        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
+    ):
         resource = kwargs.get("resource") or f"{action}"
         try:
             self._permissions.check(plugin_name, resource, "execute")
@@ -71,9 +74,9 @@ class PluginSupervisor:
         events=None,
         hooks=None,
         registry=None,
-        metrics = None,
-        tracer = None,
-        health = None,
+        metrics=None,
+        tracer=None,
+        health=None,
     ) -> None:
         self._config = config
         self._services = services
@@ -187,11 +190,7 @@ class PluginSupervisor:
 
         # Exécution de la pipeline (inclut tracing, retry, rate limit et permissions)
         return await self._pipeline.execute(
-            plugin_name,
-            action,
-            payload,
-            handler=handler,
-            resource=resource
+            plugin_name, action, payload, handler=handler, resource=resource
         )
 
     async def _dispatch(

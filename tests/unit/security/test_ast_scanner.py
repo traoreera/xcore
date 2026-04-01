@@ -15,7 +15,6 @@ from xcore.kernel.security.validation import (
     ManifestError,
     ManifestValidator,
     ScanResult,
-    _SecurityVisitor,
     _resolve_env,
     _SecurityVisitor,
 )
@@ -145,6 +144,7 @@ class TestSecurityVisitor:
         """Test detecting hasattr() call."""
         # hasattr is now in FORBIDDEN_BUILTINS
         from xcore.kernel.security.section import FORBIDDEN_BUILTINS
+
         visitor.forbidden_builtins = FORBIDDEN_BUILTINS
 
         code = "hasattr(obj, '__class__')"
@@ -275,7 +275,10 @@ class TestASTScanner:
 
         # Mock file read to raise exception. On Python 3.12, Path.read_text is read-only on instances.
         # Patching it via its string path is more robust.
-        with patch("xcore.kernel.security.validation.Path.read_text", side_effect=IOError("Permission denied")):
+        with patch(
+            "xcore.kernel.security.validation.Path.read_text",
+            side_effect=IOError("Permission denied"),
+        ):
             result = scanner.scan(tmp_path)
 
         assert result.passed is False

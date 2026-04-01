@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Callable
+
 from ..middleware import Middleware
 
 logger = logging.getLogger("xcore.runtime.middleware.tracing")
@@ -23,9 +24,9 @@ class TracingMiddleware(Middleware):
         self._metrics = metrics
 
         if self._metrics:
-            self._c_calls  = self._metrics.counter("plugin.calls")
+            self._c_calls = self._metrics.counter("plugin.calls")
             self._c_errors = self._metrics.counter("plugin.errors")
-            self._h_lat    = self._metrics.histogram("plugin.latency_seconds")
+            self._h_lat = self._metrics.histogram("plugin.latency_seconds")
 
     async def __call__(
         self,
@@ -35,7 +36,7 @@ class TracingMiddleware(Middleware):
         next_call: Callable,
         *,
         handler=None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         t0 = time.monotonic()
 

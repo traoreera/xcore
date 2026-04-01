@@ -1,14 +1,18 @@
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
-from xcore.kernel.runtime.lifecycle import LifecycleManager
+
 from xcore.kernel.api.contract import BasePlugin
+from xcore.kernel.runtime.lifecycle import LifecycleManager
+
 
 class MockPlugin(BasePlugin):
     def __init__(self, services):
         self._services = services
+
     async def handle(self, action, payload):
         return {"status": "ok"}
+
 
 @pytest.fixture
 def mock_manifest():
@@ -18,6 +22,7 @@ def mock_manifest():
     manifest.entry_point = "main.py"
     manifest.resources.timeout_seconds = 10
     return manifest
+
 
 @pytest.mark.asyncio
 async def test_lifecycle_mems_protection():
@@ -38,6 +43,7 @@ async def test_lifecycle_mems_protection():
     assert "db" in str(exc.value)
     # Vérifier que le service original n'a pas été écrasé
     assert shared_services["db"] == "core_db"
+
 
 @pytest.mark.asyncio
 async def test_lifecycle_mems_allowed():

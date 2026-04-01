@@ -7,7 +7,6 @@ Limite mémoire appliquée au démarrage via RLIMIT_AS.
 Filesystem policy appliquée via FilesystemGuard.
 """
 
-
 from __future__ import annotations
 
 import asyncio
@@ -164,7 +163,9 @@ class FilesystemGuard:
             try:
                 stack = "".join(_traceback.format_stack()[:-1])
                 logger.warning(
-                    f"[sandbox:BLOCKED] {label}\n" f"  args={args!r}\n" f"  stack:\n{stack}"
+                    f"[sandbox:BLOCKED] {label}\n"
+                    f"  args={args!r}\n"
+                    f"  stack:\n{stack}"
                 )
             finally:
                 guard._in_guard = was
@@ -172,8 +173,8 @@ class FilesystemGuard:
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
-        from pathlib import Path as _Path
         import inspect
+        from pathlib import Path as _Path
 
         def _guarded_op(func, label):
             sig = inspect.signature(func)
@@ -185,7 +186,8 @@ class FilesystemGuard:
                 try:
                     bound = sig.bind_partial(*args, **kwargs).arguments
                     paths = [
-                        v for k, v in bound.items()
+                        v
+                        for k, v in bound.items()
                         if k in pnames and isinstance(v, (str, os.PathLike))
                     ]
                 except Exception:
@@ -213,11 +215,39 @@ class FilesystemGuard:
 
         io.FileIO = _GuardedFileIO
 
-        for op in ["open", "remove", "unlink", "rmdir", "mkdir", "makedirs", "rename", "replace", "listdir", "scandir", "stat", "lstat", "chmod"]:
+        for op in [
+            "open",
+            "remove",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "makedirs",
+            "rename",
+            "replace",
+            "listdir",
+            "scandir",
+            "stat",
+            "lstat",
+            "chmod",
+        ]:
             if hasattr(os, op):
                 setattr(os, op, _guarded_op(getattr(os, op), f"os.{op}"))
 
-        for op in ["open", "unlink", "rmdir", "mkdir", "rename", "replace", "stat", "lstat", "chmod", "touch", "exists", "is_file", "is_dir"]:
+        for op in [
+            "open",
+            "unlink",
+            "rmdir",
+            "mkdir",
+            "rename",
+            "replace",
+            "stat",
+            "lstat",
+            "chmod",
+            "touch",
+            "exists",
+            "is_file",
+            "is_dir",
+        ]:
             if hasattr(_Path, op):
                 setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
 
@@ -330,6 +360,7 @@ class FilesystemGuard:
         with contextlib.suppress(ImportError):
             import ctypes as _ctypes
             import sys
+
             def _blocked_ctypes_api(label):
                 def _inner(*args, **kwargs):
                     _block(f"ctypes.{label}()", args)
@@ -431,7 +462,7 @@ class _PluginImportHook:
         """
         if not relative:
             # Package racine namespace (pas de __init__.py requis)
-            if spec:= importlib.util.spec_from_file_location(
+            if spec := importlib.util.spec_from_file_location(
                 fullname,
                 origin=None,
                 submodule_search_locations=[str(self._src_dir)],

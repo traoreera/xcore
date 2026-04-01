@@ -1,7 +1,14 @@
-
 import time
+
 import pytest
-from xcore.kernel.sandbox.limits import RateLimiter, RateLimitConfig, RateLimiterRegistry, RateLimitExceeded
+
+from xcore.kernel.sandbox.limits import (
+    RateLimitConfig,
+    RateLimiter,
+    RateLimiterRegistry,
+    RateLimitExceeded,
+)
+
 
 def test_ratelimiter_basic():
     config = RateLimitConfig(calls=2, period_seconds=1.0)
@@ -16,6 +23,7 @@ def test_ratelimiter_basic():
         limiter.check("plugin1")
     assert "quota dépassé" in str(exc.value)
 
+
 def test_ratelimiter_expiry():
     config = RateLimitConfig(calls=1, period_seconds=0.1)
     limiter = RateLimiter(config)
@@ -27,6 +35,7 @@ def test_ratelimiter_expiry():
 
     # Should be allowed again
     limiter.check("plugin1")
+
 
 def test_registry():
     registry = RateLimiterRegistry()

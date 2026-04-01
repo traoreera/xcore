@@ -14,7 +14,8 @@ SECURITY_IGNORE = {
     ".git",
     ".mypy_cache",
     ".pytest_cache",
-    "*.md", "*.json"
+    "*.md",
+    "*.json",
 }
 
 

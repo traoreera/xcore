@@ -7,9 +7,9 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from urllib.parse import urlparse
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from rich.console import Console, Group
 from rich.markup import escape
@@ -35,7 +35,9 @@ def _ensure_safe_scheme(url: str) -> None:
     """Vérifie que l'URL utilise un protocole sécurisé (http/https)."""
     scheme = urlparse(url).scheme
     if scheme not in ("http", "https"):
-        console.print(f"[bold red]❌ Sécurité :[/] Protocole '{scheme}' non supporté pour {url}")
+        console.print(
+            f"[bold red]❌ Sécurité :[/] Protocole '{scheme}' non supporté pour {url}"
+        )
         console.print("    Seuls 'http' et 'https' sont autorisés.")
         sys.exit(1)
 
@@ -162,7 +164,9 @@ async def _plugin_health(args) -> None:
 
                 # AST scan
                 scanner = ASTScanner()
-                result = scanner.scan(plugin_dir_entry, whitelist=manifest.allowed_imports)
+                result = scanner.scan(
+                    plugin_dir_entry, whitelist=manifest.allowed_imports
+                )
                 ast_ok = "✅" if result.passed else "❌"
 
                 mode = manifest.execution_mode.value
@@ -671,4 +675,11 @@ async def handle_health(args) -> None:
     status_str = "[bold green]OK[/]" if health["ok"] else "[bold red]DÉGRADÉ[/]"
     title = f"Health Check : {status_str}"
 
-    console.print(Panel(table, title=title, expand=False, border_style="green" if health["ok"] else "red"))
+    console.print(
+        Panel(
+            table,
+            title=title,
+            expand=False,
+            border_style="green" if health["ok"] else "red",
+        )
+    )

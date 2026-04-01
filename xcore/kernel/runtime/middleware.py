@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, List
 
 if TYPE_CHECKING:
     from .loader import PluginHandler
@@ -26,7 +26,7 @@ class Middleware(ABC):
         next_call: Callable,
         *,
         handler: PluginHandler | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         """Exécute la logique du middleware."""
         ...
@@ -46,11 +46,13 @@ class MiddlewarePipeline:
         payload: dict,
         *,
         handler: PluginHandler | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         """Démarre l'exécution de la chaîne."""
 
-        async def _chain(index: int, p_name: str, act: str, pay: dict, h: PluginHandler | None, **kw) -> dict:
+        async def _chain(
+            index: int, p_name: str, act: str, pay: dict, h: PluginHandler | None, **kw
+        ) -> dict:
             if index < len(self._middlewares):
                 middleware = self._middlewares[index]
                 return await middleware(
@@ -59,7 +61,7 @@ class MiddlewarePipeline:
                     pay,
                     lambda pn, a, pl, **k: _chain(index + 1, pn, a, pl, h, **k),
                     handler=h,
-                    **kw
+                    **kw,
                 )
             return await self._final_handler(p_name, act, pay, handler=h, **kw)
 

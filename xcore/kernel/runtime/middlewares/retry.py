@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Callable
+
 from ..middleware import Middleware
 
 logger = logging.getLogger("xcore.runtime.middleware.retry")
@@ -26,7 +27,7 @@ class RetryMiddleware(Middleware):
         next_call: Callable,
         *,
         handler=None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         manifest = getattr(handler, "manifest", None) if handler else None
         retry_cfg = getattr(manifest, "runtime", None) if manifest else None
@@ -42,7 +43,11 @@ class RetryMiddleware(Middleware):
                 result = await next_call(plugin_name, action, payload, **kwargs)
 
                 # Si le résultat indique une erreur de type exception capturée par le handler
-                if isinstance(result, dict) and result.get("status") == "error" and result.get("code") == "exception":
+                if (
+                    isinstance(result, dict)
+                    and result.get("status") == "error"
+                    and result.get("code") == "exception"
+                ):
                     raise Exception(result.get("msg", "Unknown error"))
 
                 return result
@@ -55,12 +60,15 @@ class RetryMiddleware(Middleware):
                         f"retry dans {backoff}s : {e}"
                     )
                     await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 60.0) # Exponential backoff plafonné
+                    # Exponential backoff plafonné
+                    backoff = min(backoff * 2, 60.0)
 
-        logger.error(f"[{plugin_name}] Toutes les tentatives ({max_attempts}) ont échoué : {last_err}")
+        logger.error(
+            f"[{plugin_name}] Toutes les tentatives ({max_attempts}) ont échoué : {last_err}"
+        )
         return {
             "status": "error",
             "msg": str(last_err),
             "code": "all_retries_failed",
-            "attempts": max_attempts
+            "attempts": max_attempts,
         }

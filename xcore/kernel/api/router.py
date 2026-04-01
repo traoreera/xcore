@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from ..observability import MetricsRegistry, HealthChecker
@@ -166,7 +166,6 @@ def build_router(
         await supervisor.unload(plugin_name)
         return {"status": "ok", "msg": f"Plugin '{plugin_name}' unloaded"}
 
-
     @router.get("/health")
     async def health_check() -> dict:
         if health_checker is None:
@@ -178,6 +177,5 @@ def build_router(
         if metrics_registry is None:
             return {}
         return metrics_registry.snapshot()
-
 
     return router

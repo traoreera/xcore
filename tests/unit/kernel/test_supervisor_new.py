@@ -1,15 +1,17 @@
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import asyncio
-from unittest.mock import MagicMock, AsyncMock
-from xcore.kernel.runtime.supervisor import PluginSupervisor
+
 from xcore.kernel.runtime.middleware import Middleware
 from xcore.kernel.runtime.middlewares.retry import RetryMiddleware
+from xcore.kernel.runtime.supervisor import PluginSupervisor
+
 
 class MockHandler:
     def __init__(self, manifest):
         self.manifest = manifest
         self.call = AsyncMock()
+
 
 @pytest.fixture
 def mock_config():
@@ -17,11 +19,13 @@ def mock_config():
     config.directory = "/tmp/plugins"
     return config
 
+
 @pytest.fixture
 def supervisor(mock_config):
     services = MagicMock()
     services.as_dict.return_value = {}
     return PluginSupervisor(mock_config, services)
+
 
 @pytest.mark.asyncio
 async def test_supervisor_middleware_pipeline(supervisor):
@@ -34,9 +38,9 @@ async def test_supervisor_middleware_pipeline(supervisor):
 
     # Initialize pipeline manually for test
     from xcore.kernel.runtime.middleware import MiddlewarePipeline
+
     supervisor._pipeline = MiddlewarePipeline(
-        middlewares=[],
-        final_handler=supervisor._dispatch
+        middlewares=[], final_handler=supervisor._dispatch
     )
 
     # Call
@@ -45,6 +49,7 @@ async def test_supervisor_middleware_pipeline(supervisor):
     # Verify
     assert result["status"] == "ok"
     handler.call.assert_called_once_with("test_action", {})
+
 
 @pytest.mark.asyncio
 async def test_retry_middleware(supervisor):
@@ -59,7 +64,7 @@ async def test_retry_middleware(supervisor):
     handler.call.side_effect = [
         Exception("Fail 1"),
         Exception("Fail 2"),
-        {"status": "ok", "result": "third_time_charm"}
+        {"status": "ok", "result": "third_time_charm"},
     ]
 
     supervisor._loader = MagicMock()
@@ -67,9 +72,9 @@ async def test_retry_middleware(supervisor):
     supervisor._loader.has.return_value = True
 
     from xcore.kernel.runtime.middleware import MiddlewarePipeline
+
     supervisor._pipeline = MiddlewarePipeline(
-        middlewares=[RetryMiddleware()],
-        final_handler=supervisor._dispatch
+        middlewares=[RetryMiddleware()], final_handler=supervisor._dispatch
     )
 
     # Call
