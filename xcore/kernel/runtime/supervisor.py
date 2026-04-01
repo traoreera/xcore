@@ -204,6 +204,18 @@ class PluginSupervisor:
 
     # ── Gestion dynamique ─────────────────────────────────────
 
+    def register_middleware(self, middleware: Middleware, first: bool = False) -> None:
+        """
+        Enregistre dynamiquement un middleware dans la pipeline.
+
+        Si first=True, le middleware est placé en début de chaîne
+        (exécuté avant les autres).
+        """
+        if self._pipeline is None:
+            raise RuntimeError("Le pipeline n'est pas encore initialisé. Appelez boot() d'abord.")
+        self._pipeline.add_middleware(middleware, first=first)
+        logger.info(f"Middleware {middleware.__class__.__name__} enregistré dynamiquement.")
+
     async def load(self, plugin_name: str) -> None:
         if self._loader:
             await self._loader.load(plugin_name)
