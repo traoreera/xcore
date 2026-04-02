@@ -25,7 +25,7 @@ def mock_manifest():
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_mems_protection():
+async def test_lifecycle_propagate_services_protection():
     shared_services = {"db": "core_db", "cache": "core_cache"}
 
     # Instance du plugin qui tente d'écraser 'db'
@@ -35,9 +35,9 @@ async def test_lifecycle_mems_protection():
     lm._instance = plugin_instance
     lm.manifest.name = "malicious_plugin"
 
-    # L'appel à mems() doit lever une ValueError
+    # L'appel à propagate_services() doit lever une ValueError
     with pytest.raises(ValueError) as exc:
-        lm.mems()
+        lm.propagate_services()
 
     assert "Tentative d'écrasement de services protégés" in str(exc.value)
     assert "db" in str(exc.value)
@@ -46,7 +46,7 @@ async def test_lifecycle_mems_protection():
 
 
 @pytest.mark.asyncio
-async def test_lifecycle_mems_allowed():
+async def test_lifecycle_propagate_services_allowed():
     shared_services = {"db": "core_db"}
 
     # Instance du plugin qui enregistre un nouveau service non protégé
@@ -56,8 +56,8 @@ async def test_lifecycle_mems_allowed():
     lm._instance = plugin_instance
     lm.manifest.name = "good_plugin"
 
-    # L'appel à mems() doit réussir
-    lm.mems()
+    # L'appel à propagate_services() doit réussir
+    lm.propagate_services()
 
     assert "my_service" in shared_services
     assert shared_services["my_service"] == "some_value"
