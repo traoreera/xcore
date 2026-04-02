@@ -34,7 +34,7 @@ class LifecycleManager:
     """
         Manages the complete lifecycle of a Trusted plugin in memory.
         v2 fixes compared to v1:
-        - mems(is_reload) distinguishes between initial load and reload (fix #3 v1)
+        - propagate_services(is_reload) distinguishes between initial load and reload (fix #3 v1)
         - Rich context (PluginContext) injected instead of a raw dict
         - Clear separation between loader / lifecycle / supervisor
         Usage:
@@ -126,7 +126,7 @@ class LifecycleManager:
         self._sm.transition("load")
         try:
             await self._do_load()
-            self.mems(is_reload=False)
+            self.propagate_services(is_reload=False)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(
@@ -266,7 +266,7 @@ class LifecycleManager:
             await self._do_unload()
             await self._do_load()
             # is_reload=True : force la mise à jour des services existants
-            self.mems(is_reload=True)
+            self.propagate_services(is_reload=True)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(f"[{self.manifest.name}] reloaded")
@@ -331,7 +331,7 @@ class LifecycleManager:
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
-    def mems(self, *, is_reload: bool = False) -> dict:
+    def propagate_services(self, *, is_reload: bool = False) -> dict:
         """
         Propage les services enregistrés par le plugin vers le container partagé.
         Utilise le PluginRegistry pour une gestion plus propre si disponible.
@@ -352,12 +352,12 @@ class LifecycleManager:
             return self._services
 
         # Vérification des collisions avec les services protégés
-        # collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
-        # if collisions:
-        #    raise ValueError(
-        #        f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-        #        f"par le noyau : {collisions}"
-        #    )
+        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
+        if collisions:
+            raise ValueError(
+                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
+                f"par le noyau : {collisions}"
+            )
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit

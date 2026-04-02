@@ -373,14 +373,14 @@ class Plugin(BasePlugin):
         assert status["state"] == "ready"
         assert status["uptime"] is not None
 
-    def test_mems_no_instance(self, lifecycle_manager):
-        """Test mems when no instance."""
-        result = lifecycle_manager.mems()
+    def test_propagate_services_no_instance(self, lifecycle_manager):
+        """Test propagate_services when no instance."""
+        result = lifecycle_manager.propagate_services()
         assert result == lifecycle_manager._services
 
     '''    @pytest.mark.asyncio
-    async def test_mems_new_keys(self, lifecycle_manager, tmp_path):
-        """Test mems adds new keys."""
+    async def test_propagate_services_new_keys(self, lifecycle_manager, tmp_path):
+        """Test propagate_services adds new keys."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "main.py").write_text("""
@@ -400,13 +400,13 @@ class Plugin(BasePlugin):
         lifecycle_manager._services = shared
 
         await lifecycle_manager.load()
-        lifecycle_manager.mems(is_reload=False)
+        lifecycle_manager.propagate_services(is_reload=False)
         shared |= lifecycle_manager._services
         assert "new_service" in shared
 
     @pytest.mark.asyncio
-    async def test_mems_reload(self, lifecycle_manager, tmp_path):
-        """Test mems updates keys on reload."""
+    async def test_propagate_services_reload(self, lifecycle_manager, tmp_path):
+        """Test propagate_services updates keys on reload."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "main.py").write_text("""
@@ -425,7 +425,7 @@ class Plugin(BasePlugin):
         lifecycle_manager._services = shared
 
         await lifecycle_manager.load()
-        lifecycle_manager.mems(is_reload=True)
+        lifecycle_manager.propagate_services(is_reload=True)
 
         assert shared["service"] == "new_value"
     '''
