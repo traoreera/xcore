@@ -38,6 +38,48 @@ class MiddlewarePipeline:
     def __init__(self, middlewares: List[Middleware], final_handler: Callable):
         self._middlewares = middlewares
         self._final_handler = final_handler
+        # Compilation de la chaîne au démarrage pour minimiser l'overhead.
+        self._compiled_chain = self._compile_pipeline(
+            middlewares, final_handler
+        )
+
+    def _compile_pipeline(
+        self, middlewares: List[Middleware], final_handler: Callable
+    ) -> Callable:
+        """
+        Compile la chaîne de middlewares en une série de closures imbriquées.
+        Évite de redéfinir la fonction récursive _chain à chaque appel.
+        """
+
+        async def _final_step(
+            p_name: str, act: str, pay: dict, h: PluginHandler | None, **kw
+        ) -> dict:
+            return await final_handler(p_name, act, pay, handler=h, **kw)
+
+        current = _final_step
+        for mw in reversed(middlewares):
+
+            def _make_step(m: Middleware, next_step: Callable):
+                async def _step(
+                    p_name: str,
+                    act: str,
+                    pay: dict,
+                    h: PluginHandler | None,
+                    **kw,
+                ) -> dict:
+                    return await m(
+                        p_name,
+                        act,
+                        pay,
+                        lambda pn, a, pl, **k: next_step(pn, a, pl, h, **k),
+                        handler=h,
+                        **kw,
+                    )
+
+                return _step
+
+            current = _make_step(mw, current)
+        return current
 
     async def execute(
         self,
@@ -48,21 +90,7 @@ class MiddlewarePipeline:
         handler: PluginHandler | None = None,
         **kwargs,
     ) -> dict:
-        """Démarre l'exécution de la chaîne."""
-
-        async def _chain(
-            index: int, p_name: str, act: str, pay: dict, h: PluginHandler | None, **kw
-        ) -> dict:
-            if index < len(self._middlewares):
-                middleware = self._middlewares[index]
-                return await middleware(
-                    p_name,
-                    act,
-                    pay,
-                    lambda pn, a, pl, **k: _chain(index + 1, pn, a, pl, h, **k),
-                    handler=h,
-                    **kw,
-                )
-            return await self._final_handler(p_name, act, pay, handler=h, **kw)
-
-        return await _chain(0, plugin_name, action, payload, handler, **kwargs)
+        """Démarre l'exécution de la chaîne via la version compilée."""
+        return await self._compiled_chain(
+            plugin_name, action, payload, handler, **kwargs
+        )
