@@ -286,6 +286,9 @@ class FilesystemGuard:
                 "pickle",
                 "shelve",
                 "marshal",
+                "multiprocessing",
+                "threading",
+                "concurrent",
                 "pty",
                 "termios",
                 "tty",
@@ -313,10 +316,14 @@ class FilesystemGuard:
         def _blocked_compile(source, *args, **kwargs):
             _block("compile()", type(source).__name__)
 
+        def _blocked_input(prompt=None):
+            _block("input()")
+
         builtins.__import__ = _guarded_import
         builtins.exec = _blocked_exec
         builtins.eval = _blocked_eval
         builtins.compile = _blocked_compile
+        builtins.input = _blocked_input
 
         # ── Couche 3 : importlib post-chargement ──────────────────────────────
 
