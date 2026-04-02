@@ -36,8 +36,15 @@ class MiddlewarePipeline:
     """Gère une chaîne de middlewares."""
 
     def __init__(self, middlewares: List[Middleware], final_handler: Callable):
-        self._middlewares = middlewares
+        self._middlewares = list(middlewares)
         self._final_handler = final_handler
+
+    def add_middleware(self, middleware: Middleware, first: bool = False) -> None:
+        """Ajoute dynamiquement un middleware à la pipeline."""
+        if first:
+            self._middlewares.insert(0, middleware)
+        else:
+            self._middlewares.append(middleware)
 
     async def execute(
         self,

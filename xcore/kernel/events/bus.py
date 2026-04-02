@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import fnmatch
 import inspect
 import logging
 from typing import Any, Callable
@@ -108,9 +109,18 @@ class EventBus:
         ```
         """
         event = Event(name=event_name, data=data or {}, source=source)
-        handlers = list(self._handlers.get(event_name, []))
-        if not handlers:
+
+        # Collect all matching handlers (exact match + wildcards)
+        matched_handlers: list[_HandlerEntry] = []
+        for pattern, entries in self._handlers.items():
+            if fnmatch.fnmatch(event_name, pattern):
+                matched_handlers.extend(entries)
+
+        if not matched_handlers:
             return []
+
+        # Sort by priority across all matched patterns
+        matched_handlers.sort(key=lambda e: e.priority, reverse=True)
 
         results: list[Any] = []
         to_remove: list[_HandlerEntry] = []
@@ -126,11 +136,11 @@ class EventBus:
                     if entry.is_async
                     else _call_sync(entry.handler, event)
                 )
-                for entry in handlers
+                for entry in matched_handlers
             ]
 
             raw = await asyncio.gather(*tasks, return_exceptions=True)
-            for entry, result in zip(handlers, raw):
+            for entry, result in zip(matched_handlers, raw):
                 if isinstance(result, Exception):
                     logger.error(
                         f"Handler '{entry.name}' erreur pour '{event_name}': {result}"
@@ -140,7 +150,7 @@ class EventBus:
                 if entry.once:
                     to_remove.append(entry)
         else:
-            for entry in handlers:
+            for entry in matched_handlers:
                 if not event.propagate or event.cancelled:
                     break
                 try:
@@ -155,9 +165,11 @@ class EventBus:
                     to_remove.append(entry)
 
         for entry in to_remove:
-            if event_name in self._handlers:
-                with contextlib.suppress(ValueError):
-                    self._handlers[event_name].remove(entry)
+            # Need to find which pattern this entry belongs to
+            for pattern, entries in self._handlers.items():
+                if entry in entries:
+                    with contextlib.suppress(ValueError):
+                        entries.remove(entry)
         return results
 
     def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:

@@ -187,17 +187,26 @@ class LifecycleManager:
             # rétro-compatibilité v1
             await self._instance.env_variable(self.manifest.env)
 
-        if hasattr(self._instance, "on_init"):
-            await self._instance.on_init()
-
-        if hasattr(self._instance, "on_load"):
-            await self._instance.on_load()
-
-        if hasattr(self._instance, "on_start"):
-            await self._instance.on_start()
+        await self._invoke_hooks(["on_init", "on_load", "on_start"])
 
         # Collecte le router HTTP custom si le plugin en expose un
         self._collect_router()
+
+    async def _invoke_hooks(self, hook_names: list[str]) -> None:
+        """Invoque une série de hooks sur l'instance s'ils existent."""
+        if not self._instance:
+            return
+        for name in hook_names:
+            hook = getattr(self._instance, name, None)
+            if hook and callable(hook):
+                try:
+                    if inspect.iscoroutinefunction(hook):
+                        await hook()
+                    else:
+                        hook()
+                except Exception as e:
+                    logger.error(f"[{self.manifest.name}] Erreur hook {name} : {e}")
+                    raise
 
     def _instantiate(self, cls) -> BasePlugin:
         """Instancie le plugin en injectant services si possible."""
@@ -261,8 +270,7 @@ class LifecycleManager:
     async def reload(self) -> None:
         self._sm.transition("reload")
         try:
-            if hasattr(self._instance, "on_reload"):
-                await self._instance.on_reload()
+            await self._invoke_hooks(["on_reload"])
             await self._do_unload()
             await self._do_load()
             # is_reload=True : force la mise à jour des services existants
@@ -288,10 +296,7 @@ class LifecycleManager:
 
     async def _do_unload(self) -> None:
         if self._instance:
-            if hasattr(self._instance, "on_stop"):
-                await self._instance.on_stop()
-            if hasattr(self._instance, "on_unload"):
-                await self._instance.on_unload()
+            await self._invoke_hooks(["on_stop", "on_unload"])
         module_name = f"xcore_plugin_{self.manifest.name}"
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
@@ -352,12 +357,12 @@ class LifecycleManager:
             return self._services
 
         # Vérification des collisions avec les services protégés
-        # collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
-        # if collisions:
-        #    raise ValueError(
-        #        f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-        #        f"par le noyau : {collisions}"
-        #    )
+        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
+        if collisions:
+            raise ValueError(
+                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
+                f"par le noyau : {collisions}"
+            )
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit
