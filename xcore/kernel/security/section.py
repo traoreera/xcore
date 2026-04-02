@@ -17,6 +17,10 @@ FORBIDDEN_BUILTINS = {
     "pickle",
     "shelve",
     "marshal",
+    "dir",
+    "vars",
+    "input",
+    "help",
 }
 
 FORBIDDEN_ATTRIBUTES = {
@@ -62,6 +66,13 @@ DEFAULT_FORBIDDEN = {
     "dis",
     "tempfile",
     "glob",
+    "multiprocessing",
+    "threading",
+    "concurrent",
+    "pty",
+    "termios",
+    "tty",
+    "fcntl",
 } | FORBIDDEN_BUILTINS
 
 DEFAULT_ALLOWED = {
