@@ -1,662 +1,148 @@
-# Creating Plugins
+# Création de Plugins
 
-This guide covers everything you need to know about creating XCore plugins, from simple IPC handlers to full REST API endpoints.
+Ce guide vous accompagne dans la création de plugins XCore, du plus simple au plus avancé.
 
-## Plugin Structure
+## Structure d'un Plugin
 
-A minimal plugin requires two files:
+Un plugin XCore est un répertoire contenant au minimum deux fichiers :
 
-```
-plugins/my_plugin/
-├── plugin.yaml      # Plugin manifest
+```text
+mon_plugin/
+├── plugin.yaml      # Le manifeste (métadonnées)
 └── src/
-    └── main.py     # Plugin implementation
+    └── main.py      # Le point d'entrée (code Python)
 ```
 
-## Communication Inter-Process (IPC)
+## Étape 1 : Le Manifeste (`plugin.yaml`)
 
-XCore utilise un système IPC bidirectionnel pour la communication entre le core et les plugins :
-
-- **Core → Plugin** : Via HTTP API (`{plugin_prefix}/ipc/{plugin_name}/{action}`)
-- **Plugin → Core** : Via le canal IPC interne (sandboxed) ou services directs (trusted)
-
-### Appels IPC depuis le Core
-
-Pour charger ou recharger un plugin via IPC :
-
-```bash
-# Charger un plugin
-xcore plugin load <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
-
-# Recharger un plugin
-xcore plugin reload <name> [--host <host>] [--port <port>] [--path <prefix>] [--key <api_key>]
-```
-
-Ces commandes communiquent avec l'API HTTP du serveur XCore en cours d'exécution :
-- `POST {plugin_prefix}/ipc/{name}/load`
-- `POST {plugin_prefix}/ipc/{name}/reload`
-
-Les arguments `--host`, `--port`, `--path` et `--key` permettent de surcharger la configuration.
-
-## The Manifest (plugin.yaml)
-
-The manifest describes your plugin to XCore:
+Le manifeste définit comment XCore doit charger et isoler votre code.
 
 ```yaml
-name: my_plugin                    # Unique identifier
-version: 1.0.0                    # Semantic version
-author: Your Name                  # Author name
-description: Plugin description    # Short description
+name: mon_hello_world
+version: "1.0.0"
+author: "Moi"
+description: "Mon premier plugin"
+execution_mode: "trusted" # Utilisez "sandboxed" pour plus de sécurité
+entry_point: "src/main.py"
 
-execution_mode: trusted            # trusted | sandboxed | legacy
-framework_version: ">=2.0"        # Compatible XCore version
-entry_point: src/main.py          # Main file path
-
-# Dependencies on other plugins (optional)
+# Facultatif : dépendances sur d'autres plugins
 requires:
-  - other_plugin
-  - another_plugin
+  - plugin_authentification >= 2.0.0
 
-# Service permissions (optional)
+# Facultatif : permissions requises
 permissions:
-  - resource: "db.*"
+  - resource: "cache.*"
     actions: ["read", "write"]
     effect: allow
-  - resource: "cache.*"
-    actions: ["read"]
-    effect: allow
-
-# Environment variables (optional)
-env:
-  API_KEY: "default_value"
-  DEBUG: "false"
-
-# Resource limits (optional)
-resources:
-  timeout_seconds: 30
-  max_memory_mb: 256
-  rate_limit:
-    calls: 1000
-    period_seconds: 60
 ```
 
-## Basic Plugin
+## Étape 2 : Le Code (`src/main.py`)
 
-The simplest plugin inherits from `TrustedBase`:
+Votre plugin doit définir une classe nommée `Plugin` héritant de `TrustedBase`.
 
-```python
-# src/main.py
-from xcore.sdk import TrustedBase, ok, error
-
-
-class Plugin(TrustedBase):
-    """My first XCore plugin."""
-
-    async def on_load(self) -> None:
-        """Called when plugin is loaded."""
-        print(f"Plugin {self.__class__.__name__} loaded")
-
-    async def on_unload(self) -> None:
-        """Called when plugin is unloaded."""
-        print(f"Plugin {self.__class__.__name__} unloaded")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        """Handle IPC actions.
-
-        Args:
-            action: The action name to execute
-            payload: Dictionary of parameters
-
-        Returns:
-            Dictionary with status and data
-        """
-        if action == "ping":
-            return ok(message="pong")
-
-        if action == "echo":
-            return ok(received=payload)
-
-        return error(
-            msg=f"Unknown action: {action}",
-            code="unknown_action"
-        )
-```
-
-## Plugin with HTTP Routes
-
-Expose REST API endpoints by implementing `get_router()`:
-
-```python
-from fastapi import APIRouter, HTTPException
-from xcore.sdk import TrustedBase
-import uuid
-
-
-class Plugin(TrustedBase):
-
-    def __init__(self):
-        super().__init__()
-        self.items = {}  # In-memory storage
-
-    def get_router(self) -> APIRouter:
-        """Return FastAPI router with custom routes."""
-        router = APIRouter(
-            prefix="/items",
-            tags=["items"],
-            responses={404: {"description": "Not found"}}
-        )
-
-        @router.get("/")
-        async def list_items():
-            """List all items."""
-            return {"items": list(self.items.values())}
-
-        @router.get("/{item_id}")
-        async def get_item(item_id: str):
-            """Get a specific item."""
-            if item_id not in self.items:
-                raise HTTPException(status_code=404, detail="Item not found")
-            return self.items[item_id]
-
-        @router.post("/")
-        async def create_item(data: dict):
-            """Create a new item."""
-            item_id = str(uuid.uuid4())
-            self.items[item_id] = {
-                "id": item_id,
-                **data
-            }
-            return self.items[item_id]
-
-        @router.put("/{item_id}")
-        async def update_item(item_id: str, data: dict):
-            """Update an existing item."""
-            if item_id not in self.items:
-                raise HTTPException(status_code=404, detail="Item not found")
-            self.items[item_id].update(data)
-            return self.items[item_id]
-
-        @router.delete("/{item_id}")
-        async def delete_item(item_id: str):
-            """Delete an item."""
-            if item_id not in self.items:
-                raise HTTPException(status_code=404, detail="Item not found")
-            del self.items[item_id]
-            return {"deleted": True}
-
-        return router
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        # IPC actions can also manipulate items
-        if action == "create":
-            item_id = str(uuid.uuid4())
-            self.items[item_id] = {"id": item_id, **payload}
-            return {"status": "ok", "id": item_id}
-
-        return {"status": "error", "msg": "Unknown action"}
-```
-
-These routes will be mounted at `/plugins/my_plugin/items/`.
-
-## Using Services
-
-Access XCore services through `self.get_service()`:
-
-### Database Access
-
-```python
-from xcore.sdk import TrustedBase
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        # Get database service
-        self.db = self.get_service("db")
-
-    def get_router(self):
-        from fastapi import APIRouter
-        router = APIRouter()
-
-        @router.get("/users")
-        async def list_users():
-            # Using sync database
-            with self.db.session() as session:
-                result = session.execute("SELECT * FROM users")
-                users = result.fetchall()
-                return {"users": [dict(u) for u in users]}
-
-        return router
-```
-
-### Cache Service
-
-```python
-from xcore.sdk import TrustedBase, ok
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        self.cache = self.get_service("cache")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "set":
-            key = payload["key"]
-            value = payload["value"]
-            ttl = payload.get("ttl", 300)
-
-            await self.cache.set(key, value, ttl=ttl)
-            return ok(message="Value cached")
-
-        if action == "get":
-            key = payload["key"]
-            value = await self.cache.get(key)
-            return ok(value=value)
-
-        if action == "delete":
-            key = payload["key"]
-            await self.cache.delete(key)
-            return ok(message="Key deleted")
-
-        return ok()
-```
-
-### Scheduler Service
-
-```python
-from xcore.sdk import TrustedBase
-import datetime
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        self.scheduler = self.get_service("scheduler")
-
-        # Add a recurring job
-        self.scheduler.add_job(
-            func=self._cleanup_task,
-            trigger="interval",
-            minutes=5,
-            id=f"{self.__class__.__name__}_cleanup",
-            replace_existing=True
-        )
-
-    def _cleanup_task(self):
-        """Run every 5 minutes."""
-        print(f"Cleanup task running at {datetime.datetime.now()}")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "schedule":
-            # Schedule a one-time job
-            run_at = payload.get("run_at")  # ISO format datetime
-            self.scheduler.add_job(
-                func=self._scheduled_action,
-                trigger="date",
-                run_date=run_at,
-                args=[payload.get("data")]
-            )
-            return {"status": "ok", "scheduled": True}
-
-        return {"status": "ok"}
-
-    def _scheduled_action(self, data):
-        print(f"Scheduled action executed with data: {data}")
-```
-
-## Calling Plugins via IPC
-
-Les plugins peuvent être appelés depuis l'extérieur via l'API HTTP IPC :
-
-```bash
-# Appeler une action IPC d'un plugin
-curl -X POST http://localhost:8000/plugin/ipc/my_plugin/my_action \
-  -H "Content-Type: application/json" \
-  -H "X-Plugin-Key: ${API_KEY}" \
-  -d '{"param1": "value1", "param2": "value2"}'
-```
-
-La réponse suit le format standardisé :
-```json
-{
-  "status": "ok",
-  "data": { ... }
-}
-```
-
-Ou en cas d'erreur :
-```json
-{
-  "status": "error",
-  "msg": "Description de l'erreur",
-  "code": "error_code"
-}
-```
-
-## Using Events
-
-Plugins can emit and subscribe to events:
-
-```python
-from xcore.sdk import TrustedBase, ok
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        # Subscribe to events
-        self.ctx.events.on("user.created", self._on_user_created)
-        self.ctx.events.on("order.placed", self._on_order_placed, priority=100)
-
-    async def _on_user_created(self, event):
-        """Handle user creation event."""
-        user_email = event.data.get("email")
-        print(f"New user created: {user_email}")
-
-        # Could send welcome email here
-
-    async def _on_order_placed(self, event):
-        """Handle order placement (high priority)."""
-        order_id = event.data.get("order_id")
-        print(f"Processing order: {order_id}")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "create_order":
-            # Create order logic...
-            order_id = "12345"
-
-            # Emit event
-            await self.ctx.events.emit("order.placed", {
-                "order_id": order_id,
-                "user_id": payload.get("user_id"),
-                "amount": payload.get("amount")
-            })
-
-            return ok(order_id=order_id)
-
-        return ok()
-```
-
-## Validation with Pydantic
-
-Use Pydantic models for request validation:
-
-```python
-from pydantic import BaseModel, EmailStr, Field
-from xcore.sdk import TrustedBase, ok, error
-
-
-class CreateUserInput(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    email: EmailStr
-    age: int = Field(ge=0, le=150)
-
-
-class UpdateUserInput(BaseModel):
-    username: str | None = Field(None, min_length=3, max_length=50)
-    age: int | None = Field(None, ge=0, le=150)
-
-
-class Plugin(TrustedBase):
-
-    users = {}
-
-    def get_router(self):
-        from fastapi import APIRouter
-        router = APIRouter()
-
-        @router.post("/users")
-        async def create_user(data: CreateUserInput):
-            """Create a new user with validation."""
-            user_id = str(len(self.users) + 1)
-            self.users[user_id] = {
-                "id": user_id,
-                "username": data.username,
-                "email": data.email,
-                "age": data.age
-            }
-            return self.users[user_id]
-
-        @router.put("/users/{user_id}")
-        async def update_user(user_id: str, data: UpdateUserInput):
-            """Update user with partial validation."""
-            if user_id not in self.users:
-                return error("User not found", code="not_found")
-
-            update_data = data.model_dump(exclude_unset=True)
-            self.users[user_id].update(update_data)
-            return self.users[user_id]
-
-        return router
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "create_user":
-            try:
-                validated = CreateUserInput(**payload)
-                # ... create user
-                return ok(user_id="123")
-            except Exception as e:
-                return error(str(e), code="validation_error")
-
-        return ok()
-```
-
-## Error Handling
-
-Use standardized error responses:
+### Exemple Minimaliste
 
 ```python
 from xcore.sdk import TrustedBase, ok, error
-from fastapi import HTTPException
-
 
 class Plugin(TrustedBase):
-
     async def handle(self, action: str, payload: dict) -> dict:
-        try:
-            if action == "risky_operation":
-                result = await self._risky_operation(payload)
-                return ok(data=result)
+        if action == "dire_bonjour":
+            nom = payload.get("nom", "Inconnu")
+            return ok(message=f"Bonjour {nom} !")
 
-        except ValueError as e:
-            # Client error
-            return error(
-                msg=str(e),
-                code="invalid_input",
-                status_code=400
-            )
-
-        except PermissionError as e:
-            # Authorization error
-            return error(
-                msg=str(e),
-                code="forbidden",
-                status_code=403
-            )
-
-        except Exception as e:
-            # Server error
-            return error(
-                msg="Internal server error",
-                code="internal_error",
-                details=str(e),
-                status_code=500
-            )
-
-        return error("Unknown action", code="unknown_action")
+        return error(f"Action {action} inconnue")
 ```
 
-## Plugin Lifecycle
+## Étape 3 : Utilisation du SDK Avancé
 
-Understanding the plugin lifecycle:
+Pour des plugins plus complexes, utilisez les mixins et décorateurs pour simplifier votre code.
+
+### Dispatch Automatique et Routes HTTP
 
 ```python
-from xcore.sdk import TrustedBase
+from xcore.sdk import (
+    TrustedBase,
+    AutoDispatchMixin,
+    RoutedPlugin,
+    action,
+    route,
+    ok
+)
 
+class Plugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
 
+    # --- Action IPC (Appelable par d'autres plugins ou CLI) ---
+    @action("calculer")
+    async def faire_calcul(self, payload: dict):
+        resultat = payload.get("a", 0) + payload.get("b", 0)
+        return ok(total=resultat)
+
+    # --- Route HTTP (Exposée sur /plugins/mon_hello_world/statut) ---
+    @route("/statut", method="GET")
+    async def voir_statut(self):
+        return {"etat": "actif", "version": self.ctx.version}
+```
+
+## Étape 4 : Accès aux Services
+
+Les services sont le moyen privilégié pour interagir avec le reste du système.
+
+```python
 class Plugin(TrustedBase):
-
-    def __init__(self):
-        super().__init__()
-        self.initialized = False
-
-    async def on_load(self) -> None:
-        """
-        Called once when plugin is first loaded.
-        Initialize services, connections, etc.
-        """
-        # Get services
+    async def on_load(self):
+        # Initialisation du service DB
         self.db = self.get_service("db")
         self.cache = self.get_service("cache")
 
-        # Initialize internal state
-        self.data = {}
-        self.initialized = True
+    async def sauvegarder_donnee(self, cle, valeur):
+        # Utilisation du cache
+        await self.cache.set(cle, valeur, ttl=600)
 
-        print("Plugin initialized")
-
-    async def on_reload(self) -> None:
-        """
-        Called when plugin is reloaded (hot reload).
-        Clean up and reinitialize if needed.
-        """
-        # Save state if needed
-        self._saved_state = self.data.copy()
-
-        # Clean up
-        self.data.clear()
-
-        print("Plugin reloading...")
-
-    async def on_unload(self) -> None:
-        """
-        Called when plugin is unloaded.
-        Clean up resources, close connections.
-        """
-        # Close any open resources
-        self.data.clear()
-        self.initialized = False
-
-        print("Plugin unloaded")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if not self.initialized:
-            return {"status": "error", "msg": "Plugin not initialized"}
-        # ... handle actions
-        return {"status": "ok"}
+        # Utilisation de la DB
+        with self.db.session() as session:
+            session.execute("INSERT INTO logs (cle) VALUES (:c)", {"c": cle})
 ```
 
-## Best Practices
+## Étape 5 : Communication par Événements
 
-### 1. Use Type Hints
-
-```python
-from typing import Any
-
-async def handle(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
-    ...
-```
-
-### 2. Document Your Code
+Les plugins peuvent communiquer de manière asynchrone via le bus d'événements.
 
 ```python
 class Plugin(TrustedBase):
-    """User management plugin.
+    async def on_load(self):
+        # S'abonner à un événement produit par un autre plugin
+        self.ctx.events.on("paiement.valide", self.preparer_commande)
 
-    Provides CRUD operations for users with
-    caching and event notifications.
-    """
+    async def preparer_commande(self, event):
+        commande_id = event.data["id"]
+        print(f"Préparation de la commande {commande_id}")
 
-    async def handle(self, action: str, payload: dict) -> dict:
-        """Handle user-related actions.
-
-        Actions:
-            - create: Create new user
-            - get: Get user by ID
-            - list: List all users
-            - delete: Delete user
-        """
-        ...
+        # Émettre un nouvel événement
+        await self.ctx.events.emit("commande.prete", {"id": commande_id})
 ```
 
-### 3. Handle Edge Cases
+## Modes d'Exécution : Trusted vs Sandboxed
 
-```python
-async def handle(self, action: str, payload: dict) -> dict:
-    if action == "divide":
-        try:
-            a = payload.get("a", 0)
-            b = payload.get("b", 0)
+| Caractéristique | Trusted | Sandboxed |
+|-----------------|---------|-----------|
+| **Vitesse** | Maximale (In-process) | Légère latence (IPC) |
+| **Sécurité** | Faible (Accès total) | Élevée (Isolé) |
+| **Accès Fichiers** | Illimité | Restreint au dossier `data/` |
+| **Modules Python** | Tous | Whitelist restreinte |
+| **Utilisation** | Plugins internes | Plugins tiers / Marketplace |
 
-            if b == 0:
-                return error("Cannot divide by zero", code="divide_by_zero")
+### Passer en mode Sandboxed
+Il suffit de changer `execution_mode: "sandboxed"` dans votre `plugin.yaml`. XCore s'occupe du reste : création du sous-processus, mise en place des guards et du pipeline IPC.
 
-            return ok(result=a / b)
-        except TypeError:
-            return error("Invalid number format", code="type_error")
-```
+## Test et Validation
 
-### 4. Use Constants for Action Names
-
-```python
-ACTION_CREATE = "create"
-ACTION_UPDATE = "update"
-ACTION_DELETE = "delete"
-
-class Plugin(TrustedBase):
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == ACTION_CREATE:
-            ...
-        elif action == ACTION_UPDATE:
-            ...
-```
-
-## Sandboxed Plugin Commands
-
-Pour les plugins en mode `sandboxed`, des commandes CLI spécifiques permettent de gérer et inspecter l'isolation :
-
+Avant de déployer, validez votre manifeste avec la CLI :
 ```bash
-# Lancer un plugin en mode sandbox isolé (test)
-xcore sandbox run <name>
-
-# Afficher les limites ressources d'un plugin
-xcore sandbox limits <name>
-
-# Afficher la politique réseau
-xcore sandbox network <name>
-
-# Afficher et valider la politique filesystem
-xcore sandbox fs <name>
+xcore plugin validate ./plugins/mon_plugin
 ```
 
-Ces commandes sont utiles pour :
-- **Tester** un plugin sandboxed avant déploiement
-- **Vérifier** les limites ressources configurées
-- **Auditer** les politiques de sécurité réseau et filesystem
-- **Déboguer** les problèmes d'isolation
-
-Exemple de sortie `xcore sandbox limits` :
+Et testez le comportement en sandbox :
+```bash
+xcore sandbox run mon_plugin
 ```
-=============================================
-  Limites ressources : document_converter
-=============================================
-  Mémoire max      : 256 MB
-  Disque max       : 100 MB
-  Timeout appel    : 60 s
-  Rate limit       : 50 appels / 60s
-
-  Runtime :
-  Health check     : activé
-    intervalle     : 10s
-    timeout        : 2s
-  Retry            : 1 tentative(s)
-=============================================
-```
-
-## Next Steps
-
-- [Working with Services](services.md)
-- [Event System](events.md)
-- [Security Best Practices](security.md)
-- [Testing Plugins](testing.md)
