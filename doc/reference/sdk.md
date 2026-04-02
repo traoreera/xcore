@@ -59,78 +59,72 @@ L'objet `ctx` (PluginContext) contient les métadonnées et les bus système :
 
 ## Décorateurs de Fonctionnalité
 
-### `@action(name)`
-Utilisé avec `AutoDispatchMixin` pour lier une méthode à une action IPC.
+### `@action(name: str)`
+Définit une méthode comme gestionnaire d'une action IPC. À utiliser avec `AutoDispatchMixin`.
 
-```python
-class MyPlugin(AutoDispatchMixin, TrustedBase):
-    @action("ping")
-    async def do_ping(self, payload: dict):
-        return ok(message="pong")
-```
+- **Paramètre** : `name` est l'identifiant de l'action envoyé par le `PluginSupervisor`.
 
-### `@route(path, method="GET", ...)`
-Utilisé avec `RoutedPlugin` pour exposer un endpoint HTTP via FastAPI.
+### `@route(path: str, method: str = "GET", ...)`
+Expose une méthode comme endpoint HTTP FastAPI. À utiliser avec `RoutedPlugin`.
 
-```python
-class MyPlugin(RoutedPlugin, TrustedBase):
-    @route("/hello/{name}", method="GET", tags=["public"])
-    async def say_hello(self, name: str):
-        return {"message": f"Hello {name}"}
-```
+- **Paramètres** :
+    - `path` : Chemin de la route (ex: `"/items/{id}"`).
+    - `method` : Méthode HTTP (`"GET"`, `"POST"`, etc.).
+    - `tags` : Liste de tags pour OpenAPI.
+    - `status_code` : Code HTTP de succès (défaut: 200).
+    - `permissions` : Liste de permissions RBAC requises (ex: `["admin"]`).
 
-### `@validate_payload(Model)`
-Valide automatiquement le payload entrant avec un modèle Pydantic.
+### `@validate_payload(schema: Type[BaseModel])`
+Valide le payload entrant via un modèle Pydantic avant l'exécution de la méthode. En cas d'échec, une erreur `validation_error` est retournée automatiquement.
 
-```python
-from pydantic import BaseModel
+### `@require_service(*service_names: str)`
+Vérifie la présence d'un ou plusieurs services avant l'appel. Lève une `KeyError` si un service manque, empêchant l'exécution de la logique métier dans un état instable.
 
-class LoginData(BaseModel):
-    username: str
-    password: str
+### `@trusted` / `@sandboxed`
+Marqueurs de compatibilité indiquant si une méthode ne peut s'exécuter qu'en mode `trusted` ou si elle est explicitement compatible avec le mode `sandboxed`.
 
-class AuthPlugin(TrustedBase):
-    @validate_payload(LoginData)
-    async def handle_login(self, data: LoginData):
-        # 'data' est ici une instance de LoginData validée
-        return ok(logged_in=True)
-```
-
-### `@require_service(*service_names)`
-Empêche l'exécution de la méthode si les services requis ne sont pas disponibles.
-
-```python
-class DataPlugin(TrustedBase):
-    @require_service("db", "cache")
-    async def process_data(self, payload: dict):
-        # On est certain que self.get_service("db") fonctionne
-        pass
-```
+---
 
 ## Repositories SQL
 
-Le SDK inclut des classes de base pour implémenter le pattern Repository avec SQLAlchemy.
+Le SDK simplifie l'accès aux données avec le pattern Repository (`xcore.sdk.adapter`).
 
 ### `BaseSyncRepository[T]`
-```python
-class UserRepository(BaseSyncRepository[User]):
-    def get_active_users(self):
-        return self.session.query(User).filter(User.active == True).all()
-
-# Usage dans le plugin
-with self.db.session() as session:
-    repo = UserRepository(User, session)
-    users = repo.get_active_users()
-```
+Fournit des méthodes CRUD synchrones standard :
+- `get_by_id(id)`
+- `get_all()`
+- `create(obj)`
+- `update(id, data)`
+- `delete(id)`
+- `get_by_name(name)`
 
 ### `BaseAsyncRepository[T]`
+Équivalent asynchrone pour une utilisation avec `async with self.db.connection()`.
+*Note : Les méthodes asynchrones nécessitent de passer explicitement l'objet `session` en premier argument.*
+
 ```python
-class ProductRepository(BaseAsyncRepository[Product]):
-    async def find_by_sku(self, sku: str):
-        stmt = select(Product).where(Product.sku == sku)
-        result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+# Exemple Async
+repo = ProductRepository(Product)
+product = await repo.get_by_id(session, "123")
 ```
+
+---
+
+## PluginContext (`self.ctx`)
+
+Chaque plugin `trusted` reçoit un objet `ctx` riche en fonctionnalités :
+
+| Propriété | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Nom du plugin. |
+| `services` | `dict` | Dictionnaire brut des services disponibles. |
+| `events` | `EventBus` | Accès au bus d'événements. |
+| `hooks` | `HookManager` | Accès au gestionnaire de hooks. |
+| `env` | `dict` | Variables d'environnement résolues (depuis `plugin.yaml`). |
+| `config` | `dict` | Bloc `extra` du manifeste. |
+| `metrics` | `MetricsRegistry` | Registre pour les compteurs et jauges. |
+| `tracer` | `Tracer` | Système de tracing pour les spans. |
+| `health` | `HealthChecker` | Registre de health checks locaux. |
 
 ## Helpers de Réponse
 

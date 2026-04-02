@@ -1,128 +1,91 @@
-# Référence de Configuration
+# Configuration Globale
 
-XCore utilise un système de configuration hiérarchique basé sur YAML, avec support des variables d'environnement.
+XCore utilise un système de configuration hiérarchique et typé. La source principale est `xcore.yaml`, mais chaque paramètre peut être surchargé par des variables d'environnement.
 
-## Structure du fichier `xcore.yaml`
+## Structure de `xcore.yaml`
 
-Le fichier de configuration principal est divisé en plusieurs sections clés.
+Le fichier est divisé en sections correspondant aux composants du noyau (`XcoreConfig`).
 
-### Section `app`
-Configuration globale de l'application.
+### Section `app` (AppConfig)
+Configuration générale de l'application.
 
-| Clé | Description | Défaut |
-|-----|-------------|--------|
-| `env` | Environnement (`development`, `production`, `test`) | `development` |
-| `debug` | Active le mode debug (logs détaillés, etc.) | `false` |
-| `secret_key` | Clé utilisée pour le hachage et la signature. | - |
-| `plugin_dir` | Répertoire où sont stockés les plugins. | `plugins/` |
-| `plugin_prefix` | Préfixe URL pour les endpoints IPC des plugins. | `/app` |
+- `name` : Nom de l'application (défaut: `xcore-app`).
+- `env` : Environnement (`development`, `staging`, `production`).
+- `debug` : Active le mode debug de FastAPI (défaut: `false`).
+- `secret_key` : Clé de chiffrement (obligatoire en prod).
+- `plugin_prefix` : Préfixe d'URL pour les plugins (défaut: `/plugin`).
 
-### Section `database`
-Configuration de la persistance SQL.
+### Section `plugins` (PluginConfig)
+Configuration du `PluginSupervisor`.
 
-```yaml
-database:
-  enabled: true
-  url: "postgresql://user:pass@localhost/db"
-  pool_size: 20
-  max_overflow: 10
-  echo: false # Affiche les requêtes SQL (debug)
-```
+- `directory` : Répertoire de scan des plugins (défaut: `./plugins`).
+- `strict_trusted` : Si `true`, refuse de charger un plugin Trusted non signé.
+- `interval` : Intervalle de scan pour le hot-reload (secondes).
+- `entry_point` : Nom du fichier d'entrée par défaut (défaut: `src/main.py`).
 
-### Section `cache`
-Configuration de Redis ou du cache en mémoire.
+### Section `services` (ServicesConfig)
+Configuration des bases de données, du cache et du scheduler.
 
-```yaml
-cache:
-  backend: "redis" # "redis" ou "memory"
-  url: "redis://localhost:6379/0"
-  ttl_default: 3600
-  prefix: "xcore:"
-```
+#### `databases`
+Dictionnaire de configurations de bases de données (SQL ou NoSQL).
+- `url` : Chaîne de connexion SQLAlchemy ou Redis.
+- `pool_size` : Taille du pool de connexions (SQL).
 
-### Section `scheduler`
-Configuration de l'APScheduler.
+#### `cache`
+- `backend` : `memory` ou `redis`.
+- `url` : Requis si backend est `redis`.
+- `ttl` : Durée de vie par défaut (secondes).
 
-```yaml
-scheduler:
-  enabled: true
-  timezone: "UTC"
-  thread_pool_size: 10
-```
+### Section `observability` (ObservabilityConfig)
+Journalisation, métriques et traces.
 
-### Section `plugins`
-Paramètres globaux du système de plugins.
+- `logging` : Niveau (`INFO`, `DEBUG`), format et fichier de sortie.
+- `metrics` : Activation et backend (`prometheus`, `statsd`, `memory`).
+- `tracing` : Activation et backend (`jaeger`, `opentelemetry`, `noop`).
 
-| Clé | Description | Défaut |
-|-----|-------------|--------|
-| `strict_trusted` | Force la vérification de signature pour les plugins Trusted. | `false` |
-| `allow_hot_reload` | Active le rechargement automatique lors de la modification de fichiers. | `true` |
-| `default_mode` | Mode d'exécution par défaut (`sandboxed` ou `trusted`). | `sandboxed` |
-| `scan_interval` | Intervalle de scan du répertoire plugins (en secondes). | `5` |
+### Section `security` (SecurityConfig)
+Paramètres globaux du bac à sable.
+
+- `allowed_imports` / `forbidden_imports` : Listes globales pour l' `ASTScanner`.
+- `rate_limit_default` : Limite appliquée aux plugins ne déclarant pas la leur.
 
 ---
 
-## Configuration du Plugin (`plugin.yaml`)
+## Surcharge par Variables d'Environnement
 
-Chaque plugin possède son propre manifeste définissant son identité et ses contraintes.
+Le framework supporte la surcharge dynamique via le préfixe `XCORE__` suivi du chemin de la clé en majuscules avec un double underscore (`__`) comme séparateur.
 
-### Métadonnées de base
-```yaml
-name: mon_plugin
-version: "1.2.0"
-author: "Equipe XCore"
-description: "Description courte du plugin"
-execution_mode: "sandboxed" # ou "trusted"
-entry_point: "src/main.py"
-```
+### Règles de conversion :
+- Les chaînes `"true"`, `"1"`, `"yes"` deviennent `True`.
+- Les chaînes `"false"`, `"0"`, `"no"` deviennent `False`.
+- Les nombres sont automatiquement convertis en entiers.
 
-### Section `resources` (Sandbox uniquement)
-Définit les limites imposées au sous-processus.
+### Exemples :
 
-```yaml
-resources:
-  timeout_seconds: 30     # Temps max pour un appel IPC
-  max_memory_mb: 256      # Limite mémoire (RLIMIT_AS)
-  max_disk_mb: 100        # Quota disque (indicatif)
-  rate_limit:
-    calls: 100            # Nombre d'appels
-    period_seconds: 60    # Par fenêtre de temps
-```
+| Variable d'environnement | Clé YAML correspondante |
+|--------------------------|-------------------------|
+| `XCORE__APP__ENV` | `app.env` |
+| `XCORE__SERVICES__CACHE__BACKEND` | `services.cache.backend` |
+| `XCORE__SERVICES__DATABASES__DEFAULT__URL` | `services.databases.default.url` |
+| `XCORE__PLUGINS__STRICT_TRUSTED` | `plugins.strict_trusted` |
+
+---
+
+## Le Manifeste du Plugin (`plugin.yaml`)
+
+Chaque plugin définit ses propres métadonnées et contraintes d'exécution.
+
+### Section `resources`
+- `timeout_seconds` : Temps maximum pour un appel IPC (Sandbox).
+- `max_memory_mb` : Limite mémoire via `RLIMIT_AS`.
+- `rate_limit` : Bloc `calls` et `period_seconds`.
 
 ### Section `permissions`
-Liste les droits d'accès aux ressources du système.
-
-```yaml
-permissions:
-  - resource: "cache.user_*"
-    actions: ["read", "write"]
-    effect: allow
-  - resource: "db.finance"
-    actions: ["*"]
-    effect: deny
-```
-
-### Section `env`
-Variables d'environnement injectées dans le plugin. Supporte l'interpolation `${VAR}` depuis l'environnement système.
-
-```yaml
-env:
-  API_TOKEN: "${EXTERNAL_API_TOKEN}"
-  LOG_LEVEL: "INFO"
-```
+Définit les accès autorisés ou refusés.
+- `resource` : Pattern glob (ex: `cache.user_*`).
+- `actions` : Liste (`read`, `write`, `execute`, `*`).
+- `effect` : `allow` ou `deny`.
 
 ### Section `filesystem` (Sandbox uniquement)
-```yaml
-filesystem:
-  allowed_paths: ["data/"]
-  denied_paths: ["src/", ".git/"]
-```
-
----
-
-## Remplacement par Variables d'Environnement
-
-Toutes les valeurs de `xcore.yaml` peuvent être surchargées par des variables d'environnement avec le préfixe `XCORE__` et un double underscore pour la hiérarchie.
-
-Exemple :
-`XCORE__DATABASE__URL="sqlite:///prod.db"` surchargera la clé `url` de la section `database`.
+- `allowed_paths` : Chemins autorisés (relatifs au plugin). Défaut : `["data/"]`.
+- `denied_paths` : Chemins interdits. Défaut : `["src/"]`.
