@@ -35,30 +35,35 @@ XCore implémente une stratégie de défense en profondeur pour protéger le noy
 
 ## Protection du Système de Fichiers (FilesystemGuard)
 
-Le `FilesystemGuard` intercepte tous les accès aux fichiers via un monkey-patching exhaustif de la bibliothèque standard.
+Le `FilesystemGuard` (`xcore/kernel/sandbox/worker.py`) assure l'isolation au niveau du disque par un monkey-patching granulaire des entrées/sorties.
 
-```yaml
-# plugin.yaml
-filesystem:
-  allowed_paths: ["data/", "logs/"] # Seuls ces dossiers sont accessibles
-  denied_paths: ["src/", "../"]    # Blocage explicite même si imbriqué
-```
+### Couches de protection :
 
-**Actions bloquées en sandbox :**
-- Ouverture de fichiers hors zone autorisée.
-- Suppression, renommage ou création de dossiers (`os.mkdir`, `os.unlink`, etc.).
+1.  **Filesystem (Paths)** : Patching de `builtins.open`, `io.open`, `os.open` et `pathlib.Path.open`. Chaque chemin est résolu de manière absolue puis validé par rapport aux `allowed_paths` du manifeste.
+2.  **Exécution Dynamique** : Blocage d' `exec()`, `eval()` et `compile()` pour empêcher l'exécution de code arbitraire injecté en string.
+3.  **Imports Post-chargement** : Patching de `importlib.import_module` et `importlib.util.find_spec` pour interdire l'import dynamique de modules sensibles (`os`, `sys`, etc.) qui auraient pu échapper au scan AST initial.
+4.  **Ctypes & Native** : Blocage complet de `ctypes` (CDLL, memmove, cast) pour empêcher les appels directs à la `libc` ou la manipulation brute de la mémoire du processus.
+
+**Actions interdites en sandbox :**
+- Toute écriture ou lecture hors du dossier `data/` (ou dossiers déclarés).
 - Modification de permissions (`os.chmod`).
-- Listage de répertoires système.
+- Création/Suppression de répertoires (`os.mkdir`, `os.rmdir`).
+- Utilisation de descripteurs de fichiers bruts (`os.fdopen`).
 
 ## Analyse Statique (ASTScanner)
 
-Avant de charger un plugin sandboxé, XCore analyse son arbre de syntaxe abstraite (AST).
+Avant de charger un plugin sandboxé, XCore analyse son arbre de syntaxe abstraite (AST) via l' `ASTScanner` (`xcore/kernel/security/validation.py`). Cette analyse bloque le code malveillant avant même qu'il ne soit exécuté.
 
 ### Éléments interdits :
-- **Imports système** : `os`, `sys`, `subprocess`, `ctypes`, `socket`, etc.
-- **Built-ins dangereux** : `eval()`, `exec()`, `compile()`, `globals()`, `__import__()`.
-- **Introspection sensible** : Accès à `__class__`, `__globals__`, `__subclasses__`, `__mro__`.
-- **Probing** : L'utilisation de `hasattr()`, `getattr()`, `setattr()` est bloquée pour empêcher la découverte d'attributs cachés.
+- **Imports système** : `os`, `sys`, `subprocess`, `ctypes`, `socket`, `shutil`, `importlib`, etc.
+- **Built-ins dangereux** : `eval()`, `exec()`, `compile()`, `globals()`, `locals()`, `__import__()`, `pickle`, `breakpoint()`.
+- **Introspection sensible** : Accès aux attributs magiques `__class__`, `__globals__`, `__subclasses__`, `__code__`, `__mro__`, `__builtins__`, `__dict__`.
+- **Réflexion bloquée** : L'utilisation de `hasattr()`, `getattr()`, `setattr()` et `delattr()` est interdite pour empêcher la découverte et la manipulation d'attributs privés ou protégés du noyau.
+
+### Logique du Scan :
+1.  **Parsing** : Transformation du code source en arbre AST.
+2.  **SecurityVisitor** : Parcours récursif de l'arbre (`visit_Import`, `visit_Name`, `visit_Attribute`).
+3.  **Fail-Closed** : Si une seule violation est détectée, le `ScanResult` passe à `passed: False` et le plugin refuse de se charger.
 
 ## Signature de Plugins
 

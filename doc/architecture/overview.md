@@ -107,41 +107,48 @@ flowchart TB
 
 **Emplacement** : `xcore/__init__.py`
 
-L'orchestrateur principal qui :
-- Charge la configuration.
-- Initialise les services.
-- Démarre le système de plugins.
-- Attache les routeurs FastAPI.
+L'orchestrateur principal est le point d'entrée unique du framework. Il coordonne l'initialisation de tous les sous-systèmes dans un ordre strict pour garantir que les dépendances sont satisfaites.
+
+**Flux de démarrage détaillé (Boot Flow) :**
+
+1.  **Chargement de la Configuration** : Utilise `ConfigLoader` pour fusionner `xcore.yaml`, les variables d'environnement (`XCORE__*`) et les valeurs par défaut.
+2.  **Initialisation de l'Observabilité** : Mise en place du `MetricsRegistry`, du `Tracer` et du `HealthChecker`.
+3.  **Démarrage des Services** : Le `ServiceContainer` initialise les connexions aux bases de données, au cache Redis et au planificateur de tâches.
+4.  **Bus d'Événements** : Instanciation de l' `EventBus` et du `HookManager` pour la communication inter-plugins.
+5.  **Supervisor & Registry** : Le `PluginSupervisor` prend le relais pour charger les plugins, tandis que le `PluginRegistry` indexe leurs capacités.
+6.  **Exposition API** : Si une application FastAPI est fournie, XCore y attache automatiquement le router système et les routers personnalisés des plugins.
 
 ```mermaid
 sequenceDiagram
     participant App as Application
     participant X as Xcore
+    participant Obs as Observability
     participant SC as ServiceContainer
+    participant EB as EventBus
     participant PS as PluginSupervisor
+    participant PL as PluginLoader
     participant FA as FastAPI
 
-    App->>+X: __init__(config_path)
-    X->>X: load_config()
-    X-->>-App: instance
-
     App->>+X: boot(app)
+    X->>Obs: init(Metrics, Tracer, Health)
+
     X->>+SC: init()
-    SC->>SC: init_databases()
-    SC->>SC: init_cache()
-    SC->>SC: init_scheduler()
+    SC->>SC: setup_databases()
+    SC->>SC: setup_cache()
     SC-->>-X: services prêts
 
-    X->>X: init_events()
-    X->>X: init_hooks()
+    X->>EB: init(Bus, Hooks)
     X->>X: init_registry()
 
     X->>+PS: boot()
-    PS->>PS: load_all_plugins()
-    PS-->>-X: plugins prêts
+    PS->>+PL: load_all()
+    Note over PL: Résolution topologique des dépendances
+    PL-->>-PS: plugins chargés
+    PS-->>-X: supervisor prêt
 
-    X->>FA: attach_router()
-    X-->>-App: prêt
+    X->>+FA: attach_router(system_router)
+    X->>FA: attach_plugin_routers()
+    X-->>-App: Système prêt
 ```
 
 ### Composants Runtime
@@ -190,12 +197,19 @@ sequenceDiagram
 
 **Emplacement** : `xcore/kernel/runtime/loader.py`
 
-Logique de chargement des plugins :
-- Scan des répertoires.
-- Analyse des manifestes (YAML/JSON).
-- Résolution des dépendances.
-- Tri topologique pour l'ordre de chargement.
-- Chargement spécifique au mode (Trusted/Sandboxed).
+Le `PluginLoader` est responsable de la découverte et de l'instanciation des plugins. Il effectue plusieurs passes :
+1.  **Scan** : Énumération des dossiers dans le répertoire des plugins.
+2.  **Manifest Parsing** : Lecture de `plugin.yaml` pour chaque extension.
+3.  **Dependency Graph** : Construction d'un graphe orienté des dépendances.
+4.  **Topological Sort** : Calcul de l'ordre de chargement optimal.
+
+##### Résolution des Dépendances (Algorithme de Kahn)
+
+XCore utilise l'algorithme de **Kahn** (`xcore/kernel/runtime/dependency.py`) pour résoudre l'ordre de chargement des plugins en fonction de leurs dépendances déclarées (`requires` dans le manifeste).
+
+-   Le système construit un graphe acyclique dirigé (DAG).
+-   Les nœuds sans dépendances sont chargés en premier.
+-   Si une boucle de dépendance est détectée (ex: A dépend de B, B dépend de A), le framework lève une `ValueError` et refuse de démarrer pour éviter les états instables.
 
 ### Composants Sandbox
 
@@ -203,32 +217,39 @@ Logique de chargement des plugins :
 
 **Emplacement** : `xcore/kernel/sandbox/process_manager.py`
 
-Exécution isolée :
-- Lancement de sous-processus.
-- Communication IPC via JSON-RPC.
-- Surveillance des ressources (Mémoire via RLIMIT_AS).
-- Gestion des délais d'expiration (Timeouts).
+Le `ProcessManager` orchestre l'exécution des plugins en mode `sandboxed`. Chaque plugin tourne dans un processus Python distinct, garantissant une isolation mémoire et CPU totale par rapport au noyau.
+
+##### Mécanisme IPC (Inter-Process Communication)
+
+La communication entre le Kernel et les Workers sandboxed s'effectue via un canal IPC sécurisé (`xcore/kernel/sandbox/ipc.py`) :
+
+-   **Protocole** : JSON-RPC léger sur flux `stdin` / `stdout`.
+-   **Transport** : Chaque message est une ligne JSON unique terminée par un retour à la ligne (`\n`), permettant un parsing efficace et asynchrone via `asyncio.StreamReader`.
+-   **Sécurité** :
+    -   Le Worker ne peut jamais initier de commande vers le Kernel (modèle Pull/Response).
+    -   Les réponses trop volumineuses (> 512 Ko par défaut) sont rejetées pour éviter les attaques par déni de service mémoire.
+    -   Un verrou (`asyncio.Lock`) garantit que les échanges sont atomiques et qu'aucune collision de message ne se produit.
 
 ```mermaid
 flowchart LR
-    subgraph Main["Processus Principal"]
-        PM[ProcessManager]
-        IPC_H[IPC Handler]
+    subgraph Main["Processus Principal (Kernel)"]
+        PS[PluginSupervisor]
+        IPC_C[IPCChannel]
     end
 
-    subgraph Worker["Processus Worker"]
-        W[Worker]
+    subgraph Worker["Processus Worker (Sandbox)"]
+        W[Worker Loop]
+        P[Plugin Instance]
         Guard[FilesystemGuard]
-        Hook[Import Hook]
-        P[Instance du Plugin]
     end
 
-    PM --> IPC_H
-    IPC_H -->|pipe/socket| IPC_H
-    IPC_H --> W
-    W --> Guard
-    W --> Hook
-    Hook --> P
+    PS -->|call| IPC_C
+    IPC_C -->|"{'action': '...', 'payload': {...}}\n"| W
+    W -->|Vérification| Guard
+    Guard -->|Appel| P
+    P -->|Résultat| W
+    W -->|"{'status': 'ok', ...}\n"| IPC_C
+    IPC_C -->|dict| PS
 ```
 
 ### Système de Sécurité
@@ -252,6 +273,29 @@ Analyse statique du code source :
 - Empêche l'accès aux attributs internes (`__class__`, `__globals__`, `__subclasses__`).
 
 ## Flux de Données
+
+### Propagation des Services
+
+La propagation des services est le mécanisme par lequel un plugin expose des fonctionnalités à d'autres plugins. Ce flux garantit que les services sont enregistrés et disponibles dans le container global avant que les plugins dépendants ne soient chargés.
+
+```mermaid
+sequenceDiagram
+    participant P as Plugin Fournisseur
+    participant LM as LifecycleManager
+    participant PR as PluginRegistry
+    participant SC as ServiceContainer
+
+    Note over P: on_load() -> register("my_service", obj)
+    LM->>+LM: propagate_services(is_reload)
+    LM->>PR: register_service(plugin, name, obj, meta)
+    Note over PR: Vérification des permissions & scoping
+    LM->>SC: update(shared_dict, instance_services)
+    Note over SC: Mise à jour du dictionnaire partagé
+    LM-->>-P: Services propagés
+```
+
+- **Isolation** : Un plugin ne peut pas écraser les services "Core" (db, cache, scheduler).
+- **Vagues** : La propagation a lieu après chaque vague de chargement topologique.
 
 ### Flux d'Action de Plugin (IPC)
 

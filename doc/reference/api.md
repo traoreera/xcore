@@ -1,10 +1,10 @@
-# API Reference
+# Référence de l'API
 
-Complete API reference for XCore classes and interfaces.
+Référence complète de l'API pour les classes et interfaces de XCore.
 
 ## Xcore
 
-Main orchestrator class.
+Classe orchestratrice principale.
 
 ```python
 from xcore import Xcore
@@ -15,17 +15,17 @@ class Xcore:
     async def shutdown(self) -> None
 ```
 
-### Attributes
+### Attributs
 
-| Attribute | Type | Description |
+| Attribut | Type | Description |
 |-----------|------|-------------|
-| `services` | `ServiceContainer` | Service container |
-| `plugins` | `PluginSupervisor` | Plugin supervisor |
-| `events` | `EventBus` | Event bus |
-| `hooks` | `HookManager` | Hook manager |
-| `registry` | `PluginRegistry` | Plugin registry |
+| `services` | `ServiceContainer` | Conteneur de services |
+| `plugins` | `PluginSupervisor` | Superviseur de plugins |
+| `events` | `EventBus` | Bus d'événements |
+| `hooks` | `HookManager` | Gestionnaire de hooks |
+| `registry` | `PluginRegistry` | Registre de plugins |
 
-### Methods
+### Méthodes
 
 #### `__init__`
 
@@ -33,15 +33,10 @@ class Xcore:
 def __init__(self, config_path: str | None = None)
 ```
 
-Initialize XCore instance.
+Initialise l'instance XCore.
 
-**Parameters**:
-- `config_path`: Path to YAML configuration file (default: `integration.yaml`)
-
-**Example**:
-```python
-xcore = Xcore(config_path="production.yaml")
-```
+**Paramètres**:
+- `config_path`: Chemin vers le fichier de configuration YAML (par défaut : `xcore.yaml`)
 
 #### `boot`
 
@@ -49,20 +44,13 @@ xcore = Xcore(config_path="production.yaml")
 async def boot(self, app=None) -> "Xcore"
 ```
 
-Start all subsystems.
+Démarre tous les sous-systèmes.
 
-**Parameters**:
-- `app`: FastAPI application instance (optional)
+**Paramètres**:
+- `app`: Instance de l'application FastAPI (optionnel)
 
-**Returns**:
-- Self for chaining
-
-**Example**:
-```python
-@app.on_event("startup")
-async def startup():
-    await xcore.boot(app)
-```
+**Retourne**:
+- L'instance elle-même (pour chaînage)
 
 #### `shutdown`
 
@@ -70,20 +58,13 @@ async def startup():
 async def shutdown(self) -> None
 ```
 
-Gracefully shutdown all subsystems.
-
-**Example**:
-```python
-@app.on_event("shutdown")
-async def shutdown():
-    await xcore.shutdown()
-```
+Arrête proprement tous les sous-systèmes.
 
 ---
 
 ## TrustedBase
 
-Base class for trusted plugins.
+Classe de base pour les plugins de confiance (mode `trusted`).
 
 ```python
 from xcore.sdk import TrustedBase
@@ -92,13 +73,13 @@ class Plugin(TrustedBase):
     ...
 ```
 
-### Attributes
+### Attributs
 
-| Attribute | Type | Description |
+| Attribut | Type | Description |
 |-----------|------|-------------|
-| `ctx` | `PluginContext` | Plugin context (injected) |
+| `ctx` | `PluginContext` | Contexte du plugin (injecté) |
 
-### Methods
+### Méthodes
 
 #### `get_service`
 
@@ -106,23 +87,7 @@ class Plugin(TrustedBase):
 def get_service(self, name: str) -> Any
 ```
 
-Get a service by name.
-
-**Parameters**:
-- `name`: Service name
-
-**Returns**:
-- Service instance
-
-**Raises**:
-- `KeyError`: If service not found
-- `RuntimeError`: If context not injected
-
-**Example**:
-```python
-db = self.get_service("db")
-cache = self.get_service("cache")
-```
+Récupère un service par son nom.
 
 #### `get_router`
 
@@ -130,25 +95,7 @@ cache = self.get_service("cache")
 def get_router(self) -> APIRouter | None
 ```
 
-Return custom FastAPI router.
-
-Override to expose HTTP endpoints.
-
-**Returns**:
-- `APIRouter` instance or `None`
-
-**Example**:
-```python
-def get_router(self):
-    from fastapi import APIRouter
-    router = APIRouter(prefix="/items")
-
-    @router.get("/")
-    async def list_items():
-        return []
-
-    return router
-```
+Retourne un router FastAPI personnalisé. À surcharger pour exposer des endpoints HTTP.
 
 #### `handle`
 
@@ -157,79 +104,25 @@ def get_router(self):
 async def handle(self, action: str, payload: dict) -> dict
 ```
 
-Handle IPC actions.
+Gère les actions IPC.
 
-**Parameters**:
-- `action`: Action name
-- `payload`: Action parameters
+### Hooks de Cycle de Vie
 
-**Returns**:
-- Response dictionary
-
-**Example**:
-```python
-async def handle(self, action: str, payload: dict) -> dict:
-    if action == "ping":
-        return {"status": "ok", "message": "pong"}
-    return {"status": "error", "msg": "Unknown action"}
-```
-
-### Lifecycle Hooks
-
-#### `on_load`
-
-```python
-async def on_load(self) -> None
-```
-
-Called when plugin is loaded.
-
-**Example**:
-```python
-async def on_load(self) -> None:
-    self.db = self.get_service("db")
-    print("Plugin loaded")
-```
-
-#### `on_unload`
-
-```python
-async def on_unload(self) -> None
-```
-
-Called when plugin is unloaded.
-
-**Example**:
-```python
-async def on_unload(self) -> None:
-    print("Plugin unloaded")
-```
-
-#### `on_reload`
-
-```python
-async def on_reload(self) -> None
-```
-
-Called when plugin is reloaded.
-
-**Example**:
-```python
-async def on_reload(self) -> None:
-    print("Plugin reloading")
-```
+- `on_load()`: Appelé au chargement.
+- `on_unload()`: Appelé au déchargement.
+- `on_reload()`: Appelé au rechargement.
 
 ---
 
 ## PluginSupervisor
 
-High-level plugin management interface.
+Interface de haut niveau pour la gestion des plugins.
 
 ```python
 from xcore.kernel.runtime.supervisor import PluginSupervisor
 ```
 
-### Methods
+### Méthodes
 
 #### `call`
 
@@ -242,57 +135,11 @@ async def call(
 ) -> dict
 ```
 
-Call a plugin action.
+Appelle une action sur un plugin via la pipeline de middlewares.
 
-**Parameters**:
-- `plugin_name`: Target plugin name
-- `action`: Action name
-- `payload`: Action parameters
+#### `load` / `unload` / `reload`
 
-**Returns**:
-- Response dictionary
-
-**Example**:
-```python
-result = await supervisor.call(
-    "my_plugin",
-    "process",
-    {"data": "value"}
-)
-```
-
-#### `load`
-
-```python
-async def load(self, plugin_name: str) -> None
-```
-
-Load a plugin.
-
-**Parameters**:
-- `plugin_name`: Plugin name
-
-#### `unload`
-
-```python
-async def unload(self, plugin_name: str) -> None
-```
-
-Unload a plugin.
-
-**Parameters**:
-- `plugin_name`: Plugin name
-
-#### `reload`
-
-```python
-async def reload(self, plugin_name: str) -> None
-```
-
-Reload a plugin.
-
-**Parameters**:
-- `plugin_name`: Plugin name
+Gère dynamiquement l'état d'un plugin par son nom.
 
 #### `status`
 
@@ -300,502 +147,208 @@ Reload a plugin.
 def status(self) -> dict
 ```
 
-Get plugin status.
+Retourne l'état actuel de tous les plugins.
 
-**Returns**:
-```python
-{
-    "plugins": [
-        {
-            "name": "plugin_name",
-            "version": "1.0.0",
-            "mode": "trusted",
-            "state": "loaded"
-        }
-    ],
-    "count": 1
-}
-```
+---
 
-#### `list_plugins`
+## PluginLoader
+
+Gère la découverte et le chargement ordonné des plugins.
 
 ```python
-def list_plugins(self) -> list[str]
+from xcore.kernel.runtime.loader import PluginLoader
 ```
 
-List loaded plugin names.
+### Méthodes
 
-**Returns**:
-- List of plugin names
+#### `load_all`
+
+```python
+async def load_all(self) -> dict[str, list[str]]
+```
+
+Scanne le répertoire et charge tous les plugins en respectant le tri topologique des dépendances.
+
+#### `get`
+
+```python
+def get(self, name: str) -> PluginHandler
+```
+
+Récupère le handler (LifecycleManager ou SandboxProcessManager) pour un plugin.
+
+---
+
+## LifecycleManager
+
+Gère le cycle de vie d'un plugin spécifique en mode `trusted`.
+
+```python
+from xcore.kernel.runtime.lifecycle import LifecycleManager
+```
+
+### Méthodes
+
+#### `load` / `unload` / `reload`
+
+Effectue les transitions d'état et invoque les hooks du plugin.
+
+#### `propagate_services`
+
+```python
+def propagate_services(self, *, is_reload: bool = False) -> dict
+```
+
+Expose les services internes du plugin au conteneur global.
 
 ---
 
 ## EventBus
 
-Event subscription and emission.
+Gestion des abonnements et de l'émission d'événements.
 
 ```python
 from xcore.kernel.events.bus import EventBus, Event
 ```
 
-### Methods
+### Méthodes
 
-#### `on`
+#### `on` / `once`
 
-```python
-def on(
-    self,
-    event_name: str,
-    priority: int = 50,
-    name: str | None = None
-) -> Callable
-```
+Décorateurs pour s'abonner à un événement (une seule fois pour `once`).
 
-Subscribe to an event.
-
-**Parameters**:
-- `event_name`: Event name pattern
-- `priority`: Handler priority (0-100, higher first)
-- `name`: Handler identifier
-
-**Returns**:
-- Decorator function
-
-**Example**:
-```python
-@events.on("user.created", priority=50)
-async def on_user_created(event: Event):
-    print(event.data)
-```
-
-#### `once`
-
-```python
-def once(
-    self,
-    event_name: str,
-    priority: int = 50
-) -> Callable
-```
-
-Subscribe once to an event.
-
-**Parameters**:
-- `event_name`: Event name
-- `priority`: Handler priority
-
-**Example**:
-```python
-@events.once("system.ready")
-async def on_ready(event: Event):
-    print("System ready!")
-```
-
-#### `subscribe`
-
-```python
-def subscribe(
-    self,
-    event_name: str,
-    handler: Callable,
-    priority: int = 50,
-    once: bool = False,
-    name: str | None = None
-) -> None
-```
-
-Subscribe a handler to an event.
-
-**Parameters**:
-- `event_name`: Event name
-- `handler`: Callback function
-- `priority`: Handler priority
-- `once`: Remove after first execution
-- `name`: Handler name
-
-#### `unsubscribe`
-
-```python
-def unsubscribe(self, event_name: str, handler: Callable) -> None
-```
-
-Unsubscribe a handler.
-
-**Parameters**:
-- `event_name`: Event name
-- `handler`: Handler function
+**Paramètres**:
+- `event_name`: Nom ou pattern de l'événement.
+- `priority`: Priorité (0-100, défaut 50).
 
 #### `emit`
 
 ```python
-async def emit(
-    self,
-    event_name: str,
-    data: dict[str, Any] | None = None,
-    source: str | None = None,
-    gather: bool = True
-) -> list[Any]
+async def emit(self, event_name: str, data: dict = None) -> list[Any]
 ```
 
-Emit an event.
-
-**Parameters**:
-- `event_name`: Event name
-- `data`: Event data
-- `source`: Event source
-- `gather`: Execute handlers in parallel
-
-**Returns**:
-- List of handler results
-
-**Example**:
-```python
-await events.emit("user.created", {
-    "user_id": "123",
-    "email": "user@example.com"
-})
-```
-
-#### `emit_sync`
-
-```python
-def emit_sync(
-    self,
-    event_name: str,
-    data: dict[str, Any] | None = None
-) -> None
-```
-
-Fire-and-forget event emission.
-
-**Parameters**:
-- `event_name`: Event name
-- `data`: Event data
-
-#### `clear`
-
-```python
-def clear(self, event_name: str | None = None) -> None
-```
-
-Clear event handlers.
-
-**Parameters**:
-- `event_name`: Specific event or all if None
-
-### Event Object
-
-```python
-@dataclass
-class Event:
-    name: str
-    data: dict[str, Any]
-    source: str | None
-    propagate: bool
-    cancelled: bool
-
-    def stop(self) -> None      # Stop propagation
-    def cancel(self) -> None     # Cancel event
-```
+Émet un événement de manière asynchrone.
 
 ---
 
-## ServiceContainer
+## Sécurité
 
-Service management and access.
+### ASTScanner
+
+Analyse statique du code source pour les plugins `sandboxed`.
+
+```python
+from xcore.kernel.security.validation import ASTScanner
+```
+
+- `scan(plugin_dir)`: Scanne tous les fichiers `.py` et retourne un `ScanResult`.
+
+### FilesystemGuard
+
+Protection du système de fichiers par monkey-patching.
+
+```python
+from xcore.kernel.sandbox.worker import FilesystemGuard
+```
+
+- `install()`: Installe les protections sur `open`, `os`, `pathlib`, etc.
+- `is_allowed(path)`: Vérifie si un chemin respecte la politique du manifeste.
+
+### PermissionEngine
+
+Moteur de contrôle d'accès granulaire (RBAC/ABAC).
+
+```python
+from xcore.kernel.permissions.engine import PermissionEngine
+```
+
+- `check(plugin, resource, action)`: Lève `PermissionDenied` si non autorisé.
+
+---
+
+## Observabilité
+
+### HealthChecker
+
+Registre de diagnostics de santé.
+
+```python
+from xcore.kernel.observability.health import HealthChecker
+```
+
+- `register(name)`: Décorateur pour enregistrer un check.
+- `run_all()`: Exécute tous les diagnostics en parallèle.
+
+### MetricsRegistry
+
+Registre de métriques léger.
+
+```python
+from xcore.kernel.observability.metrics import MetricsRegistry
+```
+
+- `counter(name, labels)` / `gauge(name, labels)` / `histogram(name)`: Crée ou récupère une métrique.
+- `snapshot()`: Retourne l'état actuel de toutes les métriques.
+
+### Tracer
+
+Système de tracing distribué.
+
+```python
+from xcore.kernel.observability.tracing import Tracer
+```
+
+- `span(name, **attrs)`: Gestionnaire de contexte pour créer un span.
+
+---
+
+## Services Intégrés
+
+### ServiceContainer
+
+Gestion et accès aux services.
 
 ```python
 from xcore.services.container import ServiceContainer
 ```
 
-### Methods
+- `get(name)`: Récupère un service (lève `KeyError` si absent).
+- `health()`: Vérifie la santé de tous les services.
 
-#### `init`
+### CacheService
 
-```python
-async def init(self) -> None
-```
-
-Initialize all services.
-
-#### `shutdown`
-
-```python
-async def shutdown(self) -> None
-```
-
-Shutdown all services.
-
-#### `get`
-
-```python
-def get(self, name: str) -> Any
-```
-
-Get a service by name.
-
-**Parameters**:
-- `name`: Service name
-
-**Returns**:
-- Service instance
-
-**Raises**:
-- `KeyError`: If service not found
-
-**Example**:
-```python
-db = container.get("db")
-cache = container.get("cache")
-```
-
-#### `get_or_none`
-
-```python
-def get_or_none(self, name: str) -> Any | None
-```
-
-Get a service or None.
-
-**Parameters**:
-- `name`: Service name
-
-**Returns**:
-- Service instance or None
-
-#### `has`
-
-```python
-def has(self, name: str) -> bool
-```
-
-Check if service exists.
-
-**Parameters**:
-- `name`: Service name
-
-**Returns**:
-- True if service exists
-
-#### `health`
-
-```python
-async def health(self) -> dict[str, Any]
-```
-
-Health check all services.
-
-**Returns**:
-```python
-{
-    "ok": True,
-    "services": {
-        "database": {"ok": True, "msg": "Connected"},
-        "cache": {"ok": True, "msg": "Connected"}
-    }
-}
-```
-
-#### `status`
-
-```python
-def status(self) -> dict[str, Any]
-```
-
-Get service status.
-
-**Returns**:
-```python
-{
-    "services": {
-        "database": {...},
-        "cache": {...}
-    },
-    "registered_keys": ["db", "cache", "scheduler"]
-}
-```
-
----
-
-## CacheService
-
-Cache operations.
+Opérations de cache.
 
 ```python
 from xcore.services.cache.service import CacheService
 ```
 
-### Methods
-
-#### `get`
-
-```python
-async def get(self, key: str) -> Any | None
-```
-
-Get value from cache.
-
-**Parameters**:
-- `key`: Cache key
-
-**Returns**:
-- Cached value or None
-
-#### `set`
-
-```python
-async def set(
-    self,
-    key: str,
-    value: Any,
-    ttl: int | None = None
-) -> None
-```
-
-Set cache value.
-
-**Parameters**:
-- `key`: Cache key
-- `value`: Value to cache
-- `ttl`: Time-to-live in seconds
-
-#### `delete`
-
-```python
-async def delete(self, key: str) -> None
-```
-
-Delete cache key.
-
-**Parameters**:
-- `key`: Cache key
-
-#### `exists`
-
-```python
-async def exists(self, key: str) -> bool
-```
-
-Check if key exists.
-
-**Parameters**:
-- `key`: Cache key
-
-**Returns**:
-- True if key exists
-
-#### `get_or_set`
-
-```python
-async def get_or_set(
-    self,
-    key: str,
-    factory: Callable[[], Any],
-    ttl: int | None = None
-) -> Any
-```
-
-Get or compute and cache value.
-
-**Parameters**:
-- `key`: Cache key
-- `factory`: Function to compute value if not cached
-- `ttl`: Time-to-live
-
-**Example**:
-```python
-data = await cache.get_or_set(
-    "expensive_data",
-    factory=lambda: fetch_from_database(),
-    ttl=300
-)
-```
+- `get(key)` / `set(key, value, ttl)` / `delete(key)`: Opérations standards.
+- `get_or_set(key, factory, ttl)`: Récupère ou calcule et met en cache.
 
 ---
 
-## Utility Functions
+## Fonctions Utilitaires
 
-### ok
+### `ok` / `error`
 
-```python
-from xcore.kernel.api.contract import ok
-
-def ok(data: dict | None = None, **kwargs) -> dict
-```
-
-Create success response.
-
-**Example**:
-```python
-return ok(message="Success", id="123")
-# Returns: {"status": "ok", "message": "Success", "id": "123"}
-```
-
-### error
+Helpers pour standardiser les réponses IPC et HTTP.
 
 ```python
-from xcore.kernel.api.contract import error
+from xcore.kernel.api.contract import ok, error
 
-def error(
-    msg: str,
-    code: str | None = None,
-    **kwargs
-) -> dict
-```
+return ok(data="valeur")
+# {"status": "ok", "data": "valeur"}
 
-Create error response.
-
-**Example**:
-```python
-return error("Not found", code="not_found", status_code=404)
-# Returns: {"status": "error", "msg": "Not found", "code": "not_found"}
+return error("Message", code="err_code")
+# {"status": "error", "msg": "Message", "code": "err_code"}
 ```
 
 ---
 
 ## Exceptions
 
-### RateLimitExceeded
-
-```python
-from xcore.kernel.sandbox.limits import RateLimitExceeded
-
-class RateLimitExceeded(Exception):
-    """Raised when rate limit is exceeded."""
-    pass
-```
-
-### PluginError
-
-```python
-from xcore.kernel.runtime.loader import PluginError
-
-class PluginError(Exception):
-    """Base plugin error."""
-    pass
-```
-
-### ValidationError
-
-```python
-from xcore.kernel.security.validation import ValidationError
-
-class ValidationError(Exception):
-    """Plugin validation error."""
-    pass
-```
-
-## Type Definitions
-
-```python
-from typing import Any, Protocol
-
-class BasePlugin(Protocol):
-    """Plugin protocol."""
-    async def handle(self, action: str, payload: dict) -> dict: ...
-
-class ExecutionMode(str, Enum):
-    TRUSTED = "trusted"
-    SANDBOXED = "sandboxed"
-    LEGACY = "legacy"
-```
+- `RateLimitExceeded`: Limite de débit atteinte.
+- `PermissionDenied`: Accès refusé par le moteur de permissions.
+- `LoadError`: Échec critique lors du chargement d'un plugin.
+- `ValidationError`: Manifeste ou code source invalide.
