@@ -18,9 +18,10 @@ No rule → default is deny (fail-closed).
 from __future__ import annotations
 
 import fnmatch
+import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Pattern
 
 
 class PolicyEffect(str, Enum):
@@ -42,12 +43,43 @@ class Policy:
     actions: list[str]
     effect: PolicyEffect = PolicyEffect.ALLOW
 
+    # Fields pre-calculated for performance
+    _actions_set: set[str] = field(init=False, repr=False)
+    _regex: Pattern | None = field(init=False, repr=False)
+    _is_wildcard: bool = field(init=False, repr=False)
+    _has_star_action: bool = field(init=False, repr=False)
+
+    def __post_init__(self):
+        """Pre-calculate values to speed up the 'matches' hot path."""
+        self._actions_set = set(self.actions)
+        self._has_star_action = "*" in self._actions_set
+
+        # Determine if the resource pattern contains glob wildcards
+        self._is_wildcard = any(c in self.resource for c in "*?[]")
+
+        if self._is_wildcard:
+            # Compile regex once to avoid fnmatch overhead in the hot path
+            # fnmatch.translate converts a glob pattern to a regex string
+            self._regex = re.compile(fnmatch.translate(self.resource))
+        else:
+            self._regex = None
+
     def matches(self, resource: str, action: str) -> bool:
-        # Check action first (list lookup is fast)
-        if "*" not in self.actions and action not in self.actions:
+        """
+        Check if the rule matches the given resource and action.
+        Optimized to use pre-calculated sets and regex.
+        """
+        # 1. Action check: O(1) set lookup is much faster than list iteration
+        if not self._has_star_action and action not in self._actions_set:
             return False
-        # Then check resource (fnmatch is slow)
-        return fnmatch.fnmatch(resource, self.resource)
+
+        # 2. Resource check:
+        # - If not a wildcard, simple string comparison is fastest
+        if not self._is_wildcard:
+            return resource == self.resource
+
+        # - If wildcard, use pre-compiled regex
+        return bool(self._regex.match(resource))
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Policy":

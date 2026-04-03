@@ -25,3 +25,7 @@
 ## 2026-04-25 - [Optimization of RateLimiter and Registry]
 **Learning:** Using `asyncio.Lock` and `async def` for pure in-memory operations (like rate limiting with a `deque`) introduces unnecessary coroutine overhead and context switching. In a single-threaded event loop, synchronous operations are effectively atomic if they don't contain `await` points, making the lock redundant.
 **Action:** Convert hot-path in-memory logic to synchronous methods and remove `asyncio.Lock` where I/O is not involved. This yielded a ~2.2x speedup in the rate-limiting check, reducing overhead from ~1.86µs to ~0.85µs.
+
+## 2026-05-01 - [Pre-compilation of Permission Patterns]
+**Learning:** `fnmatch.fnmatch` is relatively slow for high-frequency calls because it may involve redundant pattern parsing or internal cache lookups. For literal (non-wildcard) patterns, a simple string comparison is orders of magnitude faster. For true wildcard patterns, pre-compiling the glob into a regex during initialization reduces evaluation overhead by ~50%.
+**Action:** In classes that perform frequent pattern matching, identify literal patterns and use string equality. For wildcard patterns, pre-compile them into regexes during the object's initialization phase to avoid overhead in the hot execution path.

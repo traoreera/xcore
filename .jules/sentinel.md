@@ -32,3 +32,18 @@
 **Vulnerability:** The `ASTScanner` allowed the use of the `hasattr` built-in, enabling sandboxed plugins to probe for the existence of sensitive internal attributes (e.g., `__class__`, `__subclasses__`) without triggering an access error.
 **Learning:** Security sandboxes that block attribute access (like `getattr` or direct attribute access) can still be "fingerprinted" or probed using `hasattr`. This allows an attacker to discover which objects might be vulnerable to escape before attempting a blocked operation.
 **Prevention:** Always include `hasattr` in the list of forbidden built-ins for restricted execution environments, alongside `getattr`, `setattr`, and `delattr`.
+
+## 2026-04-15 - Sandbox Denial of Service via Interactive Input
+**Vulnerability:** Sandboxed plugins could call the  built-in, causing the isolated worker process to hang indefinitely while waiting for user input on stdin. This allowed a malicious or buggy plugin to block its assigned worker and potentially consume resources without completing its task.
+**Learning:** Even if a sandbox restricts filesystem and network access, interactive functions like `input()` can be used to cause process-level Denial of Service if the IPC mechanism relies on standard input/output.
+**Prevention:** Always monkey-patch interactive built-ins in the restricted execution environment to raise a `PermissionError` immediately. Additionally, include these built-ins in the static AST scanner's forbidden list to catch them before execution.
+
+## 2026-04-20 - AST Sandbox Bypass via Custom Entry Point
+**Vulnerability:** The `ASTScanner` was hardcoded to only scan the `src/` directory within a plugin. However, the execution environment (the `SandboxWorker`) used the `entry_point` from the plugin's manifest to determine the source code to load. An attacker could bypass the scan by placing malicious code in an entry point outside of `src/` (e.g., at the plugin root).
+**Learning:** Security validation must be synchronized with the actual execution logic. If the scanner assumes a fixed directory structure that the runtime does not enforce, a gap is created where unvalidated code can be executed.
+**Prevention:** Always derive the scanning target from the same configuration used by the runtime (e.g., the `entry_point`). Additionally, implement strict path validation (using `.resolve()` and `.is_relative_to()`) to prevent the scanner itself from being used as a vector for path traversal attacks via misconfigured manifests.
+
+## 2026-04-15 - Sandbox Denial of Service via Interactive Input
+**Vulnerability:** Sandboxed plugins could call the `input()` built-in, causing the isolated worker process to hang indefinitely while waiting for user input on stdin. This allowed a malicious or buggy plugin to block its assigned worker and potentially consume resources without completing its task.
+**Learning:** Even if a sandbox restricts filesystem and network access, interactive functions like `input()` can be used to cause process-level Denial of Service if the IPC mechanism relies on standard input/output.
+**Prevention:** Always monkey-patch interactive built-ins in the restricted execution environment to raise a `PermissionError` immediately. Additionally, include these built-ins in the static AST scanner's forbidden list to catch them before execution.
