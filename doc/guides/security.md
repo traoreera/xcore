@@ -1,149 +1,84 @@
-# Sécurité et Isolation
+# Sécurité et Isolation des Plugins XCore
 
-Guide complet sur les mécanismes de sécurité, l'isolation des plugins et les meilleures pratiques.
+XCore a été conçu pour exécuter du code tiers en garantissant la stabilité et la sécurité du système hôte grâce à un moteur de Sandboxing performant et multicouches.
 
-## Architecture de Sécurité Multi-couches
+---
 
-XCore implémente une stratégie de défense en profondeur pour protéger le noyau et les données du système.
+## 1. Moteur de Sandboxing (Mode `sandboxed`)
 
-1. **Sandboxing au niveau processus** — Isolation matérielle et OS (sous-processus).
-2. **Contrôle d'accès au Filesystem** — Restriction granulaire des lectures/écritures.
-3. **Analyse Statique (AST)** — Vérification du code avant exécution.
-4. **Moteur de Permissions (RBAC/ABAC)** — Contrôle des capacités inter-plugins.
-5. **Signature de Code** — Garantie de l'intégrité et de l'origine (HMAC-SHA256).
+Lorsqu'un plugin est configuré en mode `sandboxed`, il s'exécute dans un processus Python **totalement distinct**. Cette isolation garantit qu'un crash mémoire ou CPU du plugin n'affectera pas le framework central.
 
-## Mode Sandboxed vs Mode Trusted
+### Les 4 Couches de Protection du `FilesystemGuard`
 
-### Mode Sandboxed (Recommandé)
+XCore implémente une protection proactive via le `FilesystemGuard` qui monkey-patche dynamiquement les fonctions sensibles de Python au démarrage du sous-processus.
 
-**Usage** : Plugins tiers, code non audité, environnements multi-tenants.
+#### Couche 1 : Système de Fichiers (Isolation Path)
+Intercepte `open()`, `os.open()`, `pathlib.Path.open()` et les syscalls associés.
+- **Fail-closed** : Tout accès hors du dossier `data/` du plugin est bloqué par défaut.
+- **Whitelist** : Seuls les chemins déclarés dans `allowed_paths` sont accessibles.
 
-- **Isolation** : Chaque plugin tourne dans son propre processus Python.
-- **Mémoire** : Limite stricte via `RLIMIT_AS` (configurable par plugin).
-- **Disque** : Accès restreint au dossier `data/` du plugin uniquement.
-- **Code** : Scan AST obligatoire, interdiction des built-ins dangereux.
-- **Communication** : Uniquement via IPC (JSON-RPC) sécurisé.
+#### Couche 2 : Exécution Dynamique (Bloqueur de Code)
+Désactive les fonctions permettant l'exécution de code non contrôlé :
+- `eval()`, `exec()`, `compile()` et `input()` sont levés en `PermissionError`.
 
-### Mode Trusted
+#### Couche 3 : Imports Critiques (Whitelist Modules)
+Bloque l'importation de modules Python dangereux au niveau de `sys.meta_path` :
+- `os`, `sys`, `subprocess`, `shutil`, `ctypes`, `threading`, `multiprocessing` sont proscrits.
 
-**Usage** : Extensions internes, services critiques nécessitant une performance maximale.
+#### Couche 4 : Accès Bas Niveau (Ctypes/Libc)
+Bloque les appels directs à la bibliothèque `ctypes` pour empêcher le plugin de contourner les protections Python via des appels C directs vers la `libc` ou l'API C de Python.
 
-- **Isolation** : S'exécute dans le processus principal (Main Process).
-- **Accès** : Accès complet aux services partagés et à l'API système.
-- **Signature** : Signature obligatoire si `strict_trusted` est activé.
-- **Performance** : Latence minimale, pas de sérialisation IPC.
+---
 
-## Protection du Système de Fichiers (FilesystemGuard)
+## 2. Analyse Statique via `ASTScanner`
 
-Le `FilesystemGuard` (`xcore/kernel/sandbox/worker.py`) assure l'isolation au niveau du disque par un monkey-patching granulaire des entrées/sorties.
+Avant même l'exécution, XCore scanne le code source de tous les plugins (`trusted` et `sandboxed`) à la recherche de patterns suspects.
 
-### Couches de protection :
+- **Vérification de l'Entry Point** : Garantit que le code exécuté se trouve bien à l'intérieur du répertoire du plugin.
+- **Scan des Imports** : Bloque les tentatives d'importation de modules interdits dès la phase de parsing de l'arbre syntaxique (AST).
+- **Attributs Interdits** : Empêche l'accès aux attributs internes de Python comme `__class__`, `__globals__`, ou `__subclasses__` qui pourraient être utilisés pour l'évasion de sandbox.
 
-1.  **Filesystem (Paths)** : Patching de `builtins.open`, `io.open`, `os.open` et `pathlib.Path.open`. Chaque chemin est résolu de manière absolue puis validé par rapport aux `allowed_paths` du manifeste.
-2.  **Exécution Dynamique** : Blocage d' `exec()`, `eval()` et `compile()` pour empêcher l'exécution de code arbitraire injecté en string.
-3.  **Imports Post-chargement** : Patching de `importlib.import_module` et `importlib.util.find_spec` pour interdire l'import dynamique de modules sensibles (`os`, `sys`, etc.) qui auraient pu échapper au scan AST initial.
-4.  **Ctypes & Native** : Blocage complet de `ctypes` (CDLL, memmove, cast) pour empêcher les appels directs à la `libc` ou la manipulation brute de la mémoire du processus.
+---
 
-**Actions interdites en sandbox :**
-- Toute écriture ou lecture hors du dossier `data/` (ou dossiers déclarés).
-- Modification de permissions (`os.chmod`).
-- Création/Suppression de répertoires (`os.mkdir`, `os.rmdir`).
-- Utilisation de descripteurs de fichiers bruts (`os.fdopen`).
+## 3. Communication Inter-Processus (IPC)
 
-## Analyse Statique (ASTScanner)
+La communication entre le Noyau (Kernel) et le bac à sable (Sandbox) s'effectue via un canal IPC sécurisé :
 
-Avant de charger un plugin sandboxé, XCore analyse son arbre de syntaxe abstraite (AST) via l' `ASTScanner` (`xcore/kernel/security/validation.py`). Cette analyse bloque le code malveillant avant même qu'il ne soit exécuté.
+- **Protocole** : JSON-RPC léger sur flux `stdin` / `stdout`.
+- **Sens unique** : Le plugin sandboxé ne peut jamais initier de commande vers le Kernel (modèle Pull/Response).
+- **Limites de taille** : Les messages dépassant 512 Ko sont rejetés pour prévenir les attaques par déni de service (DoS) mémoire.
 
-### Éléments interdits :
-- **Imports système** : `os`, `sys`, `subprocess`, `ctypes`, `socket`, `shutil`, `importlib`, etc.
-- **Built-ins dangereux** : `eval()`, `exec()`, `compile()`, `globals()`, `locals()`, `__import__()`, `pickle`, `breakpoint()`.
-- **Introspection sensible** : Accès aux attributs magiques `__class__`, `__globals__`, `__subclasses__`, `__code__`, `__mro__`, `__builtins__`, `__dict__`.
-- **Réflexion bloquée** : L'utilisation de `hasattr()`, `getattr()`, `setattr()` et `delattr()` est interdite pour empêcher la découverte et la manipulation d'attributs privés ou protégés du noyau.
+---
 
-### Logique du Scan :
-1.  **Parsing** : Transformation du code source en arbre AST.
-2.  **SecurityVisitor** : Parcours récursif de l'arbre (`visit_Import`, `visit_Name`, `visit_Attribute`).
-3.  **Fail-Closed** : Si une seule violation est détectée, le `ScanResult` passe à `passed: False` et le plugin refuse de se charger.
+## 4. Limites de Ressources (RLIMIT)
 
-## Signature de Plugins
+Pour éviter qu'un plugin ne sature les ressources du serveur hôte, XCore applique des limites strictes au niveau du système d'exploitation :
 
-Pour garantir qu'un plugin n'a pas été modifié malveillamment, XCore supporte la signature HMAC-SHA256.
+- **Mémoire (RAM)** : Limite via `resource.RLIMIT_AS` (paramètre `max_memory_mb` dans le manifeste).
+- **Temps d'exécution (CPU)** : Timeout forcé sur chaque appel IPC (paramètre `timeout_seconds`).
+- **Débit (Rate Limiting)** : Contrôle du nombre d'appels par minute via le `MiddlewarePipeline`.
 
-### Signer un plugin
+---
+
+## 5. Signature et Vérification des Plugins
+
+Pour les environnements de production, XCore supporte la signature cryptographique des plugins :
+
 ```bash
-xcore plugin sign ./plugins/mon_plugin --key VOTRE_CLE_SECRETE
+# Signer un plugin (génère un fichier signature.json)
+xcore plugin sign ./plugins/mon_plugin --key MA_CLE_PRIVEE
+
+# Vérifier la validité avant chargement
+xcore plugin verify ./plugins/mon_plugin --key MA_CLE_PUBLIQUE
 ```
 
-Cela génère un fichier `plugin.sig` contenant l'empreinte de tous les fichiers du plugin.
+Un plugin dont la signature est invalide ou manquante sera rejeté par le framework si le mode `strict_trusted` est activé dans `xcore.yaml`.
 
-### Vérification automatique
-Dans `xcore.yaml`, vous pouvez forcer la vérification :
-```yaml
-plugins:
-  strict_trusted: true # Refuse de charger un plugin Trusted non signé
-```
+---
 
-## Moteur de Permissions
+## Bonnes Pratiques de Sécurité
 
-Le `PermissionEngine` gère qui peut faire quoi. Chaque plugin déclare ses besoins dans son manifeste.
-
-```yaml
-# plugin.yaml
-permissions:
-  - resource: "cache.*"     # Accès à toutes les clés du cache
-    actions: ["read", "write"]
-    effect: allow
-  - resource: "db.users"    # Accès restreint à la table users
-    actions: ["read"]
-    effect: allow
-```
-
-**Optimisation de performance** : Les vérifications de permissions utilisent une mémoïsation interne, réduisant l'impact sur le "hot-path" à moins de 20 microsecondes.
-
-## Bonnes Pratiques de Développement
-
-### 1. Validation des Entrées (Pydantic)
-Ne faites jamais confiance aux données reçues via IPC ou HTTP. Utilisez les décorateurs du SDK :
-
-```python
-from xcore.sdk import validate_payload, TrustedBase
-from pydantic import BaseModel
-
-class UserInput(BaseModel):
-    user_id: int
-    email: str
-
-class Plugin(TrustedBase):
-    @validate_payload(UserInput)
-    async def handle_create(self, validated: UserInput):
-        # Ici data est déjà validé et typé
-        pass
-```
-
-### 2. Éviter les Injections SQL
-Utilisez toujours les paramètres de requête fournis par le service DB, ne concaténez jamais de chaînes.
-
-```python
-# ✅ CORRECT
-with self.db.session() as session:
-    session.execute("SELECT * FROM users WHERE id = :id", {"id": user_id})
-```
-
-### 3. Gestion des Secrets
-Ne stockez jamais de clés API en dur dans le code. Utilisez le bloc `env` du manifeste ou des variables d'environnement système.
-
-```yaml
-# plugin.yaml
-env:
-  STRIPE_KEY: "${STRIPE_API_KEY}" # Sera résolu depuis l'environnement système
-```
-
-## Checklist de Sécurité Production
-
-- [ ] `debug: false` dans la configuration globale.
-- [ ] `execution_mode: sandboxed` pour tous les plugins tiers.
-- [ ] `strict_trusted: true` activé.
-- [ ] Clés secrètes (`secret_key`) générées aléatoirement (min 32 caractères).
-- [ ] Limites de ressources (`max_memory_mb`) configurées pour chaque plugin sandboxé.
-- [ ] Rate limiting global et par plugin activé.
-- [ ] HTTPS activé sur le reverse proxy (Nginx/Traefik).
+1. **Privilégier le mode `sandboxed`** pour tout code n'étant pas issu d'une source interne de confiance.
+2. **Utiliser des identifiants (UID) uniques** pour chaque plugin afin de garantir des namespaces d'import distincts dans `sys.modules`.
+3. **Limiter les permissions** au strict nécessaire (ex: autoriser uniquement `cache.*` au lieu de `*`).
+4. **Surveiller les logs de violation** : Toute tentative de violation de sandbox est logguée avec une stack trace complète pour audit.

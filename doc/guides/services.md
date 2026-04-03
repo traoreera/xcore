@@ -1,132 +1,167 @@
-# Utilisation des Services
+# Utilisation des Services XCore
 
-XCore fournit un ensemble de services de base hautement performants, accessibles uniformément par tous les plugins.
+Les services XCore fournissent une infrastructure technique partagée (Base de données, Cache, Planificateur de tâches) disponible pour tous les plugins.
 
-## Accès aux Services
+## 1. Accès aux Services
 
-Chaque plugin peut accéder aux services via la méthode `self.get_service(name)`.
+Chaque plugin accède aux services via l'objet `ServiceContainer`. Le SDK offre deux méthodes principales :
 
 ```python
 from xcore.sdk import TrustedBase
 
-class MyPlugin(TrustedBase):
+class Plugin(TrustedBase):
     async def on_load(self):
-        # Récupération des services de base
+        # 1. Récupération directe (typage automatique par IDE)
         self.db = self.get_service("db")
         self.cache = self.get_service("cache")
-        self.scheduler = self.get_service("scheduler")
+
+        # 2. Récupération typée (pour connexions nommées ou extensions)
+        # from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
+        # self.analytics = self.get_service_as("analytics", AsyncSQLAdapter)
 ```
 
-## Service de Base de Données (`db`)
+---
 
-Le service DB supporte plusieurs backends (PostgreSQL, MySQL, SQLite) et propose une API synchrone et asynchrone via SQLAlchemy.
+## 2. Service de Base de Données (`db`)
 
-### Utilisation Synchrone (Session)
-Idéal pour les opérations complexes ou les plugins tournant dans des threads séparés.
+XCore utilise **SQLAlchemy** (ou des adaptateurs spécifiques) pour gérer les connexions SQL (PostgreSQL, MySQL, SQLite).
 
-```python
-with self.db.session() as session:
-    result = session.execute("SELECT name FROM users WHERE id = :id", {"id": 1})
-    user_name = result.scalar()
-```
+### Repository SQL : `BaseSyncRepository` / `BaseAsyncRepository`
 
-### Utilisation Asynchrone
-Pour une performance maximale dans les handlers `async`.
+Le SDK simplifie l'accès aux données avec le pattern Repository.
 
 ```python
-async with self.db.connection() as conn:
-    result = await conn.execute("SELECT * FROM products")
-    products = result.fetchall()
-```
+from xcore.sdk import BaseAsyncRepository
+from sqlalchemy import Column, String, Integer
+from sqlalchemy.orm import declarative_base
 
-## Service de Cache (`cache`)
+Base = declarative_base()
 
-Basé sur Redis (ou mémoire en local), ce service permet de stocker des données temporaires de manière extrêmement rapide.
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
 
-### Opérations de base
+class UserRepository(BaseAsyncRepository[User]):
+    """Repository personnalisé pour les utilisateurs."""
+    pass
 
-```python
-# Stockage avec durée de vie (TTL) en secondes
-await self.cache.set("user:123:session", session_data, ttl=3600)
-
-# Récupération
-data = await self.cache.get("user:123:session")
-
-# Suppression
-await self.cache.delete("user:123:session")
-```
-
-### Optimisation : Batching
-Pour réduire les allers-retours réseau, utilisez les méthodes groupées :
-
-```python
-# Récupère plusieurs clés en une seule commande (MGET)
-values = await self.cache.mget(["key1", "key2", "key3"])
-
-# Stockage groupé (Pipeline)
-await self.cache.mset({
-    "key1": "val1",
-    "key2": "val2"
-}, ttl=300)
-```
-
-## Service de Planification (`scheduler`)
-
-Permet d'exécuter des tâches de fond de manière récurrente ou différée.
-
-### Tâches récurrentes (Interval)
-
-```python
-self.scheduler.add_job(
-    func=self.cleanup_temp_files,
-    trigger="interval",
-    hours=24,
-    id="cleanup_job"
-)
-```
-
-### Tâches différées (Date)
-
-```python
-from datetime import datetime, timedelta
-
-run_at = datetime.now() + timedelta(minutes=30)
-self.scheduler.add_job(
-    func=self.send_reminder,
-    trigger="date",
-    run_date=run_at,
-    args=[user_id]
-)
-```
-
-## Services Personnalisés (Extensions)
-
-Vous pouvez enregistrer vos propres services pour les rendre disponibles à d'autres plugins.
-
-```python
-# Dans un plugin fournisseur de service
-class MyServiceProvider(TrustedBase):
+# --- Dans votre plugin ---
+class UserPlugin(TrustedBase):
     async def on_load(self):
-        # Enregistre un service sous le namespace 'ext'
-        self.ctx.services.register("ext.email_client", MyEmailClient())
+        self.db = self.get_service("db")
+        self.users = UserRepository(User)
+
+    async def create_user(self, name: str):
+        # Utilisation d'une session asynchrone
+        async with self.db.session() as session:
+            new_user = User(name=name)
+            await self.users.create(session, new_user)
+            await session.commit()
+            return new_user.id
 ```
 
-## Monitoring et Santé des Services
+---
 
-Vous pouvez vérifier l'état des services via la CLI :
-```bash
-xcore services status
-```
+## 3. Service de Cache (`cache`)
 
-Ou par programmation dans un plugin :
+Le service de cache supporte le stockage en **Mémoire** ou **Redis**.
+
 ```python
-health = self.get_service("db").health()
-if health["status"] != "ok":
-    logger.error("La base de données est instable")
+# Accès au service de cache
+cache = self.get_service("cache")
+
+# --- Opérations de base ---
+# Stocker une valeur pendant 5 minutes (300s)
+await cache.set("user_123:profile", {"name": "Alice"}, ttl=300)
+
+# Récupérer une valeur
+profile = await cache.get("user_123:profile")
+
+# Supprimer une valeur
+await cache.delete("user_123:profile")
+
+# --- Opérations groupées (Optimisées Redis) ---
+await cache.mset({"k1": "v1", "k2": "v2"})
+values = await cache.mget(["k1", "k2"])
 ```
+
+---
+
+## 4. Service de Planification (`scheduler`)
+
+XCore intègre **APScheduler** pour exécuter des tâches en arrière-plan ou de manière périodique.
+
+```python
+# Accès au planificateur
+scheduler = self.get_service("scheduler")
+
+# --- Planifier une tâche ---
+# Tâche immédiate (Background Job)
+await scheduler.add_job(
+    self.process_data,
+    args=[data_id],
+    id=f"process_{data_id}"
+)
+
+# Tâche planifiée (Cron)
+await scheduler.add_cron_job(
+    self.daily_report,
+    hour=0,
+    minute=0,
+    id="daily_cleanup"
+)
+
+# Tâche par intervalle
+await scheduler.add_interval_job(
+    self.heartbeat,
+    seconds=60,
+    id="ping_external_api"
+)
+```
+
+---
+
+## 5. Propagation des Services
+
+La propagation des services permet à un plugin d'exposer des fonctionnalités à d'autres plugins de manière structurée.
+
+### Cycle de Propagation
+1. Un plugin fournisseur enregistre son service dans `on_load`.
+2. Le `LifecycleManager` détecte l'enregistrement et met à jour le `ServiceContainer` global.
+3. Les plugins dépendants (déclarés dans `requires`) peuvent alors accéder au nouveau service.
+
+```python
+# Plugin Fournisseur (ex: billing)
+class BillingPlugin(TrustedBase):
+    async def on_load(self):
+        self.register_service("billing_engine", self.engine)
+
+# Plugin Consommateur
+class CartPlugin(TrustedBase):
+    async def on_load(self):
+        # Disponible car 'billing' est une dépendance requise
+        self.billing = self.get_service("billing_engine")
+```
+
+---
+
+## 6. Surveillance de la Santé (Health Checks)
+
+Chaque service intégré implémente une méthode de santé. Vous pouvez consulter l'état de tous les services via :
+
+```bash
+# Via la CLI
+xcore services status
+
+# Via l'API HTTP
+curl http://localhost:8082/plugin/ipc/health
+```
+
+---
 
 ## Bonnes Pratiques
 
-1. **Fail-Closed** : Gérez toujours les exceptions de service (perte de connexion DB, timeout Redis).
-2. **Gestion des Ressources** : Utilisez toujours les gestionnaires de contexte (`with`, `async with`) pour libérer les connexions.
-3. **Namespacing** : Dans le cache, préfixez vos clés avec le nom de votre plugin (ex: `my_plugin:key`) pour éviter les collisions.
+1. **Lazy Initialization** : Si votre service consomme beaucoup de ressources, n'établissez la connexion réelle que lors du premier appel.
+2. **Gestion des Timeouts** : Utilisez toujours des timeouts lors des appels aux services externes (DB, Redis) pour ne pas bloquer le framework.
+3. **Namespacing des Clés** : Préfixez toujours vos clés de cache et IDs de jobs par le nom de votre plugin (ex: `auth:token:123`) pour éviter les collisions.

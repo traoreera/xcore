@@ -1,161 +1,83 @@
-# Référence de la CLI XCore
+# Manuel de la CLI XCore
 
-Le framework XCore est livré avec une interface en ligne de commande puissante pour gérer le cycle de vie des plugins, la sécurité et les services.
-
-## Utilisation Générale
-
-```bash
-xcore [OPTIONS] COMMAND [ARGS]...
-```
-
-**Options Globales :**
-- `--config PATH` : Chemin vers le fichier `xcore.yaml` (par défaut : cherche dans le dossier courant).
-- `--version` : Affiche la version de xcore.
+La CLI `xcore` est l'outil en ligne de commande pour gérer le framework, les plugins et les services.
 
 ---
 
-## Commandes des Plugins (`plugin`)
+## 1. Commandes Globales
 
-Gestion complète des extensions.
-
-### `list`
-Liste tous les plugins installés et leur état actuel.
 ```bash
-xcore plugin list
-```
+# Voir la version installée
+xcore --version
 
-### `load`
-Charge dynamiquement un plugin sur un serveur en cours d'exécution.
-```bash
-xcore plugin load <name> [--host HOST] [--port PORT] [--path PREFIX] [--key API_KEY]
-```
+# Afficher l'aide générale
+xcore --help
 
-### `reload`
-Recharge à chaud (Hot-reload) un plugin.
-```bash
-xcore plugin reload <name>
-```
-
-### `install`
-Installe un nouveau plugin depuis différentes sources.
-```bash
-xcore plugin install <name> [--source {zip,git,marketplace}] [--url URL]
-```
-
-### `remove`
-Supprime un plugin et ses fichiers associés.
-```bash
-xcore plugin remove <name>
-```
-
-### `info`
-Affiche les métadonnées détaillées d'un plugin (version, auteur, permissions, etc.).
-```bash
-xcore plugin info <name>
-```
-
-### `sign`
-Génère une signature de sécurité (`plugin.sig`) pour un plugin Trusted.
-```bash
-xcore plugin sign <path> --key <secret_key>
-```
-
-### `verify`
-Vérifie l'intégrité et la signature d'un plugin.
-```bash
-xcore plugin verify <path> --key <secret_key>
-```
-
-### `validate`
-Effectue une validation syntaxique et structurelle du manifeste `plugin.yaml`.
-```bash
-xcore plugin validate <path>
-```
-
-### `health`
-Exécute un diagnostic de santé sur tous les plugins chargés (vérification AST, ressources).
-```bash
-xcore plugin health
+# Spécifier un fichier de configuration personnalisé
+xcore --config /chemin/vers/xcore.yaml <commande>
 ```
 
 ---
 
-## Commandes du Sandbox (`sandbox`)
+## 2. Gestion des Plugins (`xcore plugin`)
 
-Outils de débogage et d'inspection pour l'isolation.
-
-### `run`
-Lance un plugin en mode sandbox isolé pour tester son comportement sans démarrer tout le framework.
-```bash
-xcore sandbox run <name>
-```
-
-### `limits`
-Affiche les limites de ressources (Mémoire, Disque, CPU, Rate Limit) configurées pour un plugin.
-```bash
-xcore sandbox limits <name>
-```
-
-### `fs`
-Affiche et valide la politique d'accès au système de fichiers (Allowed/Denied paths).
-```bash
-xcore sandbox fs <name>
-```
-
-### `network`
-Affiche la politique réseau du sandbox pour le plugin.
-```bash
-xcore sandbox network <name>
-```
+| Commande | Usage | Description |
+|----------|-------|-------------|
+| **`list`** | `xcore plugin list` | Affiche tous les plugins installés et leur statut. |
+| **`health`** | `xcore plugin health` | Vérifie la santé de tous les plugins chargés. |
+| **`load`** | `xcore plugin load <name>` | Charge un plugin dynamiquement. |
+| **`reload`** | `xcore plugin reload <name>` | Recharge un plugin (Hot-reload). |
+| **`remove`** | `xcore plugin remove <name>` | Désinstalle un plugin du répertoire `./plugins`. |
+| **`info`** | `xcore plugin info <name>` | Affiche les métadonnées détaillées du plugin. |
+| **`validate`** | `xcore plugin validate <path>`| Vérifie la syntaxe du manifeste et du code source. |
+| **`sign`** | `xcore plugin sign <path>` | Signe cryptographiquement un plugin Trusted. |
+| **`verify`** | `xcore plugin verify <path>` | Vérifie la signature cryptographique du plugin. |
 
 ---
 
-## Commandes du Marketplace (`marketplace`)
+## 3. Gestion du Bac à Sable (`xcore sandbox`)
 
-Interaction avec le catalogue officiel de plugins XCore.
+Le mode sandbox permet d'exécuter et de tester des plugins dans un environnement isolé sans lancer tout le framework XCore.
 
-### `list`
-Liste les plugins disponibles sur le marketplace.
-```bash
-xcore marketplace list
-```
-
-### `search`
-Recherche un plugin par mot-clé.
-```bash
-xcore marketplace search <query>
-```
-
-### `show`
-Affiche les détails d'un plugin du marketplace, incluant les notes et commentaires.
-```bash
-xcore marketplace show <name>
-```
-
-### `trending`
-Affiche les plugins les plus populaires du moment.
-```bash
-xcore marketplace trending
-```
-
-### `rate`
-Note un plugin (score de 1 à 5).
-```bash
-xcore marketplace rate <name> --score <1-5>
-```
+| Commande | Usage | Description |
+|----------|-------|-------------|
+| **`run`** | `xcore sandbox run <name>` | Lance le plugin en mode isolé pour test. |
+| **`limits`** | `xcore sandbox limits <name>` | Affiche les limites (mémoire, CPU) du plugin. |
+| **`fs`** | `xcore sandbox fs <name>` | Affiche la politique du système de fichiers (Allowed/Denied). |
+| **`network`**| `xcore sandbox network <name>`| Affiche la politique réseau du plugin. |
 
 ---
 
-## Commandes Système et Santé
+## 4. Marketplace (`xcore marketplace`)
 
-### `services status`
-Vérifie l'état de connexion et la santé des services de base (Base de données, Cache, Scheduler).
-```bash
-xcore services status [--json]
-```
+Interagit avec le catalogue de plugins public XCore.
 
-### `health`
-Effectue un check-up global du système (Kernel, Services, Plugins).
+| Commande | Usage | Description |
+|----------|-------|-------------|
+| **`list`** | `xcore marketplace list` | Affiche tous les plugins du catalogue. |
+| **`search`** | `xcore marketplace search <query>`| Recherche des plugins par mot-clé. |
+| **`trending`**| `xcore marketplace trending` | Affiche les plugins populaires. |
+| **`show`** | `xcore marketplace show <name>` | Détails techniques d'un plugin. |
+| **`rate`** | `xcore marketplace rate <name>` | Donne une note au plugin (1 à 5). |
+
+---
+
+## 5. État des Services (`xcore services`)
+
+Vérifie la santé de l'infrastructure commune.
+
+| Commande | Usage | Description |
+|----------|-------|-------------|
+| **`status`** | `xcore services status` | Affiche l'état des connexions DB, Cache, etc. |
+| **`health`** | `xcore health` | Lance un diagnostic global du framework. |
+
+---
+
+## Options d'affichage
+
+La plupart des commandes supportent l'option `--json` pour faciliter l'intégration avec d'autres outils (ex: `jq`).
+
 ```bash
-xcore health [--json]
+# Récupérer la liste des plugins en JSON
+xcore plugin list --json | jq '.[].name'
 ```

@@ -1,64 +1,131 @@
-# Création de Plugins
+# Création de Plugins XCore
 
-Ce guide vous accompagne dans la création de plugins XCore, du plus simple au plus avancé.
+Ce guide vous accompagne dans la conception, le développement et la validation de plugins pour XCore.
 
 ## Structure d'un Plugin
 
-Un plugin XCore est un répertoire contenant au minimum deux fichiers :
+Un plugin XCore est un répertoire organisé de manière standard :
 
 ```text
 mon_plugin/
-├── plugin.yaml      # Le manifeste (métadonnées)
-└── src/
-    └── main.py      # Le point d'entrée (code Python)
+├── plugin.yaml          # Le manifeste (métadonnées & configuration)
+├── src/
+│   └── main.py          # Le point d'entrée (Code Python)
+├── data/                # (Optionnel) Dossier accessible en mode Sandboxed
+└── requirements.txt     # (Optionnel) Dépendances Python spécifiques
 ```
 
-## Étape 1 : Le Manifeste (`plugin.yaml`)
+---
 
-Le manifeste définit comment XCore doit charger et isoler votre code.
+## 1. Le Manifeste (`plugin.yaml`)
+
+Le manifeste est le fichier central qui définit l'identité, les dépendances et les droits de votre plugin.
 
 ```yaml
-name: mon_hello_world
+# Informations générales
+name: mon_plugin
 version: "1.0.0"
-author: "Moi"
-description: "Mon premier plugin"
-execution_mode: "trusted" # Utilisez "sandboxed" pour plus de sécurité
-entry_point: "src/main.py"
+author: "XCore Team"
+description: "Un plugin d'exemple complet"
 
-# Facultatif : dépendances sur d'autres plugins
+# Configuration d'exécution
+execution_mode: "trusted"  # "trusted" (rapide) ou "sandboxed" (sécurisé)
+entry_point: "src/main.py"  # Chemin relatif vers le point d'entrée
+framework_version: ">=2.0.0"
+
+# Dépendances sur d'autres plugins
 requires:
-  - plugin_authentification >= 2.0.0
+  - auth_plugin >= 1.2.0
+  - database_helper
 
-# Facultatif : permissions requises
+# Permissions déclaratives (pour le moteur RBAC)
 permissions:
   - resource: "cache.*"
     actions: ["read", "write"]
     effect: allow
+  - resource: "db.users"
+    actions: ["read"]
+    effect: allow
+
+# Ressources et limites (principalement pour le mode Sandboxed)
+resources:
+  timeout_seconds: 15
+  max_memory_mb: 256
+  max_calls_per_minute: 1000
+
+# Configuration personnalisée (disponible via self.ctx.config)
+extra:
+  api_url: "https://api.external.com"
+  retry_count: 3
 ```
 
-## Étape 2 : Le Code (`src/main.py`)
+---
 
-Votre plugin doit définir une classe nommée `Plugin` héritant de `TrustedBase`.
+## 2. Le Cycle de Vie du Plugin
 
-### Exemple Minimaliste
+Un plugin XCore traverse plusieurs étapes lors de son existence sur le serveur.
+
+```mermaid
+graph LR
+    Scan[Découverte] --> Parse[Lecture Manifeste]
+    Parse --> Deps[Résolution Dépendances]
+    Deps --> Load[Chargement Code]
+    Load --> OnInit[on_init]
+    OnInit --> OnLoad[on_load]
+    OnLoad --> Ready[Prêt]
+    Ready --> Reload[on_reload]
+    Reload --> Ready
+    Ready --> Unload[on_unload]
+    Unload --> Removed[Déchargé]
+```
+
+### Hooks de Cycle de Vie
 
 ```python
-from xcore.sdk import TrustedBase, ok, error
+from xcore.sdk import TrustedBase
 
 class Plugin(TrustedBase):
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "dire_bonjour":
-            nom = payload.get("nom", "Inconnu")
-            return ok(message=f"Bonjour {nom} !")
+    async def on_init(self):
+        """Appelé à l'instanciation initiale, avant l'accès aux services."""
+        pass
 
-        return error(f"Action {action} inconnue")
+    async def on_load(self):
+        """Appelé une fois les services et dépendances prêts. Initialisez vos données ici."""
+        self.db = self.get_service("db")
+        print(f"Plugin {self.ctx.name} prêt !")
+
+    async def on_reload(self):
+        """Appelé lors d'un hot-reload sans redémarrage du framework."""
+        pass
+
+    async def on_unload(self):
+        """Nettoyez les ressources (connexions, timers) ici."""
+        pass
 ```
 
-## Étape 3 : Utilisation du SDK Avancé
+---
 
-Pour des plugins plus complexes, utilisez les mixins et décorateurs pour simplifier votre code.
+## 3. Implémentation : Trusted vs Sandboxed
 
-### Dispatch Automatique et Routes HTTP
+### Mode **Trusted** (Confiance)
+- S'exécute dans le même processus que le framework XCore.
+- Accès total aux services et aux API Python (sans restriction).
+- Haute performance (pas de latence IPC).
+- **Utilisation** : Plugins officiels, infrastructure interne.
+
+### Mode **Sandboxed** (Bac à sable)
+- S'exécute dans un sous-processus isolé.
+- Accès restreint via le `FilesystemGuard` et l'`ASTScanner`.
+- Communication via JSON-RPC sur pipes (stdin/stdout).
+- **Utilisation** : Plugins tiers, plugins de la Marketplace.
+
+---
+
+## 4. Utilisation du SDK Avancé
+
+### Mixins pour une écriture simplifiée
+
+XCore fournit des Mixins pour automatiser le dispatching des actions et des routes.
 
 ```python
 from xcore.sdk import (
@@ -70,79 +137,39 @@ from xcore.sdk import (
     ok
 )
 
-class Plugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
+class MonPlugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
 
-    # --- Action IPC (Appelable par d'autres plugins ou CLI) ---
-    @action("calculer")
+    @action("calcul")
     async def faire_calcul(self, payload: dict):
-        resultat = payload.get("a", 0) + payload.get("b", 0)
-        return ok(total=resultat)
+        # handle("calcul", payload) appellera automatiquement cette méthode
+        val = payload.get("val", 0) * 2
+        return ok(result=val)
 
-    # --- Route HTTP (Exposée sur /plugins/mon_hello_world/statut) ---
-    @route("/statut", method="GET")
-    async def voir_statut(self):
-        return {"etat": "actif", "version": self.ctx.version}
+    @route("/status", method="GET")
+    async def status_http(self):
+        # Route montée sous /plugin/mon_plugin/status
+        return {"active": True, "ver": self.ctx.version}
 ```
 
-## Étape 4 : Accès aux Services
+---
 
-Les services sont le moyen privilégié pour interagir avec le reste du système.
+## 5. Validation et Test
 
-```python
-class Plugin(TrustedBase):
-    async def on_load(self):
-        # Initialisation du service DB
-        self.db = self.get_service("db")
-        self.cache = self.get_service("cache")
+Avant de déployer un plugin, validez sa conformité avec la CLI XCore :
 
-    async def sauvegarder_donnee(self, cle, valeur):
-        # Utilisation du cache
-        await self.cache.set(cle, valeur, ttl=600)
-
-        # Utilisation de la DB
-        with self.db.session() as session:
-            session.execute("INSERT INTO logs (cle) VALUES (:c)", {"c": cle})
-```
-
-## Étape 5 : Communication par Événements
-
-Les plugins peuvent communiquer de manière asynchrone via le bus d'événements.
-
-```python
-class Plugin(TrustedBase):
-    async def on_load(self):
-        # S'abonner à un événement produit par un autre plugin
-        self.ctx.events.on("paiement.valide", self.preparer_commande)
-
-    async def preparer_commande(self, event):
-        commande_id = event.data["id"]
-        print(f"Préparation de la commande {commande_id}")
-
-        # Émettre un nouvel événement
-        await self.ctx.events.emit("commande.prete", {"id": commande_id})
-```
-
-## Modes d'Exécution : Trusted vs Sandboxed
-
-| Caractéristique | Trusted | Sandboxed |
-|-----------------|---------|-----------|
-| **Vitesse** | Maximale (In-process) | Légère latence (IPC) |
-| **Sécurité** | Faible (Accès total) | Élevée (Isolé) |
-| **Accès Fichiers** | Illimité | Restreint au dossier `data/` |
-| **Modules Python** | Tous | Whitelist restreinte |
-| **Utilisation** | Plugins internes | Plugins tiers / Marketplace |
-
-### Passer en mode Sandboxed
-Il suffit de changer `execution_mode: "sandboxed"` dans votre `plugin.yaml`. XCore s'occupe du reste : création du sous-processus, mise en place des guards et du pipeline IPC.
-
-## Test et Validation
-
-Avant de déployer, validez votre manifeste avec la CLI :
 ```bash
+# Vérifier la syntaxe du manifeste et du code
 xcore plugin validate ./plugins/mon_plugin
-```
 
-Et testez le comportement en sandbox :
-```bash
+# Tester l'exécution en mode sandbox simulé
 xcore sandbox run mon_plugin
 ```
+
+---
+
+## Bonnes Pratiques
+
+1. **Isolation des Données** : Utilisez le dossier `data/` de votre plugin pour stocker des fichiers locaux. En mode sandbox, c'est le seul dossier accessible en écriture.
+2. **Gestion des Erreurs** : Utilisez toujours le helper `error()` pour retourner des messages clairs en cas d'échec d'une action.
+3. **Dépendances** : Déclarez explicitement les plugins dont vous dépendez dans `requires` pour garantir un ordre de chargement correct.
+4. **Permissions** : Suivez le principe du moindre privilège en demandant uniquement les permissions `resource.*` nécessaires.

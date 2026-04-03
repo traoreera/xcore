@@ -1,92 +1,118 @@
-# Exemple de Plugin de Confiance (Trusted)
+# Exemple : Plugin de Confiance (Trusted Plugin)
 
-Cet exemple présente un plugin de gestion de tâches avancé fonctionnant en mode `trusted`. Il illustre l'accès complet aux services Core, l'utilisation de routes HTTP FastAPI complexes et la configuration sécurisée via `.env`.
+Le mode `trusted` est conçu pour les plugins internes qui ont un accès total au système et aux services partagés.
 
-## Cas d'usage : Task Manager
+---
 
-Ce plugin est en mode `trusted` car il nécessite un accès haute performance à la base de données SQL et au bus d'événements global pour coordonner des tâches système.
+## 1. Caractéristiques du mode Trusted
 
-## Structure du Plugin
+- **Processus Partagé** : S'exécute dans le même processus que le Noyau (Kernel).
+- **Accès Direct** : Peut manipuler les instances de services (`db`, `cache`, `scheduler`) directement.
+- **Routage HTTP** : Peut exposer des routers FastAPI personnalisés.
+- **Performance** : Pas d'overhead de communication IPC.
+- **Signature Requise** : En production, les plugins Trusted doivent être signés pour être chargés (`strict_trusted: true`).
 
-```text
-plugins/task_manager/
-├── plugin.yaml
-├── .env                  # Fichier de secrets (non versionné)
-└── src/
-    ├── main.py          # Orchestrateur
-    ├── models.py        # Modèles Pydantic/ORM
-    └── router.py        # Endpoints FastAPI
-```
+---
 
-## `plugin.yaml`
+## 2. Le Manifeste (`plugin.yaml`)
 
 ```yaml
-name: task_manager
-version: 2.0.0
-author: XCore Team
-description: Orchestrateur de tâches système avec accès privilégié
-
+name: core_auth
+version: 2.1.0
+author: XCore Internal Team
+description: Service d'authentification central du framework
 execution_mode: trusted
-framework_version: ">=2.0"
 entry_point: src/main.py
 
-# Activation de l'injection .env sécurisée
-envconfiguration:
-  inject: true
+# Déclarer les services requis pour l'initialisation
+requires:
+  - database_service
+  - cache_service
 
+# Permissions RBAC
 permissions:
-  - resource: "db.*"
-    actions: ["*"]
+  - resource: "db.users"
+    actions: ["read", "write"]
     effect: allow
-  - resource: "events.*"
-    actions: ["emit", "subscribe"]
+  - resource: "cache.auth_tokens"
+    actions: ["write"]
     effect: allow
 ```
 
-## `src/main.py`
+---
 
-Utilisation de `TrustedBase` et de l'objet `self.ctx` complet.
+## 3. Le Code Source (`src/main.py`)
 
 ```python
-from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok, error
-from .router import create_task_router
+from xcore.sdk import (
+    TrustedBase,
+    AutoDispatchMixin,
+    action,
+    ok,
+    error,
+    require_service
+)
+import bcrypt
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    """Plugin privilégié avec accès total aux ressources du noyau."""
+    """
+    Plugin Trusted gérant l'authentification.
+    """
 
-    async def on_load(self):
-        # 1. Récupération d'un secret depuis le .env injecté via self.ctx.env
-        self.api_key = self.ctx.env.get("TASKS_API_KEY")
-
-        # 2. Accès direct aux services Core
+    async def on_load(self) -> None:
+        """Accès direct aux services."""
         self.db = self.get_service("db")
-        self.events = self.ctx.events
+        self.cache = self.get_service("cache")
+        self.logger.info("Service d'authentification prêt.")
 
-        print(f"Task Manager v{self.ctx.version} opérationnel")
+    @action("register")
+    @require_service("db")
+    async def register_user(self, payload: dict) -> dict:
+        """
+        Action Trusted pour enregistrer un nouvel utilisateur.
+        Accès total aux API Python (ex: bcrypt).
+        """
+        username = payload.get("username")
+        password = payload.get("password")
 
-    def get_router(self):
-        """Délégation du routage HTTP à un module dédié."""
-        return create_task_router(self)
+        if not username or not password:
+            return error("Paramètres manquants")
 
-    @action("cleanup")
-    async def cleanup_tasks(self, payload: dict):
-        """Action IPC performante manipulant directement la DB."""
-        with self.db.session() as session:
-            try:
-                # Utilisation du mode Trusted pour des requêtes complexes
-                res = session.execute("DELETE FROM tasks WHERE status = 'archived'")
-                session.commit()
+        # Hashage du mot de passe (CPU intensif)
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-                # Émission d'un événement global
-                await self.events.emit("tasks.cleaned", {"count": res.rowcount})
-                return ok(deleted=res.rowcount)
-            except Exception as e:
-                return error(str(e))
+        # Insertion directe en DB
+        async with self.db.session() as session:
+            # Imaginons que nous utilisons une fonction helper ici
+            # user_id = await create_db_user(session, username, hashed)
+            pass
+
+        return ok(username=username, status="registered")
+
+    @action("validate_token")
+    @require_service("cache")
+    async def validate_token(self, payload: dict) -> dict:
+        """
+        Vérification rapide d'un token dans le cache partagé.
+        """
+        token = payload.get("token")
+        if not token:
+            return error("Token manquant")
+
+        # Lecture directe du cache Redis partagé
+        user_data = await self.cache.get(f"auth:token:{token}")
+
+        if user_data:
+            return ok(valid=True, user=user_data)
+
+        return ok(valid=False)
 ```
 
-## Points clés démontrés
+---
 
-1.  **Injection .env** : Utilisation de `envconfiguration.inject: true` pour charger des secrets (clés API, credentials DB) de manière sécurisée sans les inclure dans le code source.
-2.  **Performance In-Process** : Exécution dans le processus principal, permettant des transactions SQL directes sans passer par une sérialisation IPC coûteuse.
-3.  **Délégation de Router** : Organisation modulaire du code en renvoyant un `APIRouter` complexe depuis `get_router()`.
-4.  **Contexte Global** : Accès au bus d'événements (`self.ctx.events`) pour interagir avec d'autres composants du framework.
+## 4. Points Clés de l'Exemple
+
+✅ **Accès Full-Stack** : Accès à toutes les bibliothèques Python (`bcrypt`, `psycopg2`, etc.).
+✅ **Services Partagés** : Utilisation intensive du cache et de la base de données sans latence.
+✅ **Hautes Performances** : Idéal pour les fonctions de sécurité, d'authentification ou de traitement d'image.
+✅ **Sécurité de Chargement** : Ce plugin doit être déposé dans le dossier `./plugins` par l'administrateur système.

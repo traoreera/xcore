@@ -1,139 +1,126 @@
-# Guide de Déploiement
+# Guide de Déploiement XCore en Production
 
-Ce guide détaille les étapes pour déployer XCore dans des environnements de production sécurisés et performants.
+Ce guide fournit les étapes et les bonnes pratiques pour déployer vos applications basées sur XCore dans un environnement de production sécurisé et performant.
 
-## Prérequis pour la Production
+---
 
-- **Python 3.11+**
-- **Redis** (pour le cache et la coordination)
-- **PostgreSQL** ou **MySQL** (pour la persistance des données)
-- **Reverse Proxy** (Nginx, Traefik ou HAProxy)
+## 1. Préparer l'Environnement
 
-## Configuration de Production
+### Sécurisation des Clés Secrètes
 
-En production, vous devez utiliser un fichier de configuration dédié (ex: `xcore.prod.yaml`) et désactiver les fonctionnalités de développement.
-
-### Exemple de configuration `xcore.prod.yaml`
+En production, vous **devez** modifier les clés secrètes par défaut. XCore refusera de démarrer si ces clés sont détectées comme non modifiées.
 
 ```yaml
+# xcore.yaml (Production)
 app:
-  env: production
-  debug: false
-  secret_key: "${XCORE_SECRET_KEY}" # Utiliser une variable d'env
-  plugin_dir: "/var/lib/xcore/plugins"
+  env: "production"
+  secret_key: "${XCORE_APP_SECRET}"      # À définir via variable d'env
+  server_key: "${XCORE_SERVER_KEY}"      # À définir via variable d'env
 
 plugins:
-  strict_trusted: true             # Signature obligatoire pour Trusted
-  allow_hot_reload: false          # Désactiver en production pour la stabilité
-  default_mode: sandboxed
-
-database:
-  url: "${DATABASE_URL}"
-  pool_size: 20
-
-cache:
-  backend: redis
-  url: "${REDIS_URL}"
-
-logging:
-  level: WARNING
-  file: "/var/log/xcore/app.log"
-  format: json                     # Format structuré pour ELK/Loki
+  secret_key: "${XCORE_PLUGIN_SECRET}"  # À définir via variable d'env
+  strict_trusted: true                  # Oblige la signature des plugins Trusted
 ```
 
-## Déploiement avec Docker
+---
 
-Docker est la méthode recommandée pour garantir l'isolation et la reproductibilité.
+## 2. Déploiement via Docker
 
-### Dockerfile optimisé
+XCore est idéal pour un déploiement conteneurisé. Voici un exemple de `Dockerfile` optimisé pour la production.
+
+### Dockerfile (Exemple)
 
 ```dockerfile
+# Étape de construction
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+RUN pip install poetry
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false && poetry install --no-dev
+
+# Étape finale (Image de production)
 FROM python:3.11-slim
 
 WORKDIR /app
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Installation des dépendances système
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Installation de XCore et dépendances
-COPY pyproject.toml poetry.lock ./
-RUN pip install poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --no-dev
-
-# Copie de l'application
+# Copier le code source
 COPY . .
 
-# Utilisateur non-root pour la sécurité
-RUN useradd -m xcore && chown -R xcore /app
-USER xcore
+# Créer les dossiers nécessaires
+RUN mkdir -p logs plugins data
 
-EXPOSE 8000
+# Configuration par défaut
+ENV XCORE_CONFIG=xcore.production.yaml
+ENV LOG_LEVEL=INFO
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Lancer avec Gunicorn + Uvicorn
+CMD ["gunicorn", "app:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
 ```
 
-## Architecture avec Reverse Proxy (Nginx)
+---
 
-Il est crucial de placer XCore derrière un reverse proxy pour la gestion du SSL/TLS et la protection contre les attaques directes.
+## 3. Configuration du Serveur (Nginx/Reverse Proxy)
 
-### Exemple de configuration Nginx
+Il est recommandé de placer XCore derrière un reverse proxy comme **Nginx** pour gérer le SSL, le buffering et les timeouts.
+
+### Configuration Nginx (Exemple)
 
 ```nginx
 server {
-    listen 443 ssl http2;
-    server_name api.votre-domaine.com;
-
-    ssl_certificate /etc/letsencrypt/live/api.votre-domaine.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.votre-domaine.com/privkey.pem;
+    listen 80;
+    server_name api.xcore.dev;
 
     location / {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Buffering pour les gros payloads
-        proxy_buffering on;
-        proxy_buffer_size 8k;
+        # Timeouts pour les longs appels IPC de plugins
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 300s;
     }
 }
 ```
 
-## Stratégies de Scaling
+---
 
-### Scaling Horizontal
-Grâce à l'utilisation de Redis pour le cache et les événements, vous pouvez lancer plusieurs instances de XCore derrière un Load Balancer.
+## 4. Stratégie de Persistance
 
-### Scaling des Plugins (Sandbox)
-Pour les plugins sandboxés gourmands en ressources, vous pouvez ajuster les limites dans le manifeste :
+### Bases de Données (PostgreSQL)
+N'utilisez pas SQLite en production. Préférez un serveur PostgreSQL géré (ex: RDS, Cloud SQL) ou un cluster PostgreSQL.
+
+### Cache et Bus (Redis)
+Configurez un serveur Redis externe pour le cache, le scheduler et le bus d'événements afin de permettre le passage à l'échelle horizontale (Scaling).
+
+---
+
+## 5. Surveillance en Production (Health Checks)
+
+Configurez votre orchestrateur de conteneurs (Kubernetes, Docker Swarm) pour utiliser l'endpoint de santé :
+
 ```yaml
-resources:
-  max_memory_mb: 1024
-  timeout_seconds: 60
+# Exemple Kubernetes LivenessProbe
+livenessProbe:
+  httpGet:
+    path: /plugin/ipc/health
+    port: 8000
+    httpHeaders:
+      - name: X-Plugin-Key
+        value: "votre-cle-secrete"
+  initialDelaySeconds: 15
+  periodSeconds: 30
 ```
 
-## Monitoring et Maintenance
+---
 
-### Health Checks
-Configurez votre orchestrateur (Kubernetes, Docker Swarm) pour interroger l'endpoint de santé :
-`GET /health`
+## Bonnes Pratiques de Production
 
-### Mise à jour des Plugins
-1. Téléchargez le nouveau plugin dans le répertoire `plugins/`.
-2. Utilisez la CLI pour recharger sans interruption :
-   `xcore plugin reload nom_du_plugin`
-
-### Sauvegardes
-- Sauvegardez régulièrement votre base de données SQL.
-- Le dossier `data/` des plugins contient les données persistantes locales et doit être inclus dans vos plans de sauvegarde.
-
-## Sécurité Avancée
-
-1. **Isolation Réseau** : Placez vos instances XCore dans un réseau privé, seul le reverse proxy doit être exposé.
-2. **Secrets** : Utilisez un gestionnaire de secrets (HashiCorp Vault, AWS Secrets Manager) pour injecter les variables d'environnement.
-3. **Audit** : Activez les journaux d'audit des permissions pour tracer les actions sensibles des plugins.
+1. **Signez vos plugins Trusted** : Ne permettez jamais le chargement de code non signé sur vos serveurs de production.
+2. **Utilisez le Sandboxing** : Tout plugin dont vous n'êtes pas l'auteur direct doit impérativement s'exécuter en mode `sandboxed`.
+3. **Limitez les ressources** : Définissez des quotas CPU et RAM via `plugin.yaml` pour chaque plugin afin d'éviter qu'un bug ne sature tout votre cluster.
+4. **Loguez dans un fichier externe** : Envoyez vos logs vers un service centralisé (ELK, Datadog, Sentry) pour une analyse post-mortem efficace.

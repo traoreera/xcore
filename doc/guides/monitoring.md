@@ -1,159 +1,140 @@
-# Monitoring et Observabilité
+# Surveillance et Observabilité XCore
 
-XCore fournit un système d'observabilité complet pour surveiller vos plugins et services en production.
-
-## Les Quatre Piliers
-
-L'observabilité dans XCore repose sur quatre composants intégrés, accessibles via `self.ctx` :
-
-1.  **Métriques** (`MetricsRegistry`) : Compteurs, jauges et histogrammes pour mesurer les performances.
-2.  **Health Checks** (`HealthChecker`) : Diagnostics de santé en temps réel des services et plugins.
-3.  **Logging** : Journalisation structurée avec niveaux configurables et rotation.
-4.  **Tracing** (`Tracer`) : Suivi des flux d'exécution complexes via des spans distribuées.
+XCore intègre des outils de surveillance pour vous aider à comprendre les performances de vos plugins et à diagnostiquer les problèmes en temps réel.
 
 ---
 
-## Métriques (`self.ctx.metrics`)
+## 1. Journaux de Bord (Logs)
 
-Le registre de métriques permet de mesurer les performances de vos plugins en temps réel.
+Les logs sont structurés pour faciliter le débogage. Chaque plugin possède son propre logger, préfixé par son nom.
 
-### Types de métriques supportés
+### Niveaux de logs configurables
 
--   **Counter** : Valeurs strictement croissantes (ex: nombre total de requêtes).
--   **Gauge** : Valeurs pouvant monter ou descendre (ex: nombre de connexions actives).
--   **Histogram** : Distribution de valeurs (ex: latence des requêtes, taille des payloads).
-
-### Utilisation de base
-
-```python
-from xcore.kernel.observability.metrics import MetricsRegistry
-from xcore.sdk import TrustedBase
-
-class Plugin(TrustedBase):
-    async def on_load(self) -> None:
-        # Création des métriques dans le registre local
-        self.metrics = MetricsRegistry()
-
-        self.request_count = self.metrics.counter("http.requests.total")
-        self.active_connections = self.metrics.gauge("connections.active")
-        self.request_latency = self.metrics.histogram("http.request.duration")
-
-    def get_router(self):
-        from fastapi import APIRouter
-        import time
-        router = APIRouter()
-
-        @router.get("/data")
-        async def get_data():
-            start = time.monotonic()
-            self.active_connections.inc()
-            try:
-                # Logique métier ici...
-                self.request_count.inc()
-                return {"status": "ok"}
-            finally:
-                # Enregistrement de la latence
-                self.request_latency.observe(time.monotonic() - start)
-                self.active_connections.dec()
-        return router
-```
-
-### Métriques avec Labels
-
-Les labels permettent d'ajouter des dimensions à vos métriques pour une analyse plus fine (ex: par endpoint, par méthode HTTP).
-
-```python
-self.request_count = self.metrics.counter(
-    "http.requests.total",
-    labels={"plugin": "mon_plugin", "method": "GET"}
-)
-```
-
----
-
-## Health Checks (`self.ctx.health`)
-
-Le système de health checks permet de monitorer l'état de vos dépendances et de vos composants internes.
-
-### Enregistrer un diagnostic
-
-```python
-from xcore.kernel.observability.health import HealthChecker
-
-class Plugin(TrustedBase):
-    async def on_load(self) -> None:
-        self.health = HealthChecker()
-        self.db = self.get_service("db")
-
-        @self.health.register("database")
-        async def check_db():
-            try:
-                # Tentative d'exécution d'une requête simple
-                async with self.db.session() as session:
-                    await session.execute("SELECT 1")
-                return True, "Base de données OK"
-            except Exception as e:
-                return False, str(e)
-```
-
-Les résultats sont agrégés par le framework et exposés via la CLI `xcore health` ou l'endpoint système `/health`.
-
----
-
-## Journalisation (Logging)
-
-XCore utilise des loggers nommés et configurés globalement. Il est recommandé d'utiliser `get_logger` pour bénéficier du formatage structuré (JSON en production).
-
-### Configuration (`xcore.yaml`)
+Modifiez le niveau de détail dans `xcore.yaml` :
 
 ```yaml
 observability:
   logging:
-    level: INFO
-    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    file: "logs/app.log"
+    level: "DEBUG" # INFO, WARNING, ERROR, DEBUG
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    file: "logs/xcore.log" # Sortie vers un fichier (optionnel)
 ```
 
-### Utilisation dans les plugins
+### Utiliser le logger dans un plugin
 
 ```python
-from xcore.kernel.observability import get_logger
-logger = get_logger("mon_plugin")
-
-class Plugin(TrustedBase):
+class MonPlugin(TrustedBase):
     async def on_load(self):
-        logger.info("Plugin chargé avec succès", extra={"version": "1.0.0"})
+        self.logger.info("Démarrage du plugin...")
+        self.logger.debug("Données de configuration : %s", self.ctx.config)
 ```
 
 ---
 
-## Tracing (`self.ctx.tracer`)
+## 2. Métriques (Metrics)
 
-Le tracing permet de suivre le cheminement d'une requête à travers les différents middlewares et plugins.
+Le `MetricsRegistry` collecte des compteurs, des jauges et des histogrammes pour le framework et ses plugins.
+
+### Consulter les métriques
+
+```bash
+# Via la CLI
+xcore health
+
+# Via l'API HTTP (Snapshot JSON)
+curl http://localhost:8082/plugin/ipc/metrics
+```
+
+### Ajouter des métriques personnalisées
 
 ```python
-from xcore.kernel.observability.tracing import Tracer
-
-class Plugin(TrustedBase):
+class MonPlugin(TrustedBase):
     async def on_load(self):
-        self.tracer = Tracer(service_name="mon_plugin")
+        # Création d'un compteur personnalisé
+        self.metrics.counter("processed_items_total", description="Nombre total d'items traités")
 
+    async def process(self, item):
+        # Incrémenter le compteur
+        self.metrics.inc("processed_items_total", labels={"type": item.type})
+```
+
+---
+
+## 3. Traces Distribuées (Tracing)
+
+XCore supporte le tracing via **OpenTelemetry** pour suivre le cheminement d'une requête à travers plusieurs plugins.
+
+### Configuration du Tracing
+
+```yaml
+observability:
+  tracing:
+    enabled: true
+    backend: "jaeger" # noop, opentelemetry, jaeger
+    endpoint: "http://localhost:14268/api/traces"
+    service_name: "xcore-production"
+```
+
+### Utiliser le Tracer dans un plugin
+
+```python
+class MonPlugin(TrustedBase):
     async def handle(self, action, payload):
-        with self.tracer.span("traitement_action", action=action) as span:
-            # Instrumentation de la logique métier
-            span.set_attribute("user_id", payload.get("user_id"))
-
-            # ... exécution ...
-
-            span.set_attribute("resultat", "succès")
+        with self.tracer.start_span(f"action_{action}") as span:
+            span.set_attribute("payload_size", len(payload))
+            # ... logique métier ...
             return ok()
 ```
 
 ---
 
-## Bonnes Pratiques
+## 4. Bilan de Santé (Health Check)
 
-1.  **Noms explicites** : Utilisez des noms clairs séparés par des points (ex: `api.user.login_success`).
-2.  **Cardinalité contrôlée** : N'utilisez jamais d'IDs uniques (comme des IDs utilisateurs) comme labels dans les métriques.
-3.  **Niveaux de log appropriés** : `DEBUG` pour les informations verbeuses, `INFO` pour le flux général, et `ERROR` pour les échecs réels.
-4.  **Monitorer les dépendances** : Incluez toujours des health checks pour les API externes ou les bases de données dont votre plugin dépend.
+Le `HealthChecker` centralise l'état de santé de tous les composants :
+- **Framework** (Boot, Registry).
+- **Services** (DB, Cache, Scheduler).
+- **Plugins** (Statut, Sandboxes).
+
+### Consulter l'état global
+
+```bash
+# Rapport détaillé (CLI)
+xcore health
+
+# Rapport global (JSON)
+xcore health --json
+```
+
+### Ajouter un Health Check personnalisé dans un plugin
+
+```python
+class MonPlugin(TrustedBase):
+    async def on_init(self):
+        # Enregistrer un check périodique
+        self.ctx.health.register_check("api_connection", self.check_api)
+
+    async def check_api(self):
+        # Retourne (bool, message)
+        is_up = await ping_api()
+        return is_up, "API accessible" if is_up else "API hors ligne"
+```
+
+---
+
+## 5. Middleware de Surveillance (Performance)
+
+Le `MiddlewarePipeline` mesure automatiquement le temps d'exécution de chaque appel IPC vers un plugin. Si un appel dépasse un certain seuil, un warning est émis dans les logs.
+
+- **Métriques automatiques** : `plugin_call_duration_seconds`, `plugin_call_total`.
+- **Labels** : `plugin_name`, `action`, `status` (ok/error).
+
+---
+
+## Résumé
+
+| Outil | Usage Principal | Configuration |
+|-------|-----------------|---------------|
+| **Logs** | Débogage détaillé | `logging` |
+| **Metrics** | Tableaux de bord (Prometheus) | `metrics` |
+| **Tracing** | Analyse de latence (Jaeger) | `tracing` |
+| **Health** | Monitoring de disponibilité | Intégré |

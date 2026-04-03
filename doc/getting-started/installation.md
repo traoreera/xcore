@@ -1,218 +1,136 @@
 # Installation
 
-This guide walks you through installing XCore and setting up your development environment.
+Ce guide vous accompagne dans l'installation de XCore et la configuration de votre environnement de développement.
 
-## Prerequisites
+## Prérequis
 
-Before installing XCore, ensure you have:
+Avant d'installer XCore, assurez-vous de disposer des éléments suivants :
 
-- **Python 3.11** or higher
-- **Poetry** 1.7+ (dependency management)
-- **Git** (for cloning the repository)
+- **Python 3.11** ou une version supérieure.
+- **Poetry 1.7+** (gestionnaire de dépendances et d'environnements virtuels).
+- **Git** (pour cloner le dépôt).
+- **PostgreSQL 15+** et **Redis 7+** (recommandés pour les fonctionnalités de base de données et de cache).
 
-### Verify Python Version
+### Vérification de la version de Python
 
 ```bash
 python --version
-# Should output: Python 3.11.x or higher
+# Doit afficher : Python 3.11.x ou plus
 ```
 
-### Install Poetry
+### Installation de Poetry
 
-If you don't have Poetry installed:
+Si vous n'avez pas encore installé Poetry :
 
 ```bash
-# On macOS/Linux
+# Sur macOS/Linux
 curl -sSL https://install.python-poetry.org | python3 -
 
-# On Windows (PowerShell)
+# Sur Windows (PowerShell)
 (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
 ```
 
-Add Poetry to your PATH:
+Ajoutez Poetry à votre PATH si nécessaire :
 
 ```bash
-# Add to your ~/.bashrc, ~/.zshrc, or ~/.profile
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Installation Steps
+## Étapes d'installation
 
-### 1. Clone the Repository
+### 1. Cloner le dépôt
 
 ```bash
 git clone https://github.com/traoreera/xcore.git
 cd xcore
 ```
 
-### 2. Install Dependencies
+### 2. Installer les dépendances
+
+Utilisez Poetry pour installer toutes les dépendances du projet, y compris celles de développement :
 
 ```bash
 poetry install
 ```
 
-This will:
-- Create a virtual environment
-- Install all production and development dependencies
-- Install pre-commit hooks (if configured)
+Cette commande va :
+- Créer un environnement virtuel isolé.
+- Installer les bibliothèques requises (FastAPI, SQLAlchemy, Pydantic, etc.).
+- Installer les outils de développement (Pytest, Black, etc.).
 
-### 3. Verify Installation
+### 3. Vérifier l'installation
 
 ```bash
 poetry run xcore --version
-# Output: xcore v2.0.0
+# Doit afficher : xcore v2.0.0
 ```
 
-## Environment Configuration
+## Configuration de l'environnement
 
-### Create Environment File
+### Fichier de configuration `.env`
+
+Copiez le fichier d'exemple et générez vos clés secrètes :
 
 ```bash
 cp .env.example .env
 ```
 
-Or create `.env` manually:
+Modifiez le fichier `.env` pour y inclure vos paramètres :
 
 ```bash
-# Required variables
-echo "APP_SECRET_KEY=$(openssl rand -hex 32)" > .env
-echo "PLUGIN_SECRET_KEY=$(openssl rand -hex 32)" >> .env
-echo "DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/xcore" >> .env
-echo "REDIS_URL=redis://localhost:6379/0" >> .env
+# Clé secrète de l'application (utilisée pour signer les tokens/sessions)
+APP_SECRET_KEY=votre_cle_secrete_longue_et_aleatoire
+
+# Clé de signature des plugins (utilisée pour valider les plugins Trusted)
+PLUGIN_SECRET_KEY=votre_cle_de_signature_plugin
+
+# URLs de connexion aux services
+DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/xcore
+REDIS_URL=redis://localhost:6379/0
 ```
 
-### Environment Variables Reference
+### Référence des variables d'environnement principales
 
-| Variable | Required | Description |
+| Variable | Requis | Description |
 |----------|----------|-------------|
-| `APP_SECRET_KEY` | Yes | Application secret (min 32 chars) |
-| `PLUGIN_SECRET_KEY` | Yes | Plugin signing key |
-| `DATABASE_URL` | Yes | Main database connection |
-| `DATABASE_ASYNC_URL` | No | Async database connection |
-| `REDIS_URL` | Yes | Redis connection string |
-| `SENTRY_DSN` | No | Sentry error tracking |
+| `APP_SECRET_KEY` | Oui | Clé de sécurité principale du framework. |
+| `PLUGIN_SECRET_KEY` | Oui | Clé utilisée pour la signature cryptographique des plugins. |
+| `DATABASE_URL` | Non* | URL de connexion SQLAlchemy (si le service DB est utilisé). |
+| `REDIS_URL` | Non* | URL de connexion Redis (si le service de cache/scheduler est utilisé). |
+| `LOG_LEVEL` | Non | Niveau de log (DEBUG, INFO, WARNING, ERROR). |
 
-## Development Setup
+## Configuration de la Base de Données et du Cache
 
-### IDE Configuration
+### Docker (Option rapide)
 
-#### VS Code
-
-Recommended extensions:
-- Python
-- Pylance
-- Black Formatter
-- isort
-- YAML
-
-Create `.vscode/settings.json`:
-
-```json
-{
-  "python.defaultInterpreterPath": "./.venv/bin/python",
-  "python.formatting.provider": "black",
-  "python.sortImports.args": ["--profile", "black"],
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.organizeImports": true
-  }
-}
-```
-
-#### PyCharm
-
-1. Open the project in PyCharm
-2. Set Python interpreter to Poetry virtualenv
-3. Enable Black formatter in Settings → Tools → Black
-
-### Pre-commit Hooks
-
-Install pre-commit hooks:
+Si vous ne souhaitez pas installer PostgreSQL et Redis localement, vous pouvez utiliser Docker :
 
 ```bash
-poetry run pre-commit install
+# Lancer PostgreSQL
+docker run -d --name xcore-db -p 5432:5432 -e POSTGRES_PASSWORD=pass -e POSTGRES_DB=xcore postgres:15
+
+# Lancer Redis
+docker run -d --name xcore-cache -p 6379:6379 redis:7-alpine
 ```
 
-## Running the Application
+## Lancement en mode Développement
 
-### Development Mode
+Pour lancer le serveur avec le rechargement à chaud (hot-reload) :
 
 ```bash
-# With hot reload
-poetry run uvicorn app:app --reload --port 8082
-
-# Or using the Makefile
+# Utilisation de la commande make (recommandé)
 make run-dev
+
+# Ou manuellement via uvicorn
+poetry run uvicorn app:app --reload --port 8082
 ```
 
-### Production Mode
+Le serveur sera accessible sur `http://localhost:8082`. Vous pouvez vérifier son état en consultant l'endpoint de santé :
 
 ```bash
-# Using the configuration file
-XCORE_CONFIG=integration.yaml uvicorn app:app --workers 4
-
-# Or using the Makefile
-make run-st
+curl http://localhost:8082/plugin/ipc/health
 ```
 
-### Verify the Server
+## Prochaines étapes
 
-```bash
-curl http://localhost:8082/plugin/status
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### Poetry not found
-
-```bash
-# Add to your shell profile
-export PATH="$HOME/.local/bin:$PATH"
-source ~/.bashrc  # or ~/.zshrc
-```
-
-#### Database connection errors
-
-Ensure PostgreSQL is running:
-
-```bash
-# macOS with Homebrew
-brew services start postgresql
-
-# Ubuntu/Debian
-sudo systemctl start postgresql
-
-# Docker
-docker run -d -p 5432:5432 -e POSTGRES_DB=xcore -e POSTGRES_USER=user -e POSTGRES_PASSWORD=pass postgres:15
-```
-
-#### Redis connection errors
-
-```bash
-# macOS with Homebrew
-brew services start redis
-
-# Ubuntu/Debian
-sudo systemctl start redis
-
-# Docker
-docker run -d -p 6379:6379 redis:7-alpine
-```
-
-### Getting Help
-
-If you encounter issues:
-
-1. Check the [Troubleshooting Guide](../guides/troubleshooting.md)
-2. Search [GitHub Issues](https://github.com/traoreera/xcore/issues)
-3. Join [GitHub Discussions](https://github.com/traoreera/xcore/discussions)
-
-## Next Steps
-
-Now that XCore is installed:
-
-- [Create Your First Plugin](../guides/creating-plugins.md)
-- [Learn about Configuration](../reference/configuration.md)
-- [Explore the Architecture](../architecture/overview.md)
+Maintenant que XCore est opérationnel, passez au **[Guide de démarrage rapide](quickstart.md)** pour créer votre premier plugin.

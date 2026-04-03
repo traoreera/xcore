@@ -1,73 +1,65 @@
-# Choix Techniques et Architecture
+# Décisions Techniques et Choix d'Architecture XCore
 
-Ce document détaille les décisions architecturales majeures prises lors de la conception du framework XCore v2, ainsi que les compromis (trade-offs) effectués.
+Ce document répertorie les décisions architecturales structurantes prises lors du développement de XCore v2 et leurs justifications techniques.
 
-## Philosophie : "Plugin-First" et Noyau Minimal
+---
 
-XCore a été conçu avec la conviction que la logique métier ne doit pas polluer le noyau du framework. Le noyau (Kernel) n'est qu'un orchestrateur fournissant :
-- Un système de chargement et de cycle de vie.
-- Un bus d'événements et de hooks.
-- Un accès sécurisé à des services partagés (DB, Cache, Scheduler).
-- Une couche de sécurité (Sandboxing, Permissions).
+## 1. Isolation par Sous-processus (Sandboxing)
 
-## Choix de FastAPI
+**Décision** : Utiliser `multiprocessing` / `subprocess` pour isoler les plugins tiers plutôt que des conteneurs (Docker) ou des threads.
 
-Le choix de **FastAPI** comme fondation repose sur plusieurs facteurs :
-- **Performance** : Performance exceptionnelle grâce à `starlette` et `pydantic`.
-- **Ecosystème** : Compatibilité native avec l'asynchrone (ASGI) et typage fort.
-- **Documentation automatique** : Génération OpenAPI (Swagger) immédiate, cruciale pour un framework de plugins.
-- **Flexibilité** : Facilité d'injection de routers dynamiques.
+### Pourquoi ce choix ?
+- **Performance vs Isolation** : Les conteneurs ajoutent un overhead de démarrage et de gestion important. Les threads Python partagent le même GIL (Global Interpreter Lock), ce qui signifie qu'un plugin gourmand en CPU bloquerait tout le framework.
+- **Robustesse** : Un sous-processus permet une isolation mémoire et CPU totale. Un crash dans un plugin sandboxed ne fait pas tomber le framework principal.
+- **Simplicité de Déploiement** : Aucun démon externe n'est requis ; XCore gère lui-même le cycle de vie des processus.
 
-## Isolation des Plugins : Trusted vs Sandboxed
+---
 
-L'une des décisions les plus critiques a été le choix du modèle d'isolation.
+## 2. Sécurité via Monkey-patching (FilesystemGuard)
 
-### 1. Mode Trusted (Processus Principal)
-- **Pourquoi** : Pour les extensions de confiance nécessitant une performance maximale et un accès direct aux services.
-- **Mécanisme** : Chargement dynamique via `importlib`.
-- **Avantage** : Zéro surcharge (overhead) de communication, partage de mémoire.
-- **Inconvénient** : Une erreur critique peut faire tomber le serveur entier.
+**Décision** : Utiliser le monkey-patching dynamique des built-ins de Python au démarrage du worker.
 
-### 2. Mode Sandboxed (Sous-processus Isolé)
-- **Pourquoi** : Pour exécuter du code tiers ou non audité en toute sécurité.
-- **Mécanisme** : Chaque plugin tourne dans un processus `multiprocessing` séparé.
-- **Sécurité** :
-    - **AST Scanning** : Analyse statique du code pour bloquer les imports/appels dangereux.
-    - **FilesystemGuard** : Monkey-patching de `os` et `pathlib` pour restreindre l'accès au disque.
-    - **Import Hook** : Namespace isolé (`xcore_plugin_<uid>`) pour éviter les conflits de modules.
-    - **IPC** : Communication via JSON-RPC sur tubes (pipes).
+### Pourquoi ce choix ?
+- **Universalité** : Cela permet de sécuriser du code Python standard sans forcer les développeurs à utiliser des APIs de fichiers spécifiques. Les appels classiques à `open()` ou `Path.open()` deviennent sécurisés par défaut.
+- **Fail-Closed** : Le guard est installé avant tout chargement de code plugin, garantissant qu'aucune évasion n'est possible dès les premières lignes d'exécution.
 
-## Pipeline de Middlewares
+---
 
-XCore utilise un pattern **Middleware Pipeline** pour les appels de plugins (`supervisor.call`). Cela permet une séparation nette des préoccupations (Separation of Concerns) :
-1. **TracingMiddleware** : Observabilité et corrélation des appels.
-2. **RateLimitMiddleware** : Protection contre les abus.
-3. **PermissionMiddleware** : Vérification des droits d'exécution.
-4. **RetryMiddleware** : Résilience face aux erreurs transitoires (backoff exponentiel).
+## 3. Communication via Flux Standards (IPC stdin/stdout)
 
-## Système de Permissions (RBAC/ABAC)
+**Décision** : Utiliser les pipes standards (stdin/stdout) pour l'IPC entre le Noyau et le Sandbox.
 
-Au lieu d'un simple système binaire (autorisé/refusé), XCore implémente un moteur de permissions capable de :
-- Utiliser des **globs** pour les ressources (ex: `cache.*`).
-- Définir des actions précises (ex: `read`, `write`, `execute`).
-- Appliquer des effets `allow` ou `deny`.
-- **Optimisation** : Les résultats sont mémoïsés pour réduire l'overhead des comparaisons de patterns à ~16µs.
+### Pourquoi ce choix ?
+- **Compatibilité** : Ne nécessite pas d'ouvrir de sockets réseau, de gérer des ports ou des permissions de socket UNIX.
+- **Simplicité du Protocole** : JSON-RPC sur flux de lignes (`\n`) est extrêmement simple à implémenter, à parser et à déboguer.
+- **Performance** : Les pipes anonymes sont très performants pour l'échange de petits messages JSON (latence de l'ordre de la microseconde).
 
-## Gestion de la Performance
+---
 
-Des optimisations constantes sont appliquées sur le "hot-path" (chemin d'exécution critique) :
-- **Suppression du verrou asyncio** dans le Rate Limiter pour les opérations purement en mémoire.
-- **Bypass de la machine à états** (`RUNNING`) lors des appels pour permettre la concurrence et réduire la latence de ~20%.
-- **Caching du statut `is_async`** des handlers d'événements pour éviter les appels répétés à `inspect`.
+## 4. Middleware Pipeline Pré-compilé
 
-## Choix de Persistance
+**Décision** : Compiler la chaîne de middlewares en une seule fermeture (closure) imbriquée au démarrage du framework.
 
-XCore privilégie l'abstraction via des **Providers** :
-- **SQL** : Support de SQLAlchemy (Sync/Async) pour PostgreSQL, MySQL et SQLite.
-- **NoSQL** : Redis pour le cache et la coordination distribuée.
-- **Batching** : Implémentation native de `mget`/`mset` dans le SDK pour réduire les allers-retours réseau.
+### Pourquoi ce choix ?
+- **Optimisation Drastique** : Élimine le besoin de parcourir une liste de middlewares et de créer des lambdas à chaque appel de plugin.
+- **Lisibilité vs Performance** : Permet de garder une écriture modulaire pour les développeurs de middlewares (Tracing, Auth, RateLimit) tout en ayant les performances d'un code monolithique à l'exécution.
 
-## Évolutions Futures
+---
 
-- **WebAssembly (WASM)** : Exploration de l'isolation via `wasmer-python` pour une sécurité encore plus granulaire.
-- **Service Mesh** : Intégration native avec des protocoles comme gRPC pour les communications inter-plugins distribuées.
+## 5. Algorithme de Kahn pour les Dépendances
+
+**Décision** : Utiliser un tri topologique basé sur l'algorithme de Kahn pour ordonner le chargement des plugins.
+
+### Pourquoi ce choix ?
+- **Détection des Cycles** : Garantit mathématiquement qu'aucune dépendance cyclique ne peut bloquer le système au démarrage.
+- **Vagues de Chargement** : Permet de charger les plugins par "vagues" de nœuds indépendants, facilitant l'initialisation et la propagation des services.
+
+---
+
+## 6. Services Singleton et Propagation
+
+**Décision** : Utiliser un conteneur de services centralisé (`ServiceContainer`) avec un dictionnaire partagé injecté dans les plugins Trusted.
+
+### Pourquoi ce choix ?
+- **Efficacité Mémoire** : Évite de multiplier les connexions aux bases de données ou à Redis ; tous les plugins partagent les mêmes instances de services.
+- **Modularité** : Permet à un plugin d'exposer de nouveaux services (ex: un moteur de recherche `ext.search`) à tout le framework de manière dynamique.

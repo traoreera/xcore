@@ -38,6 +38,7 @@ htmlcov/
 tmp/
 backgroundtask
 node_modules/
+docs/
 
 .claude
 
