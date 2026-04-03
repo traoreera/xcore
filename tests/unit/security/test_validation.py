@@ -222,14 +222,14 @@ def broken(
             result = scanner.scan(plugin_dir)
 
             assert result.passed is False
-            assert "src/" in str(result.errors)
+            assert "introuvable" in str(result.errors)
 
     def test_scan_empty_src(self, scanner, temp_plugin_dir):
         """Test scanning empty src directory."""
+        (temp_plugin_dir / "src" / "main.py").touch()
         result = scanner.scan(temp_plugin_dir)
 
         assert result.passed is True
-        assert len(result.warnings) > 0
 
     def test_scan_with_whitelist(self, scanner, temp_plugin_dir):
         """Test scanning with custom whitelist."""

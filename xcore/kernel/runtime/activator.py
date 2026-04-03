@@ -53,7 +53,11 @@ class TrustedActivator(PluginActivator):
                 raise LoadError(str(e)) from e
 
         scanner = ASTScanner()
-        scan = scanner.scan(manifest.plugin_dir, whitelist=manifest.allowed_imports)
+        scan = scanner.scan(
+            manifest.plugin_dir,
+            whitelist=manifest.allowed_imports,
+            entry_point=manifest.entry_point,
+        )
         if not scan.passed:
             logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
 
@@ -77,7 +81,11 @@ class SandboxedActivator(PluginActivator):
         from ..security.validation import ASTScanner
 
         scanner = ASTScanner()
-        scan = scanner.scan(manifest.plugin_dir, whitelist=manifest.allowed_imports)
+        scan = scanner.scan(
+            manifest.plugin_dir,
+            whitelist=manifest.allowed_imports,
+            entry_point=manifest.entry_point,
+        )
         if not scan.passed:
             raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
 

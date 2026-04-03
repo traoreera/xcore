@@ -168,21 +168,39 @@ class ASTScanner:
         self.forbidden = DEFAULT_FORBIDDEN | (extra_forbidden or set())
         self.allowed = DEFAULT_ALLOWED | (extra_allowed or set())
 
-    def scan(self, plugin_dir: Path, whitelist: list[str] | None = None) -> ScanResult:
+    def scan(
+        self,
+        plugin_dir: Path,
+        whitelist: list[str] | None = None,
+        entry_point: str = "src/main.py",
+    ) -> ScanResult:
         result = ScanResult()
-        src_dir = plugin_dir / "src"
+        plugin_dir = plugin_dir.resolve()
+        entry_path = (plugin_dir / entry_point).resolve()
+
+        # Sécurité : l'entry point doit être dans le dossier du plugin
+        if not entry_path.is_relative_to(plugin_dir):
+            result.add_error(f"Entry point hors du dossier plugin : {entry_point!r}")
+            return result
+
+        if not entry_path.exists():
+            result.add_error(f"Entry point introuvable : {entry_point!r}")
+            return result
+
+        # Le dossier à scanner est celui de l'entry point (souvent src/)
+        src_dir = entry_path.parent
         extra_ok = set(whitelist or [])
 
-        if not src_dir.exists():
-            result.add_error(f"Répertoire src/ introuvable dans {plugin_dir}")
-            return result
+        # On scanne tout le dossier src_dir récursivement
+        py_files = set(src_dir.rglob("*.py"))
+        # On s'assure d'inclure l'entry point lui-même s'il n'était pas dans un .py (rare)
+        py_files.add(entry_path)
 
-        py_files = list(src_dir.rglob("*.py"))
         if not py_files:
-            result.add_warning("Aucun fichier .py dans src/")
+            result.add_warning(f"Aucun fichier .py trouvé à partir de {src_dir}")
             return result
 
-        for py_file in py_files:
+        for py_file in sorted(py_files):
             self._scan_file(py_file, result, extra_ok)
             result.scanned.append(str(py_file.relative_to(plugin_dir)))
 

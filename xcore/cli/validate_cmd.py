@@ -46,7 +46,9 @@ def validate_full(
 
     # 2. AST scan
     scanner = ASTScanner()
-    result = scanner.scan(path, whitelist=manifest.allowed_imports)
+    result = scanner.scan(
+        path, whitelist=manifest.allowed_imports, entry_point=manifest.entry_point
+    )
     if result.passed:
         print(f"✅  Scan AST    : {len(result.scanned)} fichier(s) analysé(s)")
     else:
