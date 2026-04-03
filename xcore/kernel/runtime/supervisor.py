@@ -99,6 +99,10 @@ class PluginSupervisor:
             self._services.as_dict() if hasattr(self._services, "as_dict") else {}
         )
 
+        # Souscription réactive aux événements de plugin
+        if self._events:
+            self._events.subscribe("plugin.*.services_registered", self._on_plugin_services_registered)
+
         self._loader = PluginLoader(
             config=self._config,
             services=svc_dict,
@@ -113,16 +117,16 @@ class PluginSupervisor:
             f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
         )
 
-        # Chargement des permissions pour chaque plugin chargé
-        self._load_permissions(report["loaded"])
-
-        # Enregistrement des rate limits
-        self._register_rate_limits(report["loaded"])
-
-        # Enregistrement dans le registry si disponible
+        # Enregistrement des services noyau comme "protégés" dans le registre
         if self._registry:
-            for name in report["loaded"]:
-                self._registry.register(name, self._loader.get(name))
+            for name, svc in self._services.as_dict().items():
+                try:
+                    self._registry.register_core_service(name, svc)
+                except Exception as e:
+                    logger.warning(f"Erreur lors de l'enregistrement du service noyau '{name}': {e}")
+
+        # Note: L'enregistrement des permissions, rate limits et registry
+        # est maintenant géré de manière réactive via _on_plugin_services_registered
 
         # Initialisation du pipeline de middlewares
         # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
@@ -159,6 +163,28 @@ class PluginSupervisor:
                     )
             except Exception as e:
                 logger.error(f"[{name}] Erreur enregistrement rate limit : {e}")
+
+    async def _on_plugin_services_registered(self, event) -> None:
+        """Handler réactif appelé quand un plugin a enregistré ses services."""
+        plugin_name = event.data.get("plugin")
+        if not plugin_name:
+            return
+
+        logger.debug(f"Configuration réactive pour '{plugin_name}'")
+
+        # 1. Chargement des permissions
+        self._load_permissions([plugin_name])
+
+        # 2. Enregistrement des rate limits
+        self._register_rate_limits([plugin_name])
+
+        # 3. Enregistrement dans le registry si disponible
+        if self._registry and self._loader:
+            try:
+                self._registry.register(plugin_name, self._loader.get(plugin_name))
+            except KeyError:
+                # Peut arriver si l'événement est émis pendant un load() incomplet
+                pass
 
     def _load_permissions(self, plugin_names: list[str]) -> None:
         """Charge les policies de chaque plugin dans le PermissionEngine."""
@@ -214,6 +240,12 @@ class PluginSupervisor:
             raise RuntimeError("Le pipeline n'est pas encore initialisé. Appelez boot() d'abord.")
         self._pipeline.add_middleware(middleware, first=first)
         logger.info(f"Middleware {middleware.__class__.__name__} enregistré dynamiquement.")
+
+    def get_active_middlewares(self) -> list[Middleware]:
+        """Retourne la liste des middlewares actifs dans la pipeline."""
+        if self._pipeline is None:
+            return []
+        return self._pipeline.get_middlewares()
 
     async def load(self, plugin_name: str) -> None:
         if self._loader:
