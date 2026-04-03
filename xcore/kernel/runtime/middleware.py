@@ -46,6 +46,10 @@ class MiddlewarePipeline:
         else:
             self._middlewares.append(middleware)
 
+    def get_middlewares(self) -> list[Middleware]:
+        """Retourne la liste ordonnée des middlewares actifs."""
+        return list(self._middlewares)
+
     async def execute(
         self,
         plugin_name: str,

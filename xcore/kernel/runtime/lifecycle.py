@@ -383,6 +383,17 @@ class LifecycleManager:
                     },
                 )
 
+        # Émet un événement pour signaler que les services sont prêts
+        if self._events:
+            self._events.emit_sync(
+                f"plugin.{self.manifest.name}.services_registered",
+                {
+                    "plugin": self.manifest.name,
+                    "is_reload": is_reload,
+                    "services": list(instance_services.keys()),
+                },
+            )
+
         # Mise à jour du container local (rétro-compatibilité et accès rapide)
         if is_reload:
             self._services.update(instance_services)

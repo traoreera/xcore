@@ -73,16 +73,31 @@ class PluginRegistry:
         service_name: str,
         service_obj: Any,
         metadata: dict | None = None,
+        scope: str = "public",
     ) -> None:
         """Enregistre un service exporté par un plugin."""
+        # Vérification de la protection contre l'écrasement
+        if service_name in self._exported_services:
+            old_meta = self._exported_services[service_name]
+            if old_meta.get("scope") == "protected":
+                raise PermissionError(
+                    f"Impossible d'écraser le service protégé '{service_name}' "
+                    f"(propriétaire actuel: {old_meta.get('plugin')})"
+                )
+
         self._exported_services[service_name] = {
             "plugin": plugin_name,
             "obj": service_obj,
+            "scope": scope,
             **(metadata or {}),
         }
         logger.debug(
-            f"[registry] service '{service_name}' enregistré par '{plugin_name}'"
+            f"[registry] service '{service_name}' enregistré par '{plugin_name}' (scope: {scope})"
         )
+
+    def register_core_service(self, name: str, obj: Any, metadata: dict | None = None) -> None:
+        """Enregistre un service noyau (protégé par défaut)."""
+        self.register_service("kernel", name, obj, metadata=metadata, scope="protected")
 
     def get_service(self, service_name: str, requester: str | None = None) -> Any:
         """
