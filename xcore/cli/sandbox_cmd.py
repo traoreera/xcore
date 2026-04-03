@@ -230,7 +230,11 @@ async def _sandbox_network(args) -> None:
     from xcore.kernel.security.validation import ASTScanner
 
     scanner = ASTScanner()
-    result = scanner.scan(plugin_dir, whitelist=manifest.allowed_imports)
+    result = scanner.scan(
+        plugin_dir,
+        whitelist=manifest.allowed_imports,
+        entry_point=manifest.entry_point,
+    )
 
     # Vérifie si des imports réseau sont dans la whitelist du plugin
     allowed_network = [i for i in manifest.allowed_imports if i in NETWORK_IMPORTS]

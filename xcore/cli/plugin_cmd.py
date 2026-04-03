@@ -165,7 +165,9 @@ async def _plugin_health(args) -> None:
                 # AST scan
                 scanner = ASTScanner()
                 result = scanner.scan(
-                    plugin_dir_entry, whitelist=manifest.allowed_imports
+                    plugin_dir_entry,
+                    whitelist=manifest.allowed_imports,
+                    entry_point=manifest.entry_point,
                 )
                 ast_ok = "✅" if result.passed else "❌"
 
