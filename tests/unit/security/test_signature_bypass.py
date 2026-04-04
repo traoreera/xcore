@@ -51,15 +51,9 @@ def test_signature_bypass_outside_src(tmp_path):
 
     # The signature verification SHOULD fail, but currently it will PASS
     # because it only hashes the 'src/' directory.
-    try:
+    # After the fix, verify_plugin must raise SignatureError when app/main.py is modified.
+    with pytest.raises(SignatureError):
         verify_plugin(manifest, secret_key)
-        # If we reached here, it means the bypass worked (which is bad)
-        # In the reproduction, we expect this to happen before the fix.
-        # But we want the test to FAIL when the bypass works.
-        pytest.fail("Signature verification should have failed after modifying code in app/!")
-    except SignatureError:
-        # This is what we WANT after the fix
-        pass
 
 def test_signature_root_entry_point(tmp_path):
     """
