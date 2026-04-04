@@ -43,6 +43,11 @@
 **Learning:** Security validation must be synchronized with the actual execution logic. If the scanner assumes a fixed directory structure that the runtime does not enforce, a gap is created where unvalidated code can be executed.
 **Prevention:** Always derive the scanning target from the same configuration used by the runtime (e.g., the `entry_point`). Additionally, implement strict path validation (using `.resolve()` and `.is_relative_to()`) to prevent the scanner itself from being used as a vector for path traversal attacks via misconfigured manifests.
 
+## 2026-04-22 - Plugin Signature Bypass via Custom Entry Point
+**Vulnerability:** The plugin signature verification (HMAC) was hardcoded to hash only the `src/` directory, ignoring the `entry_point` specified in the manifest. This allowed modifications to the actual code if it was located elsewhere (e.g., in an `app/` folder) without invalidating the signature.
+**Learning:** Security mechanisms must be consistent across all layers. Fixing a vulnerability in a static scanner (AST) but leaving it in the cryptographic integrity check (HMAC) creates a gap where the system trust is based on an incomplete set of verified files.
+**Prevention:** Ensure all security components (scanners, signers, loaders) use the same manifest-driven logic to identify and resolve the plugin's code root.
+
 ## 2026-04-15 - Sandbox Denial of Service via Interactive Input
 **Vulnerability:** Sandboxed plugins could call the `input()` built-in, causing the isolated worker process to hang indefinitely while waiting for user input on stdin. This allowed a malicious or buggy plugin to block its assigned worker and potentially consume resources without completing its task.
 **Learning:** Even if a sandbox restricts filesystem and network access, interactive functions like `input()` can be used to cause process-level Denial of Service if the IPC mechanism relies on standard input/output.
