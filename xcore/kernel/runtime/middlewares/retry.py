@@ -25,8 +25,7 @@ class RetryMiddleware(Middleware):
         action: str,
         payload: dict,
         next_call: Callable,
-        *,
-        handler=None,
+        handler,
         **kwargs,
     ) -> dict:
         manifest = getattr(handler, "manifest", None) if handler else None
@@ -40,7 +39,7 @@ class RetryMiddleware(Middleware):
         last_err = None
         for attempt in range(1, max_attempts + 1):
             try:
-                result = await next_call(plugin_name, action, payload, **kwargs)
+                result = await next_call(plugin_name, action, payload, handler, **kwargs)
 
                 # Si le résultat indique une erreur de type exception capturée par le handler
                 if (
