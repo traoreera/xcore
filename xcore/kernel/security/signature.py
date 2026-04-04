@@ -16,6 +16,9 @@ SECURITY_IGNORE = {
     ".pytest_cache",
     "*.md",
     "*.json",
+    "plugin.sig",
+    "plugin.yaml",
+    "plugin.json",
 }
 
 
@@ -26,7 +29,7 @@ class SignatureError(Exception):
 def _should_ignore(path: Path, root: Path) -> bool:
     rel = path.relative_to(root)
 
-    if any(part in SECURITY_IGNORE for part in rel.parts):
+    if any(part in SECURITY_IGNORE for part in rel.parts) or path.name in SECURITY_IGNORE:
         return True
 
     if path.suffix in {".pyc", ".pyo"}:
@@ -54,9 +57,18 @@ def _compute_hmac(manifest, secret_key: bytes) -> str:
             break
 
     # --- Hash des sources ---
-    src_dir = root / "src"
+    # Dynamically determine the directory to hash based on the entry point.
+    # For example, if entry_point is "src/main.py", we hash the "src/" directory.
+    # If entry_point is "main.py", we hash from the root.
+    entry_path = Path(manifest.entry_point)
+    src_dir = (root / entry_path.parent).resolve()
+
     if not src_dir.exists():
-        raise SignatureError(f"Répertoire src/ introuvable dans {root}")
+        raise SignatureError(f"Répertoire source {src_dir} introuvable dans {root}")
+
+    # Ensure src_dir is within root or is the root itself
+    if not src_dir.is_relative_to(root):
+        raise SignatureError(f"Répertoire source {src_dir} hors du dossier plugin.")
 
     files = sorted(
         p for p in src_dir.rglob("*") if p.is_file() and not _should_ignore(p, root)
