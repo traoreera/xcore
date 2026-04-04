@@ -34,7 +34,7 @@ class LifecycleManager:
     """
         Manages the complete lifecycle of a Trusted plugin in memory.
         v2 fixes compared to v1:
-        - mems(is_reload) distinguishes between initial load and reload (fix #3 v1)
+        - propagate_services(is_reload) distinguishes between initial load and reload (fix #3 v1)
         - Rich context (PluginContext) injected instead of a raw dict
         - Clear separation between loader / lifecycle / supervisor
         Usage:
@@ -45,17 +45,6 @@ class LifecycleManager:
         await lm.reload()
         await lm.unload()```
     """
-
-    # Liste des clés de services protégées (ne peuvent pas être écrasées par un plugin)
-    PROTECTED_SERVICES = {
-        "db",
-        "cache",
-        "scheduler",
-        "events",
-        "hooks",
-        "database",
-        "extensions",
-    }
 
     def __init__(
         self,
@@ -126,7 +115,7 @@ class LifecycleManager:
         self._sm.transition("load")
         try:
             await self._do_load()
-            self.mems(is_reload=False)
+            self.propagate_services(is_reload=False)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(
@@ -180,6 +169,7 @@ class LifecycleManager:
             metrics=self._metrics,
             tracer=self._tracer,
             health=self._health,
+            registry=self._registry,
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -187,17 +177,26 @@ class LifecycleManager:
             # rétro-compatibilité v1
             await self._instance.env_variable(self.manifest.env)
 
-        if hasattr(self._instance, "on_init"):
-            await self._instance.on_init()
-
-        if hasattr(self._instance, "on_load"):
-            await self._instance.on_load()
-
-        if hasattr(self._instance, "on_start"):
-            await self._instance.on_start()
+        await self._invoke_hooks(["on_init", "on_load", "on_start"])
 
         # Collecte le router HTTP custom si le plugin en expose un
         self._collect_router()
+
+    async def _invoke_hooks(self, hook_names: list[str]) -> None:
+        """Invoque une série de hooks sur l'instance s'ils existent."""
+        if not self._instance:
+            return
+        for name in hook_names:
+            hook = getattr(self._instance, name, None)
+            if hook and callable(hook):
+                try:
+                    if inspect.iscoroutinefunction(hook):
+                        await hook()
+                    else:
+                        hook()
+                except Exception as e:
+                    logger.error(f"[{self.manifest.name}] Erreur hook {name} : {e}")
+                    raise
 
     def _instantiate(self, cls) -> BasePlugin:
         """Instancie le plugin en injectant services si possible."""
@@ -261,12 +260,11 @@ class LifecycleManager:
     async def reload(self) -> None:
         self._sm.transition("reload")
         try:
-            if hasattr(self._instance, "on_reload"):
-                await self._instance.on_reload()
+            await self._invoke_hooks(["on_reload"])
             await self._do_unload()
             await self._do_load()
             # is_reload=True : force la mise à jour des services existants
-            self.mems(is_reload=True)
+            self.propagate_services(is_reload=True)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(f"[{self.manifest.name}] reloaded")
@@ -288,10 +286,7 @@ class LifecycleManager:
 
     async def _do_unload(self) -> None:
         if self._instance:
-            if hasattr(self._instance, "on_stop"):
-                await self._instance.on_stop()
-            if hasattr(self._instance, "on_unload"):
-                await self._instance.on_unload()
+            await self._invoke_hooks(["on_stop", "on_unload"])
         module_name = f"xcore_plugin_{self.manifest.name}"
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
@@ -331,7 +326,7 @@ class LifecycleManager:
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
-    def mems(self, *, is_reload: bool = False) -> dict:
+    def propagate_services(self, *, is_reload: bool = False) -> dict:
         """
         Propage les services enregistrés par le plugin vers le container partagé.
         Utilise le PluginRegistry pour une gestion plus propre si disponible.
@@ -361,12 +356,13 @@ class LifecycleManager:
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit
-        # la source de vérité.
+        # la source de vérité et assure la protection des services noyau.
         if self._registry:
             for name, obj in instance_services.items():
                 svc_meta = manifest_services_config.get(name, {})
                 scope = svc_meta.get("scope", "public")
 
+                # register_service lèvera une PermissionError si le service est protégé
                 self._registry.register_service(
                     plugin_name=self.manifest.name,
                     service_name=name,
@@ -377,6 +373,27 @@ class LifecycleManager:
                         "description": svc_meta.get("description", ""),
                     },
                 )
+        else:
+            # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
+            # On définit une liste minimale de services à protéger
+            protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
+            collisions = set(instance_services.keys()) & protected
+            if collisions:
+                raise PermissionError(
+                    f"[{self.manifest.name}] Tentative d'écrasement de services "
+                    f"noyau sans registre : {collisions}"
+                )
+
+        # Émet un événement pour signaler que les services sont prêts
+        if self._events:
+            self._events.emit_sync(
+                f"plugin.{self.manifest.name}.services_registered",
+                {
+                    "plugin": self.manifest.name,
+                    "is_reload": is_reload,
+                    "services": list(instance_services.keys()),
+                },
+            )
 
         # Mise à jour du container local (rétro-compatibilité et accès rapide)
         if is_reload:

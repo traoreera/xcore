@@ -55,6 +55,9 @@ class PluginLoader:
         hooks=None,
         registry=None,
         caller=None,
+        metrics=None,
+        tracer=None,
+        health=None,
     ) -> None:
         from ...kernel.api.contract import ExecutionMode
 
@@ -64,6 +67,9 @@ class PluginLoader:
         self._hooks = hooks
         self._registry = registry
         self._caller = caller
+        self._metrics = metrics
+        self._tracer = tracer
+        self._health = health
 
         # handlers: name -> PluginHandler (Trusted or Sandboxed)
         self._handlers: dict[str, PluginHandler] = {}
@@ -272,8 +278,8 @@ class PluginLoader:
         """Propage les services exposés par chaque plugin vers le container partagé."""
         for name in plugin_names:
             handler = self._handlers.get(name)
-            if handler and hasattr(handler, "mems"):
-                updated = handler.mems(is_reload=False)
+            if handler and hasattr(handler, "propagate_services"):
+                updated = handler.propagate_services(is_reload=False)
                 logger.debug(
                     f"[{name}] 📦 services disponibles : {sorted(updated.keys())}"
                 )

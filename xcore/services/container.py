@@ -122,18 +122,34 @@ class ServiceContainer:
         await container.shutdown()
     """
 
-    DEFAULT_PROVIDERS = [
-        DatabaseServiceProvider(),
-        CacheServiceProvider(),
-        SchedulerServiceProvider(),
-        ExtensionServiceProvider(),
-    ]
-
-    def __init__(self, config: "ServicesConfig") -> None:
+    def __init__(
+        self, config: "ServicesConfig", providers: list[BaseServiceProvider] | None = None
+    ) -> None:
         self._config = config
         self._services: dict[str, BaseService] = {}
         self._raw: dict[str, Any] = {}
         self._lazy_providers: dict[str, Any] = {}
+
+        # If no providers are provided, we use the default set
+        if providers is None:
+            self._providers = self._get_default_providers()
+        else:
+            self._providers = providers
+
+    @staticmethod
+    def _get_default_providers() -> list[BaseServiceProvider]:
+        """Returns the default list of core service providers."""
+        return [
+            DatabaseServiceProvider(),
+            CacheServiceProvider(),
+            SchedulerServiceProvider(),
+            ExtensionServiceProvider(),
+        ]
+
+    def add_provider(self, provider: BaseServiceProvider) -> None:
+        """Ajoute un fournisseur de services à la liste d'initialisation."""
+        self._providers.append(provider)
+        logger.debug(f"Provider '{provider.__class__.__name__}' ajouté")
 
     def register_provider(self, name: str, provider: Any) -> None:
         """Enregistre un fournisseur de services dynamique (lazy)."""
@@ -150,7 +166,7 @@ class ServiceContainer:
     async def init(self, providers: list[BaseServiceProvider] | None = None) -> None:
         """Initialise tous les services via les providers."""
         if providers is None:
-            providers = self.DEFAULT_PROVIDERS
+            providers = self._providers
 
         for provider in providers:
             await provider.init(self)

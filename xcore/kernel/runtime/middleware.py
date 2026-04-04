@@ -35,7 +35,7 @@ class MiddlewarePipeline:
     """Gère une chaîne de middlewares."""
 
     def __init__(self, middlewares: List[Middleware], final_handler: Callable):
-        self._middlewares = middlewares
+        self._middlewares = list(middlewares)
         self._final_handler = final_handler
         # Compilation de la chaîne au démarrage pour minimiser l'overhead.
         self._compiled_chain = self._compile_pipeline(
@@ -74,6 +74,26 @@ class MiddlewarePipeline:
 
             current = _make_step(mw, current)
         return current
+
+    def add_middleware(self, middleware: Middleware, first: bool = False) -> None:
+        """Ajoute dynamiquement un middleware à la pipeline."""
+        if first:
+            self._middlewares.insert(0, middleware)
+        else:
+            self._middlewares.append(middleware)
+        # Déclenche une recompilation immédiate de la chaîne interne
+        self._compiled_chain = self._compile_pipeline(
+            self._middlewares, self._final_handler
+        )
+
+        # Recompile the chain after adding a middleware
+        self._compiled_chain = self._compile_pipeline(
+            self._middlewares, self._final_handler
+        )
+
+    def get_middlewares(self) -> list[Middleware]:
+        """Retourne la liste ordonnée des middlewares actifs."""
+        return list(self._middlewares)
 
     async def execute(
         self,
