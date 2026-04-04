@@ -1,128 +1,119 @@
-# Guide de Test
+# Guide des Tests XCore
 
-Ce guide explique comment tester vos plugins et votre application XCore pour garantir une fiabilité maximale.
+XCore a été conçu avec la testabilité comme priorité. Ce guide vous aide à tester vos plugins de manière robuste, tant en isolation qu'en intégration.
 
-## Configuration de l'Environnement de Test
+---
 
-### Dépendances de test
-Assurez-vous d'avoir installé les outils nécessaires :
-```bash
-pip install pytest pytest-asyncio pytest-cov httpx
-```
+## 1. Philosophie des Tests
 
-### Configuration Pytest
-Créez un fichier `pytest.ini` à la racine pour configurer le mode asynchrone :
-```ini
-[pytest]
-asyncio_mode = auto
-testpaths = tests
-```
+Dans XCore, les tests se répartissent en trois catégories :
+1. **Tests de Plugins (Isolation)** : Tester la logique métier sans le framework.
+2. **Tests d'Intégration (Noyau)** : Tester le chargement, les services et l'IPC.
+3. **Tests de Sécurité (Sandbox)** : Vérifier que les restrictions de la sandbox sont bien appliquées.
 
-## Tester un Plugin (Mode Trusted)
+---
 
-Pour tester un plugin, vous pouvez l'instancier manuellement et simuler les appels de services.
+## 2. Tester un Plugin en Isolation
 
-### Exemple de test unitaire
+Le moyen le plus simple est de tester la classe `Plugin` directement en mockant ses services.
+
 ```python
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from plugins.mon_plugin.src.main import Plugin
 
 @pytest.mark.asyncio
-async def test_action_dire_bonjour():
-    # 1. Préparation (Setup)
-    plugin = Plugin()
-    plugin.ctx = MagicMock()
+async def test_mon_plugin_logic():
+    # Instanciation manuelle
+    p = Plugin()
 
-    # 2. Exécution (Execution)
-    payload = {"nom": "Jules"}
-    result = await plugin.handle("dire_bonjour", payload)
+    # Mock des services
+    p.cache = MagicMock()
+    p.cache.get.return_value = "ma_valeur"
 
-    # 3. Vérification (Assertion)
+    # Appel de l'action
+    result = await p.handle("get_data", {"key": "test"})
+
+    # Vérifications
     assert result["status"] == "ok"
-    assert "Jules" in result["message"]
+    assert result["data"] == "ma_valeur"
 ```
 
-## Tests d'Intégration avec XCore
+---
 
-Pour des tests plus réalistes, démarrez une instance minimale du framework.
+## 3. Tester via le Framework (Intégration)
+
+Utilisez le `Xcore` orchestrateur pour charger réellement vos plugins et tester les appels IPC réels.
 
 ```python
 from xcore import Xcore
+import pytest
 
-@pytest.fixture
-async def app():
-    xcore = Xcore(config_path="tests/xcore.test.yaml")
+@pytest.mark.asyncio
+async def test_full_plugin_cycle():
+    # Démarrage du framework (config par défaut)
+    xcore = Xcore()
     await xcore.boot()
-    yield xcore
+
+    # Appel IPC réel via le Supervisor
+    result = await xcore.plugins.call("mon_plugin", "ping", {})
+
+    # Vérifications
+    assert result["status"] == "ok"
+    assert result["msg"] == "pong"
+
+    # Arrêt propre
     await xcore.shutdown()
-
-@pytest.mark.asyncio
-async def test_workflow_complet(app):
-    # Appel via le supervisor (inclut les middlewares)
-    result = await app.plugins.call("mon_plugin", "faire_calcul", {"a": 10, "b": 5})
-    assert result["total"] == 15
 ```
 
-## Tester les Routes HTTP
+---
 
-Utilisez `httpx` pour simuler des requêtes vers les endpoints exposés par vos plugins.
+## 4. Tester l'API HTTP (FastAPI)
+
+Utilisez `TestClient` de FastAPI pour tester les endpoints HTTP exposés par vos plugins.
 
 ```python
-from httpx import AsyncClient
-from app import app # Votre instance FastAPI
+from fastapi.testclient import TestClient
+from app import app # Votre application FastAPI intégrant Xcore
 
-@pytest.mark.asyncio
-async def test_endpoint_http():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.get("/plugins/mon_plugin/statut")
+client = TestClient(app)
 
+def test_plugin_http_route():
+    # Test de la route système IPC
+    response = client.post(
+        "/plugin/ipc/mon_plugin/action",
+        headers={"X-Plugin-Key": "change-me-in-production"},
+        json={"payload": {"key": "val"}}
+    )
     assert response.status_code == 200
-    assert response.json()["etat"] == "actif"
+
+    # Test de la route REST du plugin
+    response = client.get("/plugin/mon_plugin/status")
+    assert response.status_code == 200
+    assert response.json()["active"] is True
 ```
 
-## Tester en Mode Sandbox
+---
 
-Le test des plugins sandboxés est crucial car ils subissent des restrictions strictes.
+## 5. Exécution des Tests
 
-```python
-@pytest.mark.asyncio
-async def test_sandbox_security(app):
-    # Tenter une action interdite (ex: accès au disque hors data/)
-    result = await app.plugins.call("plugin_tiers", "lire_config_systeme", {})
+Le projet utilise **Pytest**. Vous pouvez lancer tous les tests du framework et des plugins avec :
 
-    # Doit être intercepté par le FilesystemGuard
-    assert result["status"] == "error"
-    assert result["code"] == "filesystem_denied"
+```bash
+# Lancer tous les tests
+poetry run pytest
+
+# Lancer les tests d'un répertoire spécifique
+poetry run pytest tests/unit/kernel/
+
+# Voir la couverture de code
+poetry run pytest --cov=xcore
 ```
 
-## Simulation de Services (Mocking)
+---
 
-Il est souvent préférable de ne pas utiliser de vraie base de données ou de vrai Redis pendant les tests unitaires.
+## Bonnes Pratiques
 
-```python
-@pytest.fixture
-def mock_cache():
-    cache = AsyncMock()
-    cache.get.return_value = "valeur_cachee"
-    return cache
-
-@pytest.mark.asyncio
-async def test_avec_mock(mock_cache):
-    plugin = Plugin()
-    # Injection du mock dans le plugin
-    plugin.get_service = MagicMock(return_value=mock_cache)
-
-    result = await plugin.handle("get_data", {"key": "test"})
-    assert result["data"] == "valeur_cachee"
-```
-
-## Bonnes Pratiques de Test
-
-1. **Isolation** : Chaque test doit être indépendant des autres. Utilisez des fixtures pour réinitialiser l'état.
-2. **Couverture** : Visez au moins 80% de couverture de code pour les plugins critiques.
-   ```bash
-   pytest --cov=plugins/mon_plugin
-   ```
-3. **Edge Cases** : Testez les payloads vides, les types de données incorrects et les erreurs de services.
-4. **Performance** : Surveillez le temps d'exécution de vos tests. Un test unitaire ne devrait pas dépasser quelques millisecondes.
+1. **Utiliser des bases de données de test** : Configurez `DATABASE_URL` pour pointer vers une base SQLite en mémoire (`sqlite:///:memory:`) ou une base de test dédiée pour vos tests d'intégration.
+2. **Nettoyage après test** : Assurez-vous de décharger les plugins (`unload`) après chaque test pour éviter les fuites de mémoire ou les conflits de namespace.
+3. **Tester le mode Sandboxed** : Si votre plugin est destiné à être sandboxed, testez-le avec la commande `xcore sandbox run <name>` pour vérifier qu'aucune `PermissionError` n'est levée.

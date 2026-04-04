@@ -1,93 +1,118 @@
-# Système d'Événements et Hooks
+# Système d'Événements et Hooks XCore
 
-XCore utilise une architecture pilotée par les événements (Event-Driven) pour permettre une communication découplée et extensible entre les plugins et le noyau.
+XCore utilise une architecture pilotée par les événements (Event-Driven) pour permettre une communication découplée entre les plugins.
 
-## Concept de base
+## 1. Concept de base
 
-Le système repose sur deux composants majeurs :
-1. **Event Bus** : Pour la diffusion d'informations (Publish/Subscribe).
-2. **Hooks** : Pour permettre aux plugins d'intercepter ou de modifier le comportement d'autres composants.
+Le système repose sur deux types d'interactions majeures :
+- **Event Bus** : Diffusion asynchrone d'informations (Pub/Sub).
+- **Hooks** : Interception asynchrone permettant de modifier des données ou d'interrompre un flux.
 
-## Event Bus
+---
+
+## 2. Event Bus : Publication et Souscription
 
 Le bus d'événements permet d'émettre des messages à travers tout le système.
-
-### Émettre un événement
-
-```python
-from xcore.sdk import TrustedBase
-
-class Plugin(TrustedBase):
-    async def trigger_something(self):
-        # Émission asynchrone
-        await self.ctx.events.emit("user.registered", {
-            "user_id": 123,
-            "email": "alice@example.com"
-        })
-```
 
 ### S'abonner à un événement
 
 Les abonnements se font généralement dans la méthode `on_load`.
 
 ```python
+from xcore.sdk import TrustedBase
+
 class NotificationPlugin(TrustedBase):
     async def on_load(self):
-        # Inscription au bus
-        self.ctx.events.on("user.registered", self.send_welcome_email)
+        # Abonnement standard
+        self.ctx.events.on("user.registered", self.send_email)
 
-    async def send_welcome_email(self, event):
-        user_data = event.data
-        print(f"Envoi d'un email à {user_data['email']}")
+        # Abonnement avec wildcards
+        self.ctx.events.on("order.*", self.log_order_event)
+
+    async def send_email(self, event):
+        user_id = event.data["user_id"]
+        print(f"Envoi d'un email de bienvenue à {user_id}")
+
+    async def log_order_event(self, event):
+        print(f"Action {event.name} sur la commande {event.data['id']}")
 ```
 
-### Priorités et Arrêt de propagation
-
-Vous pouvez contrôler l'ordre d'exécution des handlers.
+### Émettre un événement
 
 ```python
-# Un handler prioritaire (exécuté en premier)
-self.ctx.events.on("order.created", self.check_fraud, priority=100)
+class RegistrationPlugin(TrustedBase):
+    async def register_user(self, user_id):
+        # ... logique métier ...
 
-# Un handler normal (défaut: 50)
-self.ctx.events.on("order.created", self.log_order, priority=50)
+        # Émission asynchrone
+        await self.ctx.events.emit("user.registered", {
+            "user_id": user_id,
+            "ts": 123456789
+        })
+```
 
+---
+
+## 3. Gestion Avancée : Priorités et Flux
+
+### Contrôle de l'ordre d'exécution (Priorité)
+
+Vous pouvez définir une priorité (défaut: 50) pour chaque handler. Les handlers avec une priorité plus élevée (ex: 100) s'exécutent en premier.
+
+```python
+# S'exécute AVANT les autres (priorité 100 > 50)
+self.ctx.events.on("order.payment", self.check_fraud, priority=100)
+
+# S'exécute APRÈS (priorité 10 < 50)
+self.ctx.events.on("order.payment", self.send_invoice, priority=10)
+```
+
+### Arrêt de propagation (`stop`)
+
+Un handler peut décider d'interrompre l'exécution des handlers suivants pour un événement donné.
+
+```python
 async def check_fraud(self, event):
     if is_fraudulent(event.data):
-        # Arrête l'exécution des handlers suivants pour cet événement
-        event.stop()
-        print("Commande frauduleuse bloquée !")
+        print("ALERTE : Fraude détectée. Arrêt de la propagation.")
+        event.stop()  # Les handlers avec une priorité < 100 ne seront PAS appelés
 ```
 
-## Système de Hooks
+---
 
-Les hooks sont des points d'extension spécifiques qui permettent de modifier des données ou de valider des actions avant qu'elles ne soient finalisées.
+## 4. Hooks : Interception et Modification
 
-### Utiliser un Hook
+Les hooks sont des événements particuliers conçus pour être interceptés afin de modifier leur contenu avant que l'action finale ne soit effectuée.
+
+### Utiliser un Hook pour modifier des données
 
 ```python
-class FilterPlugin(TrustedBase):
+class ContentPlugin(TrustedBase):
     async def on_load(self):
-        # Intercepte le hook 'content.processing'
-        self.ctx.hooks.on("content.processing", self.filter_bad_words)
+        # Hook pour modifier le texte avant sauvegarde
+        self.ctx.hooks.on("content.saving", self.censor_text)
 
-    async def filter_bad_words(self, event):
-        # Modifie directement les données de l'événement
+    async def censor_text(self, event):
         text = event.data.get("text", "")
-        event.data["text"] = text.replace("mauvais", "****")
+        # Modification directe de l'objet 'data' de l'événement
+        event.data["text"] = text.replace("gros-mot", "****")
 ```
 
-### Annulation d'Action
+### Annulation d'une action (`cancel`)
 
-Contrairement aux événements simples, un hook peut être annulé, ce qui signale à l'émetteur que l'action ne doit pas être poursuivie.
+Un hook peut également être "annulé", signalant à l'émetteur que l'opération ne doit pas se poursuivre.
 
 ```python
-async def validate_payment(self, event):
-    if event.data["amount"] > 5000:
-        event.cancel(reason="Montant trop élevé sans validation manuelle")
+async def validate_order(self, event):
+    if event.data["total"] > 10000:
+        # Annule l'événement et arrête la propagation
+        event.cancel()
+        print("Commande trop élevée, annulation via Hook.")
 ```
 
-## Événements Système
+---
+
+## 5. Événements Système Natifs
 
 XCore émet plusieurs événements natifs auxquels vos plugins peuvent réagir :
 
@@ -95,14 +120,17 @@ XCore émet plusieurs événements natifs auxquels vos plugins peuvent réagir :
 |-----------|-------------|
 | `xcore.boot` | Le framework démarre. |
 | `xcore.plugins.booted` | Tous les plugins ont été chargés. |
-| `plugin.<name>.loaded` | Un plugin spécifique a été chargé. |
-| `plugin.<name>.reloaded`| Un plugin a été rechargé à chaud. |
-| `service.<name>.ready` | Un service (DB, Cache) est prêt. |
+| `plugin.<nom>.loaded` | Un plugin spécifique a été chargé. |
+| `plugin.<nom>.reloaded`| Un plugin a été rechargé à chaud. |
+| `service.<nom>.ready` | Un service (DB, Cache) est prêt. |
 | `security.violation` | Une violation de sandbox a été détectée. |
 
-## Performances et Bonnes Pratiques
+---
 
-- **Asynchronisme** : Le bus d'événements gère nativement les handlers `async` et synchrones.
-- **Cache de réflexion** : XCore met en cache le type de chaque handler pour éviter l'utilisation coûteuse de `inspect` lors de chaque émission (gain de performance de ~30x).
-- **Éviter les boucles** : Soyez vigilant à ne pas émettre un événement qui déclenche un handler qui émet à nouveau le même événement.
-- **Nettoyage** : Bien que XCore gère le nettoyage automatique au déchargement, il est de bonne pratique d'utiliser `self.ctx.events.unsubscribe` dans `on_unload` si vous créez des abonnements dynamiques.
+## 6. Performances et Optimisations
+
+XCore optimise le bus d'événements pour les charges de production :
+
+- **Cache de réflexion** : Le type de chaque handler (`async` ou `sync`) est mis en cache lors de l'enregistrement pour éviter d'utiliser `inspect` à chaque émission (gain de performance de ~30x).
+- **Parallélisme contrôlé** : Par défaut, `emit` utilise `asyncio.gather` pour exécuter les handlers en parallèle, sauf si l'ordre séquentiel est requis (ex: pour respecter `event.stop()`).
+- **Isolation des exceptions** : Une erreur dans un handler ne fait pas échouer l'émission globale vers les autres handlers.

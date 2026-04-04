@@ -1,84 +1,105 @@
-# Guide du Marketplace
+# XCore Marketplace : Catalogue de Plugins
 
-Le Marketplace XCore est l'endroit centralisé pour découvrir, partager et installer des extensions pour vos applications XCore.
+Le Marketplace XCore est l'endroit centralisé pour découvrir, installer et gérer des plugins tiers pour votre instance XCore.
 
-## Introduction
+---
 
-Le Marketplace permet de :
-- Parcourir des centaines de plugins vérifiés.
-- Installer des extensions en une seule commande.
-- Partager vos propres créations avec la communauté.
-- Bénéficier de mises à jour automatiques.
+## 1. Concepts du Marketplace
 
-## Parcourir le Marketplace
+Le Marketplace agit comme un index public de plugins. Chaque plugin est vérifié et scanné pour garantir sa compatibilité avec XCore.
 
-### Lister les plugins
-Pour voir les plugins disponibles :
+- **Dépôt de Plugins** : Les plugins sont hébergés sur le Marketplace (ZIP) ou sur des plateformes Git (GitHub, GitLab).
+- **Versioning** : Support complet du versioning sémantique pour garantir la stabilité de votre application lors des mises à jour.
+- **Sécurité** : Les plugins téléchargés depuis le Marketplace s'exécutent par défaut en mode `sandboxed`.
+
+---
+
+## 2. Utilisation via la CLI XCore
+
+La CLI est le moyen privilégié pour interagir avec le Marketplace.
+
+### Rechercher des plugins
+
 ```bash
+# Lister tous les plugins disponibles
 xcore marketplace list
-```
 
-### Rechercher une extension
-Vous cherchez une fonctionnalité spécifique (ex: authentification, redis) ?
-```bash
-xcore marketplace search "auth"
-```
+# Rechercher par mot-clé ou catégorie
+xcore marketplace search "authentication"
 
-### Voir les tendances
-Découvrez ce que la communauté utilise le plus :
-```bash
+# Voir les plugins les plus populaires
 xcore marketplace trending
 ```
 
-## Détails et Notation
+### Consulter les détails
 
-Avant d'installer, vous pouvez consulter les détails d'un plugin :
 ```bash
-xcore marketplace show users-auth
+# Afficher les métadonnées complètes d'un plugin
+xcore marketplace show auth_plugin
 ```
 
-Vous y trouverez :
-- La description complète.
-- Les permissions requises.
-- Les dépendances.
-- Le score moyen des utilisateurs.
+### Noter et Commenter
 
-### Noter un plugin
-Si vous appréciez un plugin, faites-le savoir :
 ```bash
-xcore marketplace rate users-auth --score 5
+# Donner une note de 1 à 5 à un plugin
+xcore marketplace rate auth_plugin --score 5
 ```
 
-## Installation de Plugins
+---
 
-L'installation via le marketplace est le mode par défaut de la commande `install`.
+## 3. Installation de Plugins
 
-### Installation simple
+Vous pouvez installer des plugins directement depuis le Marketplace ou depuis des sources externes.
+
+### Installation depuis le Marketplace
+
 ```bash
-xcore plugin install my-awesome-plugin
+# Installation automatique (téléchargement et extraction dans /plugins)
+xcore plugin install auth_plugin
 ```
 
-XCore va :
-1. Télécharger le package depuis le marketplace.
-2. Vérifier l'intégrité.
-3. Résoudre et installer les dépendances nécessaires.
-4. Valider le manifeste.
+### Installation depuis une source Git
 
-## Publication (Aperçu)
+```bash
+# Cloner un dépôt Git directement dans le dossier plugins
+xcore plugin install --source git --url https://github.com/user/my_plugin.git
+```
 
-*Note : La publication nécessite un compte sur le portail développeur XCore.*
+### Installation depuis un fichier ZIP
 
-Pour publier un plugin :
-1. Assurez-vous que votre `plugin.yaml` est complet.
-2. Testez votre plugin en local avec `xcore plugin validate`.
-3. Signez votre plugin si nécessaire.
-4. Utilisez le portail web pour soumettre votre archive ZIP ou lier votre dépôt GitHub.
+```bash
+# Installer depuis une archive locale ou distante
+xcore plugin install --source zip --url https://example.com/plugin.zip
+```
 
-## Sécurité du Marketplace
+---
 
-Chaque plugin soumis au marketplace subit un processus de validation :
-- **Scan Malware** : Analyse des fichiers.
-- **Scan AST** : Détection automatique des patterns de code dangereux.
-- **Vérification de Version** : Compatibilité garantie avec les versions de framework déclarées.
+## 4. Configuration du Client Marketplace
 
-Nous recommandons d'utiliser le **Execution Mode: Sandboxed** pour tout plugin tiers dont vous n'avez pas audité le code source.
+Pour utiliser votre propre index de plugins ou configurer une clé API, modifiez la section `marketplace` de votre fichier `xcore.yaml` :
+
+```yaml
+marketplace:
+  url: "https://marketplace.xcore.dev" # URL de l'API du Marketplace
+  api_key: "${XCORE_MARKETPLACE_KEY}" # Votre clé API (optionnel)
+  timeout: 10                          # Timeout des requêtes en secondes
+  cache_ttl: 300                       # Durée de cache des résultats (secondes)
+```
+
+---
+
+## 5. Publier votre Plugin sur le Marketplace
+
+Si vous souhaitez partager votre plugin avec la communauté :
+
+1. Assurez-vous que votre plugin respecte la structure standard (voir [Guide de création](creating-plugins.md)).
+2. Validez le manifeste avec `xcore plugin validate`.
+3. Soumettez votre plugin via l'interface web du Marketplace ou l'API de publication (en cours de développement).
+
+---
+
+## Bonnes Pratiques
+
+1. **Vérifier les avis** : Avant d'installer un plugin tiers, consultez sa note et ses commentaires sur le Marketplace.
+2. **Utiliser le Sandboxing** : Exécutez toujours les plugins tiers en mode `sandboxed` pour une sécurité maximale.
+3. **Épingler les versions** : Pour vos environnements de production, spécifiez toujours une version exacte lors de l'installation pour éviter les ruptures de compatibilité.

@@ -1,124 +1,188 @@
-# Exemple de Plugin Complet
+# Exemple : Plugin Complet (Complete Plugin CRUD)
 
-Cet exemple présente un plugin de gestion d'utilisateurs complet, illustrant une architecture propre (Modèles, Services, Routes) et l'utilisation intensive des services XCore (DB, Cache).
+Cet exemple complet présente l'implémentation d'un plugin gérant des tâches (Todos) avec intégration de services, routes HTTP et validation de données.
 
-## Structure du Plugin
+---
+
+## 1. Structure du Répertoire
 
 ```text
-plugins/users/
+todo_plugin/
 ├── plugin.yaml
 └── src/
-    ├── __init__.py
-    ├── main.py          # Point d'entrée
-    ├── models.py        # Modèles Pydantic & SQLAlchemy
-    ├── services.py      # Logique métier
-    └── repository.py    # Accès aux données (SDK Repository)
+    └── main.py
 ```
 
-## `plugin.yaml`
+---
+
+## 2. Le Manifeste (`plugin.yaml`)
 
 ```yaml
-name: users
-version: 2.0.0
+name: todo_plugin
+version: 1.0.0
 author: XCore Team
-description: Gestion complète des utilisateurs avec SQL et Cache
-
+description: Plugin CRUD Todo intégrant services, routes et validation
 execution_mode: trusted
-framework_version: ">=2.0"
 entry_point: src/main.py
 
+# Dépendances sur les services SQL et Cache
+requires:
+  - database_service
+  - cache_service
+
+# Permissions requises
 permissions:
-  - resource: "db.*"
-    actions: ["read", "write"]
+  - resource: "db.todos"
+    actions: ["read", "write", "delete"]
     effect: allow
   - resource: "cache.*"
     actions: ["read", "write"]
     effect: allow
-
-env:
-  TOKEN_EXPIRY: "3600"
 ```
 
-## `src/repository.py`
+---
 
-Utilisation du `BaseSyncRepository` du SDK pour l'abstraction SQL.
-
-```python
-from xcore.sdk import BaseSyncRepository
-from .models import UserORM
-
-class UserRepository(BaseSyncRepository[UserORM]):
-    def find_by_email(self, email: str):
-        """Recherche personnalisée par email."""
-        return self.session.query(self.model).filter_by(email=email).first()
-```
-
-## `src/main.py`
+## 3. Le Code Source (`src/main.py`)
 
 ```python
+from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy.orm import declarative_base
 from xcore.sdk import (
     TrustedBase,
-    RoutedPlugin,
     AutoDispatchMixin,
+    RoutedPlugin,
+    BaseAsyncRepository,
     action,
     route,
     validate_payload,
     ok,
     error
 )
-from .services import UserService
-from .models import UserCreate # Modèle Pydantic
 
+# 1. Modèle SQLAlchemy pour la base de données
+Base = declarative_base()
+
+class Todo(Base):
+    __tablename__ = "todos"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    completed = Column(Boolean, default=False)
+
+# 2. Modèles Pydantic pour la validation
+class CreateTodo(BaseModel):
+    title: str
+
+class UpdateTodo(BaseModel):
+    title: str | None = None
+    completed: bool | None = None
+
+# 3. Repository pour l'accès aux données
+class TodoRepository(BaseAsyncRepository[Todo]):
+    pass
+
+# 4. Classe Plugin principale
 class Plugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
-    """Plugin de gestion utilisateur haute performance."""
+    """
+    Plugin Todo complet utilisant le SDK XCore.
+    """
 
-    async def on_load(self):
-        # Initialisation des services Core
+    async def on_load(self) -> None:
+        """Initialisation des services."""
         self.db = self.get_service("db")
         self.cache = self.get_service("cache")
+        self.repo = TodoRepository(Todo)
 
-        # Injection dans la couche de service métier
-        self.user_service = UserService(self.db, self.cache, self.ctx.env)
-        print("✅ Users plugin prêt")
+        # Créer les tables si elles n'existent pas (en développement uniquement)
+        if self.ctx.env == "development":
+             async with self.db.engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
 
-    # --- Actions IPC ---
+    # --- Actions IPC (Inter-Process Communication) ---
 
     @action("create")
-    @validate_payload(UserCreate)
-    async def create_user(self, data: UserCreate):
-        """Action IPC pour créer un utilisateur (validée par Pydantic)."""
-        try:
-            user = await self.user_service.register(data)
-            return ok(user_id=user.id)
-        except Exception as e:
-            return error(str(e), code="registration_failed")
+    @validate_payload(CreateTodo)
+    async def create_todo_ipc(self, data: dict) -> dict:
+        """Crée une nouvelle tâche via IPC."""
+        async with self.db.session() as session:
+            todo = Todo(title=data["title"])
+            await self.repo.create(session, todo)
+            await session.commit()
 
-    @action("get")
-    async def get_user(self, payload: dict):
-        user_id = payload.get("user_id")
-        user = await self.user_service.get_by_id(user_id)
-        return ok(user=user) if user else error("Pas trouvé", code="not_found")
+            # Invalide le cache de la liste des todos
+            await self.cache.delete("todo:list")
 
-    # --- Routes HTTP ---
+            return ok(id=todo.id, title=todo.title)
 
-    @route("/me", method="GET", tags=["auth"])
-    async def get_me(self):
-        """Endpoint HTTP avec instrumentation de tracing."""
-        with self.ctx.tracer.span("api.get_me") as span:
-            # Simule l'utilisateur courant (Alice)
-            span.set_attribute("user", "alice")
-            return {"user": "alice", "status": "active"}
+    # --- Routes HTTP REST (Exposées sur /plugin/todo_plugin/...) ---
 
     @route("/", method="GET")
-    async def list_users(self, page: int = 1):
-        """Liste paginée avec mise en cache."""
-        return await self.user_service.list_paginated(page)
+    async def list_todos(self):
+        """Liste toutes les tâches (avec cache)."""
+        # Tentative de récupération depuis le cache
+        cached = await self.cache.get("todo:list")
+        if cached:
+            return {"todos": cached, "cached": True}
+
+        # Sinon, récupération en DB
+        async with self.db.session() as session:
+            todos = await self.repo.get_all(session)
+            results = [{"id": t.id, "title": t.title, "completed": t.completed} for t in todos]
+
+            # Mise en cache pour 60 secondes
+            await self.cache.set("todo:list", results, ttl=60)
+
+            return {"todos": results, "cached": False}
+
+    @route("/{todo_id}", method="GET")
+    async def get_todo(self, todo_id: int):
+        """Récupère une tâche par son ID."""
+        async with self.db.session() as session:
+            todo = await self.repo.get_by_id(session, todo_id)
+            if not todo:
+                return error("Tâche non trouvée", status_code=404)
+            return {"id": todo.id, "title": todo.title, "completed": todo.completed}
+
+    @route("/{todo_id}", method="DELETE", status_code=204)
+    async def delete_todo(self, todo_id: int):
+        """Supprime une tâche."""
+        async with self.db.session() as session:
+            await self.repo.delete(session, todo_id)
+            await session.commit()
+            await self.cache.delete("todo:list")
+            return None
 ```
 
-## Points clés démontrés
+---
 
-1.  **Repository Pattern** : Abstraction propre de la base de données SQLAlchemy via le SDK.
-2.  **Validation Pydantic** : Utilisation de `@validate_payload` pour sécuriser et typer les entrées.
-3.  **Tracing & Observabilité** : Instrumentation manuelle via `self.ctx.tracer` et les spans.
-4.  **Modularité** : Séparation claire entre transport (main.py), logique (services.py) et données (repository.py).
-5.  **Gestion des Erreurs** : Utilisation systématique de `ok()` et `error()` pour l'IPC.
+## 4. Test de l'Exemple
+
+### Création d'une tâche via IPC
+
+```bash
+curl -X POST http://localhost:8082/plugin/ipc/todo_plugin/create \
+  -H "X-Plugin-Key: change-me-in-production" \
+  -d '{"payload": {"title": "Apprendre XCore"}}'
+
+# Réponse :
+# {"status":"ok","plugin":"todo_plugin","action":"create","result":{"status":"ok","id":1,"title":"Apprendre XCore"}}
+```
+
+### Lecture des tâches via HTTP REST
+
+```bash
+curl http://localhost:8082/plugin/todo_plugin/
+
+# Réponse :
+# {"todos":[{"id":1,"title":"Apprendre XCore","completed":false}],"cached":false}
+```
+
+---
+
+## Points Clés de l'Exemple
+
+✅ **Persistence** : Utilisation du service DB avec le pattern Repository.
+✅ **Caching** : Utilisation du service Cache pour optimiser les requêtes `list`.
+✅ **Validation** : Décorateur `@validate_payload` avec modèles Pydantic.
+✅ **Routage** : Décorateur `@route` pour construire une API REST standard.
+✅ **Cycle de vie** : Initialisation et nettoyage gérés dans `on_load`.

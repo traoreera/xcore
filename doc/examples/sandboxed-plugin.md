@@ -1,105 +1,123 @@
-# Exemple de Plugin Sandboxé
+# Exemple : Plugin en Bac à sable (Sandboxed Plugin)
 
-Cet exemple présente un plugin de traitement d'images sécurisé fonctionnant en mode `sandboxed`. Il illustre l'isolation totale, la liste blanche d'imports et les limites de ressources.
+Le mode `sandboxed` est conçu pour les plugins tiers ou dont vous ne maîtrisez pas le code source. Il garantit une isolation de sécurité maximale.
 
-## Cas d'usage : Processeur d'Images
+---
 
-Ce plugin est idéal pour le mode sandbox car il manipule des fichiers binaires externes potentiellement corrompus et utilise des bibliothèques de traitement d'image complexes.
+## 1. Caractéristiques du mode Sandboxed
 
-## Structure du Plugin
+- **Processus Isolé** : S'exécute dans un sous-processus Python distinct.
+- **FS Guard** : Accès au système de fichiers restreint (défaut: uniquement `data/`).
+- **AST Scan** : Code analysé à la recherche d'imports dangereux (`os`, `sys`, `subprocess`).
+- **Ctypes Blocked** : Accès aux bibliothèques C natives (`libc`, `ctypes`) désactivé.
+- **Communication IPC** : Échange de données via JSON-RPC uniquement.
 
-```text
-plugins/image_processor/
-├── plugin.yaml
-├── src/
-│   └── main.py
-└── data/                # Seul dossier accessible en écriture
-```
+---
 
-## `plugin.yaml`
-
-Le manifeste définit les barrières de sécurité du plugin.
+## 2. Le Manifeste (`plugin.yaml`)
 
 ```yaml
-name: image_processor
+name: risky_calculator
 version: 1.0.0
-author: XCore Team
-description: Traitement d'images sécurisé avec isolation système
-
+author: Third Party Dev
+description: Un plugin de calcul qui peut traiter des données locales
 execution_mode: sandboxed
-framework_version: ">=2.0"
 entry_point: src/main.py
 
-# Liste blanche stricte (AST scanner bloquera tout le reste)
-allowed_imports:
-  - PIL
-  - io
-  - base64
-  - hashlib
-
-# Ressources strictement limitées (OS level via RLIMIT_AS)
-resources:
-  timeout_seconds: 5
-  max_memory_mb: 128
-  rate_limit:
-    calls: 10
-    period_seconds: 60
-
-# Restriction filesystem (Monkey-patching de FilesystemGuard)
+# Politique de sécurité du système de fichiers
 filesystem:
-  allowed_paths: ["data/"]
-  denied_paths: ["src/"]
+  allowed_paths: ["data/"]      # Seul ce dossier est accessible
+  denied_paths: ["src/", "../"] # Blocage explicite des sources et parents
+
+# Limites de ressources matérielles
+resources:
+  max_memory_mb: 64             # RAM maximale avant crash (64 Mo)
+  timeout_seconds: 5            # Temps de réponse maximal par appel (5 s)
 ```
 
-## `src/main.py`
+---
 
-En mode sandbox, le plugin implémente directement le contrat `BasePlugin` sans forcément hériter de `TrustedBase` (qui donne accès à trop de services).
+## 3. Le Code Source (`src/main.py`)
 
 ```python
-import io
-import base64
-from PIL import Image
-from xcore.sdk import ok, error
+import json
+from pathlib import Path
+from xcore.sdk import TrustedBase, ok, error
 
-class Plugin:
-    """Traitement d'image isolé dans un subprocess."""
+class Plugin(TrustedBase):
+    """
+    Plugin Sandboxed démontrant l'isolation FS.
+    """
+
+    async def on_load(self) -> None:
+        """Accès sécurisé au dossier data/."""
+        self.data_dir = Path("data")
+        self.data_dir.mkdir(exist_ok=True)
+        print("✅ Plugin Sandboxed démarré dans son processus isolé.")
 
     async def handle(self, action: str, payload: dict) -> dict:
-        if action == "grayscale":
-            return await self._grayscale(payload)
-        return error(f"Action {action} inconnue ou interdite en sandbox")
+        """
+        Point d'entrée pour les appels IPC.
+        """
+        if action == "save_result":
+            # Sauvegarde autorisée dans le dossier data/
+            result_file = self.data_dir / "last_result.json"
+            result_file.write_text(json.dumps(payload))
+            return ok(msg="Résultat sauvegardé dans le bac à sable.")
 
-    async def _grayscale(self, payload: dict):
-        try:
-            # 1. Lecture sécurisée (image passée en base64)
-            img_data = base64.b64decode(payload["image"])
-            img = Image.open(io.BytesIO(img_data))
+        if action == "read_secrets":
+            # TENTATIVE DE VIOLATION : Lecture hors de data/
+            try:
+                # Tentative d'accès au fichier de config framework (BLOQUÉ par FS Guard)
+                with open("../../xcore.yaml", "r") as f:
+                    content = f.read()
+                return ok(content=content)
+            except PermissionError as e:
+                # Retourne l'erreur de violation sans crasher le framework
+                return error(str(e), code="security_violation")
 
-            # 2. Traitement CPU-bound
-            img = img.convert("L")
+        if action == "execute_os":
+            # TENTATIVE DE VIOLATION : Import de module interdit
+            try:
+                import os # BLOQUÉ par l'Import Hook
+                return ok(msg=f"OS : {os.name}")
+            except (PermissionError, ImportError) as e:
+                return error(str(e), code="security_violation")
 
-            # 3. Écriture dans data/ (seul dossier autorisé par le guard)
-            # Toute tentative hors data/ lèvera une PermissionError
-            img.save("data/last_processed.png")
-
-            # 4. Retour du résultat
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            return ok(
-                image=base64.b64encode(buffered.getvalue()).decode(),
-                size=len(img_data)
-            )
-        except Exception as e:
-            # Les erreurs sont capturées et transmises au canal IPC
-            return error(str(e), code="processing_error")
-
-# Marqueur pour le loader xcore
-Plugin.__protocol__ = True
+        return ok(status="running")
 ```
 
-## Points clés de sécurité démontrés
+---
 
-1.  **Isolation Filesystem** : L'utilisation de `img.save("data/...")` est autorisée. Une tentative comme `img.save("/etc/passwd")` est interceptée par le `FilesystemGuard` et produit un log d'audit critique.
-2.  **Sécurité AST** : L' `ASTScanner` analyse le code avant chargement. L'utilisation de `eval()`, `exec()` ou l'accès à `__globals__` est physiquement impossible.
-3.  **RLIMIT_AS** : Si l'image est trop grande et que la mémoire dépasse 128 Mo, le processus est immédiatement tué par le noyau Linux, protégeant le reste du framework.
-4.  **IPC JSON-RPC** : La communication se fait exclusivement par flux JSON sur `stdin/stdout`, garantissant qu'aucune mémoire n'est partagée.
+## 4. Test de l'Exemple
+
+### Appel d'une action autorisée
+
+```bash
+curl -X POST http://localhost:8082/plugin/ipc/risky_calculator/save_result \
+  -H "X-Plugin-Key: change-me-in-production" \
+  -d '{"payload": {"score": 100}}'
+
+# Réponse :
+# {"status":"ok","plugin":"risky_calculator","action":"save_result","result":{"status":"ok","msg":"Résultat sauvegardé..."}}
+```
+
+### Appel d'une action bloquée (Tentative de violation)
+
+```bash
+curl -X POST http://localhost:8082/plugin/ipc/risky_calculator/read_secrets \
+  -H "X-Plugin-Key: change-me-in-production" \
+  -d '{"payload": {}}'
+
+# Réponse :
+# {"status":"error","plugin":"risky_calculator","action":"read_secrets","result":{"status":"error","msg":"[sandbox] open('../../xcore.yaml') interdit dans le sandbox","code":"security_violation"}}
+```
+
+---
+
+## Points Clés de l'Exemple
+
+✅ **Isolation totale** : Les erreurs de sécurité ne propagent pas de crash au Noyau.
+✅ **FS Guard** : Blocage dynamique des accès fichiers non autorisés.
+✅ **Import Hook** : Blocage des modules système Python critiques.
+✅ **Communication IPC** : Le plugin reçoit uniquement les données JSON dont il a besoin.

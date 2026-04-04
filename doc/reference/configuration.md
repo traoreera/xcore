@@ -1,91 +1,110 @@
-# Configuration Globale
+# Configuration XCore (`xcore.yaml`)
 
-XCore utilise un système de configuration hiérarchique et typé. La source principale est `xcore.yaml`, mais chaque paramètre peut être surchargé par des variables d'environnement.
-
-## Structure de `xcore.yaml`
-
-Le fichier est divisé en sections correspondant aux composants du noyau (`XcoreConfig`).
-
-### Section `app` (AppConfig)
-Configuration générale de l'application.
-
-- `name` : Nom de l'application (défaut: `xcore-app`).
-- `env` : Environnement (`development`, `staging`, `production`).
-- `debug` : Active le mode debug de FastAPI (défaut: `false`).
-- `secret_key` : Clé de chiffrement (obligatoire en prod).
-- `plugin_prefix` : Préfixe d'URL pour les plugins (défaut: `/plugin`).
-
-### Section `plugins` (PluginConfig)
-Configuration du `PluginSupervisor`.
-
-- `directory` : Répertoire de scan des plugins (défaut: `./plugins`).
-- `strict_trusted` : Si `true`, refuse de charger un plugin Trusted non signé.
-- `interval` : Intervalle de scan pour le hot-reload (secondes).
-- `entry_point` : Nom du fichier d'entrée par défaut (défaut: `src/main.py`).
-
-### Section `services` (ServicesConfig)
-Configuration des bases de données, du cache et du scheduler.
-
-#### `databases`
-Dictionnaire de configurations de bases de données (SQL ou NoSQL).
-- `url` : Chaîne de connexion SQLAlchemy ou Redis.
-- `pool_size` : Taille du pool de connexions (SQL).
-
-#### `cache`
-- `backend` : `memory` ou `redis`.
-- `url` : Requis si backend est `redis`.
-- `ttl` : Durée de vie par défaut (secondes).
-
-### Section `observability` (ObservabilityConfig)
-Journalisation, métriques et traces.
-
-- `logging` : Niveau (`INFO`, `DEBUG`), format et fichier de sortie.
-- `metrics` : Activation et backend (`prometheus`, `statsd`, `memory`).
-- `tracing` : Activation et backend (`jaeger`, `opentelemetry`, `noop`).
-
-### Section `security` (SecurityConfig)
-Paramètres globaux du bac à sable.
-
-- `allowed_imports` / `forbidden_imports` : Listes globales pour l' `ASTScanner`.
-- `rate_limit_default` : Limite appliquée aux plugins ne déclarant pas la leur.
+Le fichier `xcore.yaml` est le cerveau du framework. Il centralise toutes les configurations de l'application, des services et des plugins.
 
 ---
 
-## Surcharge par Variables d'Environnement
+## 1. Structure Globale
 
-Le framework supporte la surcharge dynamique via le préfixe `XCORE__` suivi du chemin de la clé en majuscules avec un double underscore (`__`) comme séparateur.
+```yaml
+app:
+  name: "mon-app-xcore"
+  env: "development" # development | staging | production
+  debug: false
+  secret_key: "change-me-in-production"
+  plugin_prefix: "/plugin" # Préfixe racine des routes HTTP
+  plugin_tags: ["XCore"] # Tags OpenAPI globaux
 
-### Règles de conversion :
-- Les chaînes `"true"`, `"1"`, `"yes"` deviennent `True`.
-- Les chaînes `"false"`, `"0"`, `"no"` deviennent `False`.
-- Les nombres sont automatiquement convertis en entiers.
+plugins:
+  directory: "./plugins" # Répertoire de stockage des plugins
+  secret_key: "change-me-in-production"
+  strict_trusted: true # Refuse les plugins non signés en production
+  interval: 2 # Intervalle du watcher en secondes
+  entry_point: "src/main.py" # Point d'entrée par défaut
 
-### Exemples :
+services:
+  # Configuration des bases de données SQL/NoSQL
+  databases:
+    default:
+      type: "sqlite" # sqlite | postgresql | mysql
+      url: "sqlite:///./xcore.db"
+      pool_size: 5
+      max_overflow: 10
+      echo: false
 
-| Variable d'environnement | Clé YAML correspondante |
-|--------------------------|-------------------------|
-| `XCORE__APP__ENV` | `app.env` |
-| `XCORE__SERVICES__CACHE__BACKEND` | `services.cache.backend` |
-| `XCORE__SERVICES__DATABASES__DEFAULT__URL` | `services.databases.default.url` |
-| `XCORE__PLUGINS__STRICT_TRUSTED` | `plugins.strict_trusted` |
+  # Configuration du cache (Mémoire ou Redis)
+  cache:
+    backend: "memory" # memory | redis
+    ttl: 300
+    max_size: 1000
+    url: "redis://localhost:6379/0" # Requis si backend=redis
+
+  # Configuration du planificateur de tâches
+  scheduler:
+    enabled: true
+    backend: "memory" # memory | redis | database
+    timezone: "UTC"
+
+  # Extensions (Services personnalisés tiers)
+  extensions:
+    mon_service_custom:
+      api_key: "${CUSTOM_API_KEY}"
+      timeout: 30
+
+observability:
+  logging:
+    level: "INFO" # DEBUG, INFO, WARNING, ERROR
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    file: "logs/xcore.log"
+
+  metrics:
+    enabled: false
+    backend: "memory" # memory | prometheus | statsd
+    prefix: "xcore"
+
+  tracing:
+    enabled: false
+    backend: "noop" # noop | opentelemetry | jaeger
+    service_name: "xcore"
+
+security:
+  allowed_imports: ["math", "json", "time"] # Imports autorisés en sandbox
+  forbidden_imports: ["os", "sys", "subprocess"] # Imports bloqués par l'AST
+  rate_limit_default:
+    calls: 100
+    period_seconds: 60
+
+marketplace:
+  url: "https://marketplace.xcore.dev"
+  api_key: ""
+  timeout: 10
+  cache_ttl: 300
+```
 
 ---
 
-## Le Manifeste du Plugin (`plugin.yaml`)
+## 2. Variables d'Environnement (Interpolation)
 
-Chaque plugin définit ses propres métadonnées et contraintes d'exécution.
+XCore supporte l'injection de variables d'environnement directement dans le fichier YAML via la syntaxe `${VAR_NAME}`.
 
-### Section `resources`
-- `timeout_seconds` : Temps maximum pour un appel IPC (Sandbox).
-- `max_memory_mb` : Limite mémoire via `RLIMIT_AS`.
-- `rate_limit` : Bloc `calls` et `period_seconds`.
+```yaml
+app:
+  secret_key: "${APP_SECRET_KEY}"
+```
 
-### Section `permissions`
-Définit les accès autorisés ou refusés.
-- `resource` : Pattern glob (ex: `cache.user_*`).
-- `actions` : Liste (`read`, `write`, `execute`, `*`).
-- `effect` : `allow` ou `deny`.
+### Surcharge par variables d'environnement
 
-### Section `filesystem` (Sandbox uniquement)
-- `allowed_paths` : Chemins autorisés (relatifs au plugin). Défaut : `["data/"]`.
-- `denied_paths` : Chemins interdits. Défaut : `["src/"]`.
+Toutes les clés du fichier YAML peuvent être surchargées via des variables d'environnement préfixées par `XCORE__` (double soulignement pour les niveaux d'imbrication).
+
+- `XCORE__APP__ENV=production` surcharge `app.env`.
+- `XCORE__SERVICES__CACHE__BACKEND=redis` surcharge `services.cache.backend`.
+
+---
+
+## 3. Valeurs par Défaut
+
+XCore est conçu pour fonctionner sans configuration (Zéro-Config) en utilisant des valeurs par défaut sécurisées :
+- **DB** : SQLite locale (`./xcore.db`).
+- **Cache** : En mémoire (`memory`).
+- **Logs** : Niveau `INFO` vers la sortie standard.
+- **Plugins** : Dossier `./plugins`.

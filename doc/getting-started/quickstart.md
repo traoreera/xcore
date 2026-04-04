@@ -1,15 +1,15 @@
-# Quickstart Guide
+# Guide de Démarrage Rapide
 
-Get up and running with XCore in 5 minutes. This guide will walk you through creating your first plugin and making your first API call.
+Apprenez à utiliser XCore en moins de 5 minutes. Ce guide vous accompagne dans la création de votre premier plugin et l'exécution de votre première action.
 
-## Step 1: Start the Server
+## Étape 1 : Démarrer le serveur XCore
 
 ```bash
 cd xcore
 poetry run uvicorn app:app --reload --port 8082
 ```
 
-You should see:
+Si tout est correct, vous verrez :
 ```
 INFO:     Started server process [xxxxx]
 INFO:     Waiting for application startup.
@@ -17,21 +17,21 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8082
 ```
 
-## Step 2: Create Your First Plugin
+## Étape 2 : Créer votre premier plugin
 
-Create a simple "Hello World" plugin:
+Créez un plugin simple nommé "compteur" qui utilise le service de cache pour compter les appels.
 
 ```bash
-mkdir -p plugins/hello_world/src
+mkdir -p plugins/compteur/src
 ```
 
-Create `plugins/hello_world/plugin.yaml`:
+Créez le manifeste `plugins/compteur/plugin.yaml` :
 
 ```yaml
-name: hello_world
+name: compteur
 version: 1.0.0
-author: Your Name
-description: A simple hello world plugin
+author: Votre Nom
+description: Un plugin qui compte les appels via le service de cache
 execution_mode: trusted
 framework_version: ">=2.0"
 entry_point: src/main.py
@@ -45,216 +45,104 @@ resources:
   timeout_seconds: 10
 ```
 
-Create `plugins/hello_world/src/main.py`:
+Créez le code Python `plugins/compteur/src/main.py` :
 
 ```python
-from xcore.sdk import TrustedBase, ok, error
+from xcore.sdk import (
+    TrustedBase,
+    AutoDispatchMixin,
+    RoutedPlugin,
+    action,
+    route,
+    ok,
+    error
+)
 
-
-class Plugin(TrustedBase):
-    """Hello World plugin demonstrating XCore basics."""
+class Plugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
+    """Plugin de comptage démontrant les bases de XCore."""
 
     async def on_load(self) -> None:
-        """Called when plugin is loaded."""
-        print("✅ Hello World plugin loaded!")
-
-    async def on_unload(self) -> None:
-        """Called when plugin is unloaded."""
-        print("👋 Hello World plugin unloaded!")
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        """Handle incoming action calls."""
-
-        if action == "hello":
-            name = payload.get("name", "World")
-            return ok(message=f"Hello, {name}!")
-
-        if action == "greet":
-            name = payload.get("name", "Guest")
-            language = payload.get("language", "en")
-
-            greetings = {
-                "en": f"Hello, {name}!",
-                "fr": f"Bonjour, {name}!",
-                "es": f"¡Hola, {name}!",
-                "de": f"Hallo, {name}!",
-            }
-
-            return ok(
-                message=greetings.get(language, greetings["en"]),
-                language=language
-            )
-
-        return error(f"Unknown action: {action}", code="unknown_action")
-```
-
-## Step 3: Call Your Plugin
-
-The plugin automatically loads. Now let's call it:
-
-### Using cURL
-
-```bash
-# Simple hello
-curl -X POST http://localhost:8082/app/hello_world/hello \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Alice"}'
-
-# Response:
-# {"status":"ok","message":"Hello, Alice!"}
-
-# Greet with language
-curl -X POST http://localhost:8082/app/hello_world/greet \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Bob", "language": "fr"}'
-
-# Response:
-# {"status":"ok","message":"Bonjour, Bob!","language":"fr"}
-```
-
-### Using Python
-
-```python
-import httpx
-
-async def call_plugin():
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:8082/app/hello_world/hello",
-            json={"name": "Alice"}
-        )
-        print(response.json())
-        # {'status': 'ok', 'message': 'Hello, Alice!'}
-
-# Run with asyncio
-import asyncio
-asyncio.run(call_plugin())
-```
-
-## Step 4: Add HTTP Routes
-
-Let's expose a REST API endpoint:
-
-Update `plugins/hello_world/src/main.py`:
-
-```python
-from fastapi import APIRouter
-from xcore.sdk import TrustedBase, ok, error
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        print("✅ Hello World plugin loaded!")
-
-    def get_router(self) -> APIRouter:
-        """Define custom HTTP routes."""
-        router = APIRouter(prefix="/hello", tags=["hello"])
-
-        @router.get("/")
-        async def hello_root():
-            return {"message": "Hello World API"}
-
-        @router.get("/{name}")
-        async def hello_name(name: str):
-            return {"message": f"Hello, {name}!"}
-
-        @router.post("/greet")
-        async def greet(data: dict):
-            name = data.get("name", "Guest")
-            return {"message": f"Hello, {name}!"}
-
-        return router
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "hello":
-            return ok(message="Hello from IPC!")
-        return error("Unknown action")
-```
-
-Now test the HTTP routes:
-
-```bash
-# GET endpoint
-curl http://localhost:8082/plugins/hello_world/hello/Alice
-# {"message":"Hello, Alice!"}
-
-# POST endpoint
-curl -X POST http://localhost:8082/plugins/hello_world/hello/greet \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Charlie"}'
-# {"message":"Hello, Charlie!"}
-```
-
-## Step 5: Use Services
-
-Let's use the cache service:
-
-Update `plugins/hello_world/src/main.py`:
-
-```python
-from fastapi import APIRouter
-from xcore.sdk import TrustedBase, ok
-import time
-
-
-class Plugin(TrustedBase):
-
-    async def on_load(self) -> None:
-        # Get cache service
+        """Appelé lors du chargement du plugin."""
         self.cache = self.get_service("cache")
-        print("✅ Hello World plugin loaded with cache access!")
+        print("✅ Plugin Compteur chargé avec succès !")
 
-    def get_router(self) -> APIRouter:
-        router = APIRouter(prefix="/hello", tags=["hello"])
+    @action("increment")
+    async def increment_ipc(self, payload: dict) -> dict:
+        """Action IPC (appelable par d'autres plugins ou CLI)."""
+        key = payload.get("key", "default_counter")
 
-        @router.get("/cached-time")
-        async def cached_time():
-            """Returns cached current time."""
-            # Try to get from cache
-            cached = await self.cache.get("current_time")
-            if cached:
-                return {"time": cached, "cached": True}
+        # Récupère la valeur actuelle (0 si absent)
+        val = await self.cache.get(f"count:{key}") or 0
+        new_val = val + 1
 
-            # Compute and cache
-            current = time.strftime("%Y-%m-%d %H:%M:%S")
-            await self.cache.set("current_time", current, ttl=60)
-            return {"time": current, "cached": False}
+        # Sauvegarde la nouvelle valeur
+        await self.cache.set(f"count:{key}", new_val)
 
-        return router
+        return ok(counter=new_val, key=key)
 
-    async def handle(self, action: str, payload: dict) -> dict:
-        if action == "cache_test":
-            await self.cache.set("test_key", "test_value", ttl=300)
-            value = await self.cache.get("test_key")
-            return ok(cached_value=value)
-        return ok()
+    @route("/valeur/{key}", method="GET")
+    async def get_valeur_http(self, key: str):
+        """Route HTTP (exposée sur /plugin/compteur/valeur/{key})."""
+        val = await self.cache.get(f"count:{key}") or 0
+        return {"key": key, "valeur": val}
 ```
 
-Test the cache:
+## Étape 3 : Tester le plugin
+
+Le plugin est automatiquement détecté et chargé par XCore. Testez-le immédiatement via l'API IPC et l'API HTTP.
+
+### Test via l'API IPC (JSON sur HTTP)
+
+XCore expose une API système pour appeler les actions des plugins.
 
 ```bash
-# First call - not cached
-curl http://localhost:8082/plugins/hello_world/hello/cached-time
-# {"time":"2024-01-15 14:30:00","cached":false}
+# Incrémenter le compteur 'test_1'
+curl -X POST http://localhost:8082/plugin/ipc/compteur/increment \
+  -H "Content-Type: application/json" \
+  -H "X-Plugin-Key: change-me-in-production" \
+  -d '{"payload": {"key": "test_1"}}'
 
-# Second call - cached
-curl http://localhost:8082/plugins/hello_world/hello/cached-time
-# {"time":"2024-01-15 14:30:00","cached":true}
+# Réponse :
+# {"status":"ok","plugin":"compteur","action":"increment","result":{"status":"ok","counter":1,"key":"test_1"}}
 ```
 
-## Summary
+### Test via la route HTTP personnalisée
 
-You've learned:
+Les plugins Trusted peuvent exposer leurs propres endpoints REST.
 
-✅ How to create a basic XCore plugin
-✅ How to expose IPC actions (handle method)
-✅ How to add custom HTTP routes (get_router method)
-✅ How to access services (cache, database, etc.)
+```bash
+# Consulter la valeur actuelle via la route HTTP du plugin
+curl http://localhost:8082/plugin/compteur/valeur/test_1
 
-## What's Next?
+# Réponse :
+# {"key":"test_1","valeur":1}
+```
 
-- [Complete Plugin Tutorial](../guides/creating-plugins.md)
-- [Working with Services](../guides/services.md)
-- [Event System](../guides/events.md)
-- [Security Best Practices](../guides/security.md)
+## Étape 4 : Utiliser la CLI XCore
+
+Vous pouvez également interagir avec vos plugins via l'outil en ligne de commande.
+
+```bash
+# Lister les plugins chargés
+poetry run xcore plugin list
+
+# Vérifier la santé du plugin
+poetry run xcore plugin health
+```
+
+## Résumé des concepts clés
+
+Dans ce guide, vous avez appris à :
+
+✅ **Créer un manifeste** (`plugin.yaml`) pour déclarer votre plugin.
+✅ **Utiliser les mixins** (`AutoDispatchMixin`, `RoutedPlugin`) pour simplifier le code.
+✅ **Déclarer des actions IPC** avec le décorateur `@action`.
+✅ **Déclarer des routes HTTP** avec le décorateur `@route`.
+✅ **Accéder aux services partagés** (ici, le cache) via `self.get_service()`.
+
+## Prochaines étapes
+
+- [En savoir plus sur la création de plugins](../guides/creating-plugins.md)
+- [Découvrir tous les services disponibles](../guides/services.md)
+- [Comprendre le système d'événements](../guides/events.md)
+- [Sécuriser vos plugins avec le Sandboxing](../guides/security.md)

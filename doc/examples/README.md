@@ -1,48 +1,34 @@
-# Exemples de Plugins
+# Exemples XCore
 
-Découvrez des exemples concrets pour apprendre à développer avec XCore.
-
-## Catalogue d'exemples
-
-Les exemples suivants sont disponibles pour illustrer les différentes facettes du framework :
-
-1.  **[Basic Plugin](basic-plugin.md)** : Un plugin minimaliste pour comprendre les bases (cycle de vie, actions simple).
-2.  **[Complete Plugin](complete-plugin.md)** : Un exemple exhaustif utilisant la base de données, le cache, les événements et les routes HTTP.
-3.  **[Trusted Plugin](trusted-plugin.md)** : Un plugin s'exécutant dans le processus principal avec un accès complet aux services.
-4.  **[Sandboxed Plugin](sandboxed-plugin.md)** : Un plugin isolé dans un sous-processus avec des restrictions de sécurité et de ressources.
-
-## Structure recommandée
-
-Pour tous vos plugins, nous recommandons de suivre cette structure de dossiers :
-
-```text
-my_plugin/
-├── plugin.yaml          # Manifeste du plugin
-├── plugin.sig           # Signature (pour le mode Trusted strict)
-├── requirements.txt     # Dépendances Python (si non incluses dans le noyau)
-├── data/                # Données locales (seul dossier accessible en Sandbox)
-└── src/                 # Code source
-    ├── __init__.py
-    ├── main.py          # Point d'entrée défini dans plugin.yaml
-    ├── models.py        # Modèles Pydantic ou SQLAlchemy
-    ├── services.py      # Logique métier interne
-    └── utils.py         # Fonctions utilitaires
-```
-
-## Bonnes pratiques illustrées
-
-Dans ces exemples, vous trouverez l'application des principes suivants :
-
--   **Validation forte** via Pydantic pour toutes les entrées.
--   **Gestion d'erreurs standardisée** utilisant les helpers `ok()` et `error()`.
--   **Utilisation asynchrone** systématique pour ne pas bloquer l'event loop.
--   **Découplage** via le bus d'événements pour la communication inter-plugins.
--   **Observabilité** via l'injection de logs et de métriques.
+Cette section contient des exemples concrets pour vous aider à démarrer rapidement avec XCore. Chaque exemple est conçu pour illustrer une fonctionnalité spécifique du framework.
 
 ---
 
-### Vous ne trouvez pas ce que vous cherchez ?
+## 1. Exemples de Plugins
 
--   Consultez le **[Guide de création de plugins](../guides/creating-plugins.md)** pour un tutoriel pas à pas.
--   Référez-vous au **[SDK Reference](../reference/sdk.md)** pour la liste complète des APIs.
--   Visitez le **[Marketplace](../guides/marketplace.md)** pour voir des plugins réels publiés par la communauté.
+Ces guides pas-à-pas vous montrent comment construire différents types de plugins :
+
+- **[Plugin de Base](basic-plugin.md)** : Structure minimale et point d'entrée `handle()`.
+- **[Plugin Complet (CRUD)](complete-plugin.md)** : Utilisation de la base de données, du cache, des routes HTTP et de la validation Pydantic.
+- **[Plugin Trusted](trusted-plugin.md)** : Accès total aux services et intégration avancée pour les plugins internes.
+- **[Plugin Sandboxed](sandboxed-plugin.md)** : Démonstration de l'isolation de sécurité et du blocage des accès non autorisés (FS Guard, AST).
+
+---
+
+## 2. Exemples de Services
+
+- **[Service de Cache](../guides/services.md#3-service-de-cache-cache)** : Utilisation de Redis et de la mémoire.
+- **[Service SQL](../guides/services.md#2-service-de-base-de-donnees-db)** : Pattern Repository et sessions asynchrones.
+- **[Service Scheduler](../guides/services.md#4-service-de-planification-scheduler)** : Tâches de fond et jobs Cron.
+
+---
+
+## 3. Guide Pratique : "Créer un plugin de A à Z"
+
+Si vous débutez, nous vous recommandons de suivre le **[Guide de démarrage rapide](../getting-started/quickstart.md)** qui vous accompagne dans la création de votre premier plugin interactif.
+
+---
+
+## 4. Partagez vos Exemples !
+
+Vous avez construit un plugin génial ? Proposez-le à la communauté via une Pull Request sur le dépôt officiel ou publiez-le sur le **[Marketplace XCore](../guides/marketplace.md)**.
