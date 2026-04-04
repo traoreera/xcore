@@ -17,40 +17,13 @@ from ..permissions.engine import PermissionDenied, PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
 from .loader import PluginLoader
 from .middleware import Middleware, MiddlewarePipeline
+from .middleware_registry import MiddlewareRegistry
+from .middlewares.permissions import PermissionMiddleware
+from .middlewares.ratelimit import RateLimitMiddleware
 from .middlewares.retry import RetryMiddleware
 from .middlewares.tracing import TracingMiddleware
 
 logger = logging.getLogger("xcore.runtime.supervisor")
-
-
-class RateLimitMiddleware(Middleware):
-    def __init__(self, rate):
-        self._rate = rate
-
-    async def __call__(
-        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
-    ):
-        try:
-            self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
-        return await next_call(plugin_name, action, payload, **kwargs)
-
-
-class PermissionMiddleware(Middleware):
-    def __init__(self, permissions):
-        self._permissions = permissions
-
-    async def __call__(
-        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
-    ):
-        resource = kwargs.get("resource") or f"{action}"
-        try:
-            self._permissions.check(plugin_name, resource, "execute")
-        except PermissionDenied as e:
-            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
-            return {"status": "error", "msg": str(e), "code": "permission_denied"}
-        return await next_call(plugin_name, action, payload, **kwargs)
 
 
 class PluginSupervisor:
@@ -92,6 +65,21 @@ class PluginSupervisor:
         self._metrics = metrics
         self._tracer = tracer
         self._health = health
+        self._middleware_registry = MiddlewareRegistry()
+        self._setup_default_middlewares()
+
+    def _setup_default_middlewares(self) -> None:
+        """Registers default middleware factories."""
+        self._middleware_registry.register(
+            "tracing", lambda ctx: TracingMiddleware(ctx.get("tracer"), ctx.get("metrics"))
+        )
+        self._middleware_registry.register(
+            "rate_limit", lambda ctx: RateLimitMiddleware(ctx.get("rate"))
+        )
+        self._middleware_registry.register(
+            "permissions", lambda ctx: PermissionMiddleware(ctx.get("permissions"))
+        )
+        self._middleware_registry.register("retry", lambda _: RetryMiddleware())
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
@@ -110,6 +98,9 @@ class PluginSupervisor:
             hooks=self._hooks,
             registry=self._registry,
             caller=lambda name, action, payload: self.call(name, action, payload),
+            metrics=self._metrics,
+            tracer=self._tracer,
+            health=self._health,
         )
         report = await self._loader.load_all()
         logger.info(
@@ -128,15 +119,17 @@ class PluginSupervisor:
         # Note: L'enregistrement des permissions, rate limits et registry
         # est maintenant géré de manière réactive via _on_plugin_services_registered
 
-        # Initialisation du pipeline de middlewares
+        # Initialisation du pipeline de middlewares via le registry
         # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
-        self._pipeline = MiddlewarePipeline(
-            middlewares=[
-                TracingMiddleware(self._tracer, self._metrics),
-                RateLimitMiddleware(self._rate),
-                PermissionMiddleware(self._permissions),
-                RetryMiddleware(),
-            ],
+        mw_context = {
+            "tracer": self._tracer,
+            "metrics": self._metrics,
+            "rate": self._rate,
+            "permissions": self._permissions,
+        }
+        self._pipeline = self._middleware_registry.create_pipeline(
+            names=["tracing", "rate_limit", "permissions", "retry"],
+            context=mw_context,
             final_handler=self._dispatch,
         )
 

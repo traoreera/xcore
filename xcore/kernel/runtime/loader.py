@@ -55,6 +55,9 @@ class PluginLoader:
         hooks=None,
         registry=None,
         caller=None,
+        metrics=None,
+        tracer=None,
+        health=None,
     ) -> None:
         from ...kernel.api.contract import ExecutionMode
 
@@ -64,6 +67,9 @@ class PluginLoader:
         self._hooks = hooks
         self._registry = registry
         self._caller = caller
+        self._metrics = metrics
+        self._tracer = tracer
+        self._health = health
 
         # handlers: name -> PluginHandler (Trusted or Sandboxed)
         self._handlers: dict[str, PluginHandler] = {}
