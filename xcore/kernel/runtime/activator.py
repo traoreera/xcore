@@ -68,6 +68,9 @@ class TrustedActivator(PluginActivator):
             hooks=loader._hooks,
             registry=loader._registry,
             caller=loader._caller,
+            metrics=loader._metrics,
+            tracer=loader._tracer,
+            health=loader._health,
         )
         await lm.start()
         return lm

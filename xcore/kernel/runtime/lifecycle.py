@@ -46,17 +46,6 @@ class LifecycleManager:
         await lm.unload()```
     """
 
-    # Liste des clés de services protégées (ne peuvent pas être écrasées par un plugin)
-    PROTECTED_SERVICES = {
-        "db",
-        "cache",
-        "scheduler",
-        "events",
-        "hooks",
-        "database",
-        "extensions",
-    }
-
     def __init__(
         self,
         manifest,  # PluginManifest
@@ -180,6 +169,7 @@ class LifecycleManager:
             metrics=self._metrics,
             tracer=self._tracer,
             health=self._health,
+            registry=self._registry,
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -356,22 +346,15 @@ class LifecycleManager:
         if not instance_services:
             return self._services
 
-        # Vérification des collisions avec les services protégés
-        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
-        if collisions:
-            raise ValueError(
-                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-                f"par le noyau : {collisions}"
-            )
-
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit
-        # la source de vérité.
+        # la source de vérité et assure la protection des services noyau.
         if self._registry:
             for name, obj in instance_services.items():
                 svc_meta = manifest_services_config.get(name, {})
                 scope = svc_meta.get("scope", "public")
 
+                # register_service lèvera une PermissionError si le service est protégé
                 self._registry.register_service(
                     plugin_name=self.manifest.name,
                     service_name=name,
@@ -381,6 +364,16 @@ class LifecycleManager:
                         "scope": scope,
                         "description": svc_meta.get("description", ""),
                     },
+                )
+        else:
+            # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
+            # On définit une liste minimale de services à protéger
+            protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
+            collisions = set(instance_services.keys()) & protected
+            if collisions:
+                raise PermissionError(
+                    f"[{self.manifest.name}] Tentative d'écrasement de services "
+                    f"noyau sans registre : {collisions}"
                 )
 
         # Émet un événement pour signaler que les services sont prêts

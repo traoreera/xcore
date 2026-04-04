@@ -38,9 +38,24 @@ class PluginContext:
     metrics: Any = None  # MetricsRegistry
     tracer: Any = None  # Tracer
     health: Any = None  # HealthChecker
+    registry: Any = None  # PluginRegistry
 
     def get_service(self, name: str) -> Any:
-        """Accès sécurisé à un service avec message d'erreur clair."""
+        """
+        Accès sécurisé à un service avec vérification de scoping via le registry
+        si disponible, sinon via le container partagé.
+        """
+        # Priorité au registry pour le respect des scopes (public/private/protected)
+        if self.registry:
+            try:
+                return self.registry.get_service(name, requester=self.name)
+            except (KeyError, PermissionError) as e:
+                # Si non trouvé ou refusé par le registry, on tente le container
+                # (Certains services noyau ne sont pas forcément dans le registry)
+                if isinstance(e, PermissionError):
+                    raise
+
+        # Fallback sur le container direct
         svc = self.services.get(name)
         if svc is None:
             raise KeyError(

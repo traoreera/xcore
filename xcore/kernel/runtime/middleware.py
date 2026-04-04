@@ -87,6 +87,10 @@ class MiddlewarePipeline:
             self._middlewares.insert(0, middleware)
         else:
             self._middlewares.append(middleware)
+        # Déclenche une recompilation immédiate de la chaîne interne
+        self._compiled_chain = self._compile_pipeline(
+            self._middlewares, self._final_handler
+        )
 
     def get_middlewares(self) -> list[Middleware]:
         """Retourne la liste ordonnée des middlewares actifs."""
