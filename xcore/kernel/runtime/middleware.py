@@ -24,8 +24,7 @@ class Middleware(ABC):
         action: str,
         payload: dict,
         next_call: Callable,
-        *,
-        handler: PluginHandler | None = None,
+        handler: PluginHandler | None,
         **kwargs,
     ) -> dict:
         """Exécute la logique du middleware."""
@@ -67,14 +66,9 @@ class MiddlewarePipeline:
                     h: PluginHandler | None,
                     **kw,
                 ) -> dict:
-                    return await m(
-                        p_name,
-                        act,
-                        pay,
-                        lambda pn, a, pl, **k: next_step(pn, a, pl, h, **k),
-                        handler=h,
-                        **kw,
-                    )
+                    # On passe 'next_step' et 'h' directement pour éviter
+                    # la création d'une lambda (closure) à chaque appel.
+                    return await m(p_name, act, pay, next_step, h, **kw)
 
                 return _step
 

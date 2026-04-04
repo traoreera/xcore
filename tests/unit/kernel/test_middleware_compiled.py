@@ -8,16 +8,16 @@ class MockMiddleware(Middleware):
         self.name = name
         self.calls = []
 
-    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+    async def __call__(self, plugin_name, action, payload, next_call, handler, **kwargs):
         self.calls.append((plugin_name, action, payload))
-        return await next_call(plugin_name, action, payload, **kwargs)
+        return await next_call(plugin_name, action, payload, handler, **kwargs)
 
 @pytest.mark.asyncio
 async def test_compiled_pipeline_execution_order():
     mw1 = MockMiddleware("mw1")
     mw2 = MockMiddleware("mw2")
 
-    async def final_handler(p, a, pay, *, handler=None, **kwargs):
+    async def final_handler(p, a, pay, handler, **kwargs):
         return {"status": "ok", "handler_passed": handler is not None}
 
     handler = MagicMock()
@@ -35,12 +35,12 @@ async def test_compiled_pipeline_handler_propagation():
     received_handlers = []
 
     class HandlerTrackingMiddleware(Middleware):
-        async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+        async def __call__(self, plugin_name, action, payload, next_call, handler, **kwargs):
             received_handlers.append(handler)
-            return await next_call(plugin_name, action, payload, **kwargs)
+            return await next_call(plugin_name, action, payload, handler, **kwargs)
 
     mw = HandlerTrackingMiddleware()
-    async def final_handler(p, a, pay, *, handler=None, **kwargs):
+    async def final_handler(p, a, pay, handler, **kwargs):
         received_handlers.append(handler)
         return {"status": "ok"}
 

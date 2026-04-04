@@ -34,8 +34,7 @@ class TracingMiddleware(Middleware):
         action: str,
         payload: dict,
         next_call: Callable,
-        *,
-        handler=None,
+        handler,
         **kwargs,
     ) -> dict:
         t0 = time.monotonic()
@@ -48,14 +47,14 @@ class TracingMiddleware(Middleware):
             async with self._tracer.span(f"{plugin_name}.{action}") as span:
                 span.set_attribute("plugin", plugin_name)
                 span.set_attribute("action", action)
-                result = await next_call(plugin_name, action, payload, **kwargs)
+                result = await next_call(plugin_name, action, payload, handler, **kwargs)
 
                 if isinstance(result, dict) and result.get("status") == "error":
                     span.set_status("error")
                     if self._metrics:
                         self._c_errors.inc()
         else:
-            result = await next_call(plugin_name, action, payload, **kwargs)
+            result = await next_call(plugin_name, action, payload, handler, **kwargs)
             if isinstance(result, dict) and result.get("status") == "error":
                 if self._metrics:
                     self._c_errors.inc()

@@ -26,6 +26,36 @@ from .middlewares.tracing import TracingMiddleware
 logger = logging.getLogger("xcore.runtime.supervisor")
 
 
+class RateLimitMiddleware(Middleware):
+    def __init__(self, rate):
+        self._rate = rate
+
+    async def __call__(
+        self, plugin_name, action, payload, next_call, handler, **kwargs
+    ):
+        try:
+            self._rate.check(plugin_name)
+        except RateLimitExceeded as e:
+            return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
+        return await next_call(plugin_name, action, payload, handler, **kwargs)
+
+
+class PermissionMiddleware(Middleware):
+    def __init__(self, permissions):
+        self._permissions = permissions
+
+    async def __call__(
+        self, plugin_name, action, payload, next_call, handler, **kwargs
+    ):
+        resource = kwargs.get("resource") or f"{action}"
+        try:
+            self._permissions.check(plugin_name, resource, "execute")
+        except PermissionDenied as e:
+            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
+            return {"status": "error", "msg": str(e), "code": "permission_denied"}
+        return await next_call(plugin_name, action, payload, handler, **kwargs)
+
+
 class PluginSupervisor:
     """
     Interface haut niveau pour interagir avec les plugins.
@@ -213,7 +243,7 @@ class PluginSupervisor:
         )
 
     async def _dispatch(
-        self, plugin_name: str, action: str, payload: dict, *, handler=None, **kwargs
+        self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
         if handler is None:
