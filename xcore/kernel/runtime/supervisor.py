@@ -28,13 +28,13 @@ class RateLimitMiddleware(Middleware):
         self._rate = rate
 
     async def __call__(
-        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
+        self, plugin_name, action, payload, next_call, handler, **kwargs
     ):
         try:
             self._rate.check(plugin_name)
         except RateLimitExceeded as e:
             return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
-        return await next_call(plugin_name, action, payload, **kwargs)
+        return await next_call(plugin_name, action, payload, handler, **kwargs)
 
 
 class PermissionMiddleware(Middleware):
@@ -42,7 +42,7 @@ class PermissionMiddleware(Middleware):
         self._permissions = permissions
 
     async def __call__(
-        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
+        self, plugin_name, action, payload, next_call, handler, **kwargs
     ):
         resource = kwargs.get("resource") or f"{action}"
         try:
@@ -50,7 +50,7 @@ class PermissionMiddleware(Middleware):
         except PermissionDenied as e:
             logger.warning(f"[{plugin_name}] Appel refusé : {e}")
             return {"status": "error", "msg": str(e), "code": "permission_denied"}
-        return await next_call(plugin_name, action, payload, **kwargs)
+        return await next_call(plugin_name, action, payload, handler, **kwargs)
 
 
 class PluginSupervisor:
@@ -194,7 +194,7 @@ class PluginSupervisor:
         )
 
     async def _dispatch(
-        self, plugin_name: str, action: str, payload: dict, *, handler=None, **kwargs
+        self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
         if handler is None:
