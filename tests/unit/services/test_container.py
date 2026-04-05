@@ -76,22 +76,23 @@ class TestServiceContainer:
 
     def test_default_providers_present(self):
         """Test default providers are present."""
-        assert len(ServiceContainer.DEFAULT_PROVIDERS) == 4
+        providers = ServiceContainer._get_default_providers()
+        assert len(providers) == 4
         assert any(
             isinstance(p, DatabaseServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
+            for p in providers
         )
         assert any(
             isinstance(p, CacheServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
+            for p in providers
         )
         assert any(
             isinstance(p, SchedulerServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
+            for p in providers
         )
         assert any(
             isinstance(p, ExtensionServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
+            for p in providers
         )
 
     def test_get_nonexistent_service(self, container):

@@ -49,27 +49,21 @@ class PluginLoader:
 
     def __init__(
         self,
-        config: "PluginConfig",
-        services: dict[str, Any],
-        events=None,
-        hooks=None,
-        registry=None,
-        caller=None,
-        metrics=None,
-        tracer=None,
-        health=None,
+        ctx: "KernelContext",
+        caller: Any = None,
     ) -> None:
         from ...kernel.api.contract import ExecutionMode
 
-        self._config = config
-        self._services = services
-        self._events = events
-        self._hooks = hooks
-        self._registry = registry
+        self.ctx = ctx
+        self._config = ctx.config
+        self._services = ctx.services.as_dict() if hasattr(ctx.services, "as_dict") else {}
+        self._events = ctx.events
+        self._hooks = ctx.hooks
+        self._registry = ctx.registry
         self._caller = caller
-        self._metrics = metrics
-        self._tracer = tracer
-        self._health = health
+        self._metrics = ctx.metrics
+        self._tracer = ctx.tracer
+        self._health = ctx.health
 
         # handlers: name -> PluginHandler (Trusted or Sandboxed)
         self._handlers: dict[str, PluginHandler] = {}

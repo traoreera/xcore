@@ -774,6 +774,31 @@ async def _run(plugin_dir: Path) -> None:
                 response = {"status": "ok", "msg": "shutdown"}
                 _send(transport, response)
                 break
+            elif action == "get_services":
+                # Retourne la liste des services exposés par le plugin
+                svcs = getattr(plugin, "_services", {})
+                response = {"status": "ok", "services": list(svcs.keys())}
+            elif action == "rpc_call":
+                # Appel RPC sur une méthode d'un service
+                svc_name = payload.get("service")
+                method_name = payload.get("method")
+                args = payload.get("args", [])
+                kwargs = payload.get("kwargs", {})
+
+                svcs = getattr(plugin, "_services", {})
+                if svc_name not in svcs:
+                    response = {"status": "error", "msg": f"Service '{svc_name}' non trouvé"}
+                else:
+                    svc = svcs[svc_name]
+                    method = getattr(svc, method_name, None)
+                    if not method or not callable(method):
+                        response = {"status": "error", "msg": f"Méthode '{method_name}' non trouvée sur '{svc_name}'"}
+                    else:
+                        if inspect.iscoroutinefunction(method):
+                            result = await method(*args, **kwargs)
+                        else:
+                            result = method(*args, **kwargs)
+                        response = {"status": "ok", "result": result}
             else:
                 result = await plugin.handle(action, payload)
                 response = (

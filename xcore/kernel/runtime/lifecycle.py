@@ -326,6 +326,9 @@ class LifecycleManager:
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
+    # Services protégés noyau
+    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
+
     def propagate_services(self, *, is_reload: bool = False) -> dict:
         """
         Propage les services enregistrés par le plugin vers le container partagé.

@@ -14,8 +14,12 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from .ipc import IPCChannel, IPCProcessDead, IPCResponse
+if TYPE_CHECKING:
+    from ..context import KernelContext
+
+from .ipc import IPCChannel, IPCProcessDead, IPCResponse, SandboxedServiceProxy
 from .isolation import DiskQuotaExceeded, DiskWatcher
 
 logger = logging.getLogger("xcore.sandbox.process_manager")
@@ -45,8 +49,14 @@ class SandboxProcessManager:
     et ne s'appelle plus jamais via start() → plus de RecursionError.
     """
 
-    def __init__(self, manifest, config: SandboxConfig | None = None) -> None:
+    def __init__(
+        self,
+        manifest,
+        ctx: "KernelContext | None" = None,
+        config: SandboxConfig | None = None,
+    ) -> None:
         self.manifest = manifest
+        self.ctx = ctx
         self.config = config or SandboxConfig()
         self._process: asyncio.subprocess.Process | None = None
         self._channel: IPCChannel | None = None
@@ -57,6 +67,8 @@ class SandboxProcessManager:
         self._health_task: asyncio.Task | None = None
         data_dir = manifest.plugin_dir / "data"
         self._disk = DiskWatcher(data_dir, manifest.resources.max_disk_mb)
+        # Cache des proxies de services
+        self._service_proxies: dict[str, SandboxedServiceProxy] = {}
 
     @property
     def state(self) -> ProcessState:
@@ -81,6 +93,10 @@ class SandboxProcessManager:
         self._state = ProcessState.RUNNING
         self._started_at = time.monotonic()
         self._restarts = 0
+
+        # Découverte réactive des services sandboxed
+        await self.propagate_services()
+
         self._watch_task = asyncio.create_task(
             self._watch_loop(), name=f"watch-{self.manifest.name}"
         )
@@ -93,6 +109,50 @@ class SandboxProcessManager:
         logger.info(
             f"[{self.manifest.name}] ✅ Subprocess démarré (PID={self._process.pid})"
         )
+
+    async def propagate_services(self, *, is_reload: bool = False) -> dict:
+        """
+        Interroge le worker pour connaître les services exposés
+        et enregistre des proxies dans le registry.
+        """
+        if not self.is_available or not self._channel:
+            return {}
+
+        try:
+            resp = await self._channel.call("get_services", {})
+            if not resp.success:
+                return {}
+
+            service_names = resp.data.get("services", [])
+            for name in service_names:
+                proxy = SandboxedServiceProxy(self._channel, name)
+                self._service_proxies[name] = proxy
+
+                if self.ctx and self.ctx.registry:
+                    # Enregistre le proxy dans le registry global
+                    # Le proxy se comporte comme l'objet réel pour les appels de méthodes
+                    self.ctx.registry.register_service(
+                        plugin_name=self.manifest.name,
+                        service_name=name,
+                        service_obj=proxy,
+                        metadata={"mode": "sandboxed", "proxy": True},
+                    )
+
+            # Émet un événement
+            if self.ctx and self.ctx.events:
+                await self.ctx.events.emit(
+                    f"plugin.{self.manifest.name}.services_registered",
+                    {
+                        "plugin": self.manifest.name,
+                        "is_reload": is_reload,
+                        "services": service_names,
+                    },
+                )
+
+        except Exception as e:
+            logger.error(f"[{self.manifest.name}] Erreur propagation services : {e}")
+
+        return self._service_proxies
 
     async def _spawn(self) -> None:
         worker_path = Path(__file__).parent / "worker.py"

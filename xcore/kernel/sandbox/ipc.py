@@ -92,3 +92,33 @@ class IPCChannel:
             await self._process.stdin.wait_closed()
         except Exception:
             pass
+
+
+class SandboxedServiceProxy:
+    """
+    Proxy côté Core pour un service vivant dans un sandbox.
+    Intercepte les appels d'attributs et les transforme en appels RPC via IPC.
+    """
+
+    def __init__(self, channel: IPCChannel, service_name: str) -> None:
+        self._channel = channel
+        self._service_name = service_name
+
+    def __getattr__(self, name: str):
+        """Retourne une fonction asynchrone qui effectue l'appel RPC."""
+
+        async def rpc_method(*args, **kwargs):
+            resp = await self._channel.call(
+                "rpc_call",
+                {
+                    "service": self._service_name,
+                    "method": name,
+                    "args": list(args),
+                    "kwargs": kwargs,
+                },
+            )
+            if not resp.success:
+                raise IPCError(f"RPC Error on {self._service_name}.{name}: {resp.data.get('msg')}")
+            return resp.data.get("result")
+
+        return rpc_method
