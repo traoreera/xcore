@@ -9,9 +9,9 @@ class DummyMiddleware(Middleware):
         self.name = name
         self.calls = calls
 
-    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+    async def __call__(self, plugin_name, action, payload, next_call, handler, **kwargs):
         self.calls.append(f"before:{self.name}")
-        res = await next_call(plugin_name, action, payload, **kwargs)
+        res = await next_call(plugin_name, action, payload, handler, **kwargs)
         self.calls.append(f"after:{self.name}")
         return res
 

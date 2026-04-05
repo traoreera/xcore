@@ -63,14 +63,8 @@ class TrustedActivator(PluginActivator):
 
         lm = LifecycleManager(
             manifest,
-            services=loader._services,
-            events=loader._events,
-            hooks=loader._hooks,
-            registry=loader._registry,
+            ctx=loader.ctx,
             caller=loader._caller,
-            metrics=loader._metrics,
-            tracer=loader._tracer,
-            health=loader._health,
         )
         await lm.start()
         return lm
@@ -92,6 +86,6 @@ class SandboxedActivator(PluginActivator):
         if not scan.passed:
             raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
 
-        mgr = SandboxProcessManager(manifest)
+        mgr = SandboxProcessManager(manifest, ctx=loader.ctx)
         await mgr.start()
         return mgr
