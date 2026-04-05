@@ -79,12 +79,24 @@ class FilesystemGuard:
         denied_paths: list[str],
     ) -> None:
         self._plugin_dir = plugin_dir.resolve()
-        self._allowed = [
-            (self._plugin_dir / p).resolve() for p in (allowed_paths or ["data/"])
-        ]
-        self._denied = [
-            (self._plugin_dir / p).resolve() for p in (denied_paths or ["src/"])
-        ]
+
+        # Sécurité : on valide que chaque chemin résolu reste dans le plugin_dir.
+        # Cela empêche un manifeste malicieux de configurer un accès hors du bac à sable.
+        def _resolve_safe(paths, default):
+            results = []
+            for p in paths or default:
+                try:
+                    resolved = (self._plugin_dir / p).resolve()
+                    if resolved.is_relative_to(self._plugin_dir):
+                        results.append(resolved)
+                    else:
+                        logger.warning(f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}")
+                except Exception as e:
+                    logger.warning(f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}")
+            return results
+
+        self._allowed = _resolve_safe(allowed_paths, ["data/"])
+        self._denied = _resolve_safe(denied_paths, ["src/"])
         self._original_open = builtins_open  # sauvegarde avant patch
         self._in_guard = False
 

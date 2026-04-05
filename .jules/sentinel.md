@@ -45,8 +45,13 @@
 
 ## 2026-04-22 - Plugin Signature Bypass via Custom Entry Point
 **Vulnerability:** The plugin signature verification (HMAC) was hardcoded to hash only the `src/` directory, ignoring the `entry_point` specified in the manifest. This allowed modifications to the actual code if it was located elsewhere (e.g., in an `app/` folder) without invalidating the signature.
-**Learning:** Security mechanisms must be consistent across all layers. Fixing a vulnerability in a static scanner (AST) but leaving it in the cryptographic integrity check (HMAC) creates a gap where the system trust is based on an incomplete set of verified files.
+**Learning:** Security mechanisms must be consistent across all layers. Fixing a vulnerability in a static scanner (AST) but leaving it in the xcore/kernel/security/signature.py integrity check (HMAC) creates a gap where the system trust is based on an incomplete set of verified files.
 **Prevention:** Ensure all security components (scanners, signers, loaders) use the same manifest-driven logic to identify and resolve the plugin's code root.
+
+## 2026-04-25 - Path Traversal via Manifest Configuration in FilesystemGuard
+**Vulnerability:** A malicious plugin manifest could configure access to host files (e.g., `/etc/passwd`) by providing absolute paths or parent-directory traversal sequences (`..`) in the `allowed_paths` or `denied_paths` settings.
+**Learning:** Security policies derived from untrusted configuration files (like manifests) must be validated after resolution. Naive concatenation of a base directory with configuration paths can be bypassed if the configuration paths are absolute or contain traversal components.
+**Prevention:** In the sandbox initialization, always resolve configuration paths and verify they remain within the intended sandbox boundary using `path.resolve().is_relative_to(sandbox_root.resolve())`.
 
 ## 2026-04-15 - Sandbox Denial of Service via Interactive Input
 **Vulnerability:** Sandboxed plugins could call the `input()` built-in, causing the isolated worker process to hang indefinitely while waiting for user input on stdin. This allowed a malicious or buggy plugin to block its assigned worker and potentially consume resources without completing its task.
