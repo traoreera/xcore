@@ -13,7 +13,8 @@ import contextlib
 import fnmatch
 import inspect
 import logging
-from typing import Any, Callable
+import re
+from typing import Any, Callable, Pattern
 
 from .section import Event, _HandlerEntry
 
@@ -41,6 +42,7 @@ class EventBus:
 
     def __init__(self) -> None:
         self._handlers: dict[str, list[_HandlerEntry]] = {}
+        self._wildcard_patterns: dict[str, Pattern] = {}
 
     # ── Enregistrement ────────────────────────────────────────
 
@@ -74,12 +76,18 @@ class EventBus:
     ) -> None:
         if event_name not in self._handlers:
             self._handlers[event_name] = []
+
+        # If it's a wildcard, pre-compile and store it
+        if any(c in event_name for c in "*?[]") and event_name not in self._wildcard_patterns:
+            self._wildcard_patterns[event_name] = re.compile(fnmatch.translate(event_name))
+
         entry = _HandlerEntry(
             handler=handler,
             is_async=inspect.iscoroutinefunction(handler),
             priority=priority,
             once=once,
             name=name or getattr(handler, "__name__", str(handler)),
+            pattern=event_name,
         )
         self._handlers[event_name].append(entry)
         self._handlers[event_name].sort(key=lambda e: e.priority, reverse=True)
@@ -89,6 +97,10 @@ class EventBus:
             self._handlers[event_name] = [
                 e for e in self._handlers[event_name] if e.handler is not handler
             ]
+            # Clean up the pattern list and wildcard patterns if empty
+            if not self._handlers[event_name]:
+                self._handlers.pop(event_name)
+                self._wildcard_patterns.pop(event_name, None)
 
     # ── Émission ──────────────────────────────────────────────
 
@@ -110,11 +122,18 @@ class EventBus:
         """
         event = Event(name=event_name, data=data or {}, source=source)
 
-        # Collect all matching handlers (exact match + wildcards)
+        # 1. Exact match lookup (O(1))
         matched_handlers: list[_HandlerEntry] = []
-        for pattern, entries in self._handlers.items():
-            if fnmatch.fnmatch(event_name, pattern):
-                matched_handlers.extend(entries)
+        if event_name in self._handlers:
+            matched_handlers.extend(self._handlers[event_name])
+
+        # 2. Wildcard lookup (O(N_wildcards)) - much faster than O(N_all)
+        for pattern, regex in self._wildcard_patterns.items():
+            # If the pattern is EXACTLY event_name, it was already handled above.
+            if pattern == event_name:
+                continue
+            if regex.match(event_name):
+                matched_handlers.extend(self._handlers[pattern])
 
         if not matched_handlers:
             return []
@@ -165,11 +184,14 @@ class EventBus:
                     to_remove.append(entry)
 
         for entry in to_remove:
-            # Need to find which pattern this entry belongs to
-            for pattern, entries in self._handlers.items():
-                if entry in entries:
-                    with contextlib.suppress(ValueError):
-                        entries.remove(entry)
+            # Use entry.pattern for O(1) removal
+            entries = self._handlers.get(entry.pattern)
+            if entries:
+                with contextlib.suppress(ValueError):
+                    entries.remove(entry)
+                    if not entries:
+                        self._handlers.pop(entry.pattern, None)
+                        self._wildcard_patterns.pop(entry.pattern, None)
         return results
 
     def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:
@@ -196,5 +218,7 @@ class EventBus:
         """Clear the bus or a specific event."""
         if event_name:
             self._handlers.pop(event_name, None)
+            self._wildcard_patterns.pop(event_name, None)
         else:
             self._handlers.clear()
+            self._wildcard_patterns.clear()
