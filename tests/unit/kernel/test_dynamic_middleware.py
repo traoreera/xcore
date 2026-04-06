@@ -9,20 +9,31 @@ class DummyMiddleware(Middleware):
         self.name = name
         self.calls = calls
 
-    async def __call__(self, plugin_name, action, payload, next_call, *, handler=None, **kwargs):
+    async def __call__(self, plugin_name, action, payload, next_call, handler=None, **kwargs):
         self.calls.append(f"before:{self.name}")
-        res = await next_call(plugin_name, action, payload, **kwargs)
+        res = await next_call(plugin_name, action, payload, handler, **kwargs)
         self.calls.append(f"after:{self.name}")
         return res
 
 @pytest.mark.asyncio
 async def test_dynamic_middleware_registration():
+    from xcore.kernel.context import KernelContext
     config = MagicMock()
     config.plugins.directory = "plugins"
     services = MagicMock()
     services.as_dict.return_value = {}
+    ctx = KernelContext(
+        config=config.plugins,
+        services=services,
+        events=MagicMock(),
+        hooks=MagicMock(),
+        registry=MagicMock(),
+        metrics=MagicMock(),
+        tracer=MagicMock(),
+        health=MagicMock(),
+    )
 
-    supervisor = PluginSupervisor(config.plugins, services)
+    supervisor = PluginSupervisor(ctx)
 
     # Mock boot process to avoid actual loading
     supervisor._loader = MagicMock()

@@ -162,15 +162,8 @@ class TrustedBase(ABC):
                 "Context not injected — plugin not yet loaded. "
                 "Appeler get_service() depuis on_load() ou handle()."
             )
-        svc = self.ctx.services.get(name)
-        if svc is None:
-            available = sorted(self.ctx.services.keys()) if self.ctx.services else []
-            raise KeyError(
-                f"Service '{name}' indisponible.\n"
-                f"  Disponibles : {available}\n"
-                f"  Conseil : vérifiez le nom dans xcore.yaml → databases / services."
-            )
-        return svc
+        # Utilise le contexte pour la résolution (inclut scoping via registry)
+        return self.ctx.get_service(name)
 
     def get_service_as(self, name: str, type_: type[T]) -> T:
         """

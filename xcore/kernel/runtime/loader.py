@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
+    from ..context import KernelContext
 
 from ...kernel.security.validation import ManifestValidator
 
@@ -49,27 +50,21 @@ class PluginLoader:
 
     def __init__(
         self,
-        config: "PluginConfig",
-        services: dict[str, Any],
-        events=None,
-        hooks=None,
-        registry=None,
+        ctx: "KernelContext",
         caller=None,
-        metrics=None,
-        tracer=None,
-        health=None,
     ) -> None:
         from ...kernel.api.contract import ExecutionMode
 
-        self._config = config
-        self._services = services
-        self._events = events
-        self._hooks = hooks
-        self._registry = registry
+        self._ctx = ctx
+        self._config = ctx.config
+        self._services = ctx.services.as_dict() if ctx.services else {}
+        self._events = ctx.events
+        self._hooks = ctx.hooks
+        self._registry = ctx.registry
+        self._metrics = ctx.metrics
+        self._tracer = ctx.tracer
+        self._health = ctx.health
         self._caller = caller
-        self._metrics = metrics
-        self._tracer = tracer
-        self._health = health
 
         # handlers: name -> PluginHandler (Trusted or Sandboxed)
         self._handlers: dict[str, PluginHandler] = {}

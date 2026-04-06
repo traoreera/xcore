@@ -123,6 +123,7 @@ class Xcore:
         from .services import ServiceContainer
 
         self.services = ServiceContainer(self._config.services)
+        self.services.load_default_providers()
         await self.services.init()
 
         # 2. Event bus + hooks
@@ -132,17 +133,20 @@ class Xcore:
         # 3. Registry des plugins
         self.registry = PluginRegistry(self._config)
 
-        # 4. Plugin supervisor (runtime + sandbox)
-        self.plugins = PluginSupervisor(
+        # 4. Kernel Context & Plugin supervisor (runtime + sandbox)
+        from .kernel.context import KernelContext
+
+        ctx = KernelContext(
             config=self._config.plugins,
             services=self.services,
             events=self.events,
             hooks=self.hooks,
             registry=self.registry,
-            metrics=MetricsRegistry(),
-            tracer=Tracer(self._config.observability.tracing.service_name),
-            health=HealthChecker(),
+            metrics=self.metrics,
+            tracer=self.tracer,
+            health=self.health,
         )
+        self.plugins = PluginSupervisor(ctx)
         await self.plugins.boot()
 
         # 5. Attache le router FastAPI si une app est fournie
