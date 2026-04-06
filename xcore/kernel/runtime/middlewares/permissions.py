@@ -5,7 +5,7 @@ permissions.py — Middleware for plugin permission checks.
 from __future__ import annotations
 
 import logging
-from ..middleware import Middleware
+from .middleware import Middleware
 from ...permissions.engine import PermissionDenied
 
 logger = logging.getLogger("xcore.runtime.middlewares.permissions")

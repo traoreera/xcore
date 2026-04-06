@@ -5,56 +5,34 @@ Agrège : PluginLoader + PermissionEngine + rate limiter + retry + routing appel
 C'est lui qu'expose Xcore via xcore.plugins.
 """
 
+
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...configurations.sections import PluginConfig
     from ..context import KernelContext
 
-from ..permissions.engine import PermissionDenied, PermissionEngine
-from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
+from ..permissions.engine import PermissionEngine
+from ..sandbox.limits import RateLimiterRegistry
 from .loader import PluginLoader
-from .middleware import Middleware, MiddlewarePipeline
-from .middleware_registry import MiddlewareRegistry
-from .middlewares.permissions import PermissionMiddleware
-from .middlewares.ratelimit import RateLimitMiddleware
-from .middlewares.retry import RetryMiddleware
-from .middlewares.tracing import TracingMiddleware
+from .middlewares import (
+    Middleware,
+    MiddlewarePipeline,
+    MiddlewareRegistry,
+    PermissionMiddleware,
+    RateLimitMiddleware,
+    RetryMiddleware,
+    TracingMiddleware
+)
 
 logger = logging.getLogger("xcore.runtime.supervisor")
 
 
-class RateLimitMiddleware(Middleware):
-    def __init__(self, rate):
-        self._rate = rate
-
-    async def __call__(
-        self, plugin_name, action, payload, next_call, handler, **kwargs
-    ):
-        try:
-            self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return {"status": "error", "msg": str(e), "code": "rate_limit_exceeded"}
-        return await next_call(plugin_name, action, payload, handler, **kwargs)
 
 
-class PermissionMiddleware(Middleware):
-    def __init__(self, permissions):
-        self._permissions = permissions
-
-    async def __call__(
-        self, plugin_name, action, payload, next_call, handler, **kwargs
-    ):
-        resource = kwargs.get("resource") or f"{action}"
-        try:
-            self._permissions.check(plugin_name, resource, "execute")
-        except PermissionDenied as e:
-            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
-            return {"status": "error", "msg": str(e), "code": "permission_denied"}
-        return await next_call(plugin_name, action, payload, handler, **kwargs)
 
 
 class PluginSupervisor:
@@ -186,11 +164,8 @@ class PluginSupervisor:
 
         # 3. Enregistrement dans le registry si disponible
         if self._registry and self._loader:
-            try:
+            with contextlib.suppress(KeyError):
                 self._registry.register(plugin_name, self._loader.get(plugin_name))
-            except KeyError:
-                # Peut arriver si l'événement est émis pendant un load() incomplet
-                pass
 
     def _load_permissions(self, plugin_names: list[str]) -> None:
         """Charge les policies de chaque plugin dans le PermissionEngine."""
@@ -249,9 +224,7 @@ class PluginSupervisor:
 
     def get_active_middlewares(self) -> list[Middleware]:
         """Retourne la liste des middlewares actifs dans la pipeline."""
-        if self._pipeline is None:
-            return []
-        return self._pipeline.get_middlewares()
+        return [] if self._pipeline is None else self._pipeline.get_middlewares()
 
     async def load(self, plugin_name: str) -> None:
         if self._loader:

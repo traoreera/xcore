@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable, List
 
 if TYPE_CHECKING:
-    from .loader import PluginHandler
+    from ..loader import PluginHandler
 
 logger = logging.getLogger("xcore.runtime.middleware")
 
@@ -82,11 +82,6 @@ class MiddlewarePipeline:
         else:
             self._middlewares.append(middleware)
         # Déclenche une recompilation immédiate de la chaîne interne
-        self._compiled_chain = self._compile_pipeline(
-            self._middlewares, self._final_handler
-        )
-
-        # Recompile the chain after adding a middleware
         self._compiled_chain = self._compile_pipeline(
             self._middlewares, self._final_handler
         )

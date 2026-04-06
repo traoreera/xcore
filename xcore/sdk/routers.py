@@ -137,7 +137,7 @@ class RouterRegistry:
             scopes=scopes,
         )
 
-    def path(
+    def patch(
         self,
         path: str,
         *,
@@ -151,7 +151,7 @@ class RouterRegistry:
     ):
         return self.router(
             path,
-            "PATH",
+            "PATCH",
             tags=tags,
             summary=summary,
             status_code=status_code,

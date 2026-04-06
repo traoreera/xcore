@@ -42,7 +42,7 @@ async def test_dynamic_middleware_registration():
     handler.call.return_value = {"status": "ok"}
     supervisor._loader.get.return_value = handler
 
-    from xcore.kernel.runtime.middleware import MiddlewarePipeline
+    from xcore.kernel.runtime.middlewares import MiddlewarePipeline
     supervisor._pipeline = MiddlewarePipeline([], supervisor._dispatch)
 
     calls = []
