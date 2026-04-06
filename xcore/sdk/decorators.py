@@ -25,7 +25,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from typing import Callable, Type
+from typing import Callable, Type, Literal
 
 from pydantic import BaseModel, ValidationError
 
