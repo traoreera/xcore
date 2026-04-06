@@ -4,7 +4,7 @@ ratelimit.py — Middleware for plugin rate limiting.
 
 from __future__ import annotations
 
-from ..middleware import Middleware
+from .middleware import Middleware
 from ...sandbox.limits import RateLimitExceeded
 
 

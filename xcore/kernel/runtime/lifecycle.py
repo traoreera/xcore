@@ -332,13 +332,11 @@ class LifecycleManager:
         if not instance_services:
             return self._services
 
-        # Vérification des collisions avec les services protégés
-        collisions = set(instance_services.keys()) & self.PROTECTED_SERVICES
-        if collisions:
-            raise ValueError(
-                f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-                f"par le noyau : {collisions}"
-            )
+        #if collisions := set(instance_services.keys()) & self.PROTECTED_SERVICES:
+        #    raise ValueError(
+        #        f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
+        #Tentative         f"par le noyau : {collisions}"
+        #    )
 
         # Enregistrement explicite dans le registre pour le scoping/discovery
         # On le fait AVANT de mettre à jour self._services pour que le registre soit

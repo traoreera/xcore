@@ -1,7 +1,7 @@
 
 import pytest
 from unittest.mock import MagicMock
-from xcore.kernel.runtime.middleware import Middleware, MiddlewarePipeline
+from xcore.kernel.runtime.middlewares.middleware import Middleware, MiddlewarePipeline
 
 class MockMiddleware(Middleware):
     def __init__(self, name):

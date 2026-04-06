@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Callable
 
-from ..middleware import Middleware
+from .middleware import Middleware
 
 logger = logging.getLogger("xcore.runtime.middleware.tracing")
 

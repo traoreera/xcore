@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from xcore.kernel.runtime.middleware import Middleware
+from xcore.kernel.runtime.middlewares.middleware import Middleware
 from xcore.kernel.runtime.middlewares.retry import RetryMiddleware
 from xcore.kernel.runtime.supervisor import PluginSupervisor
 
@@ -48,7 +48,7 @@ async def test_supervisor_middleware_pipeline(supervisor):
     supervisor._loader.has.return_value = True
 
     # Initialize pipeline manually for test
-    from xcore.kernel.runtime.middleware import MiddlewarePipeline
+    from xcore.kernel.runtime.middlewares.middleware import MiddlewarePipeline
 
     supervisor._pipeline = MiddlewarePipeline(
         middlewares=[], final_handler=supervisor._dispatch
@@ -82,7 +82,7 @@ async def test_retry_middleware(supervisor):
     supervisor._loader.get.return_value = handler
     supervisor._loader.has.return_value = True
 
-    from xcore.kernel.runtime.middleware import MiddlewarePipeline
+    from xcore.kernel.runtime.middlewares.middleware import MiddlewarePipeline
 
     supervisor._pipeline = MiddlewarePipeline(
         middlewares=[RetryMiddleware()], final_handler=supervisor._dispatch
