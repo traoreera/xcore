@@ -9,9 +9,12 @@ variables, and the plugin configuration.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TYPE_CHECKING
 
-
+if TYPE_CHECKING:
+    from .proto import EventBus, HookManager
+    from ..observability import Tracer, MetricsRegistry, HealthChecker
+    from ...registry import PluginRegistry
 @dataclass
 class PluginContext:
     """
@@ -29,16 +32,16 @@ class PluginContext:
 
     name: str
     services: dict[str, Any] = field(default_factory=dict)
-    events: Any = None  # EventBus
-    hooks: Any = None  # HookManager
+    events: EventBus = None  # EventBus
+    hooks: HookManager = None  # HookManager
     env: dict[str, str] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
     caller: Callable[[str, str, dict], Awaitable[dict]] | None = None
 
-    metrics: Any = None  # MetricsRegistry
-    tracer: Any = None  # Tracer
-    health: Any = None  # HealthChecker
-    registry: Any = None  # PluginRegistry
+    metrics: MetricsRegistry = None  # MetricsRegistry
+    tracer: Tracer = None  # Tracer
+    health: HealthChecker = None  # HealthChecker
+    registry: PluginRegistry = None  # PluginRegistry
 
     def get_service(self, name: str) -> Any:
         """
