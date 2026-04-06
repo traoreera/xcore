@@ -123,7 +123,7 @@ class TestTrustedBase:
         plugin = TestPlugin()
         mock_db = MagicMock()
         mock_ctx = MagicMock()
-        mock_ctx.services = {"db": mock_db}
+        mock_ctx.get_service.return_value = mock_db
 
         await plugin._inject_context(mock_ctx)
 
@@ -154,15 +154,14 @@ class TestTrustedBase:
 
         plugin = TestPlugin()
         mock_ctx = MagicMock()
-        mock_ctx.services = {}
-        mock_ctx.services = {}
+        mock_ctx.get_service.side_effect = KeyError("Service 'db' unavailable")
 
         await plugin._inject_context(mock_ctx)
 
         with pytest.raises(KeyError) as exc:
             plugin.get_service("db")
 
-        assert "indisponible" in str(exc.value)
+        assert "unavailable" in str(exc.value)
 
     def test_get_router_default(self):
         """Test default get_router returns None."""

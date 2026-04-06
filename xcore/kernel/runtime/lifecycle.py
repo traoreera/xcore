@@ -17,7 +17,10 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..context import KernelContext
 
 from ..api.context import PluginContext
 from ..api.contract import BasePlugin
@@ -33,45 +36,32 @@ class LoadError(Exception):
 class LifecycleManager:
     """
         Manages the complete lifecycle of a Trusted plugin in memory.
-        v2 fixes compared to v1:
-        - propagate_services(is_reload) distinguishes between initial load and reload (fix #3 v1)
-        - Rich context (PluginContext) injected instead of a raw dict
-        - Clear separation between loader / lifecycle / supervisor
-        Usage:
-    ```python
-    lm = LifecycleManager(manifest, services=shared_dict)
-        await lm.load()
-        result = await lm.call("ping", {})
-        await lm.reload()
-        await lm.unload()```
     """
+    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
 
     def __init__(
         self,
         manifest,  # PluginManifest
-        services: dict[str, Any],  # container partagé (référence)
-        events=None,  # EventBus optionnel
-        hooks=None,  # HookManager optionnel
-        registry=None,  # PluginRegistry optionnel
+        ctx: "KernelContext",
         caller=None,
-        metrics=None,
-        tracer=None,
-        health=None,
     ) -> None:
-        self._caller = caller
+        self._ctx = ctx
         self.manifest = manifest
-        self._services = services  # même objet que PluginSupervisor._services
-        self._events = events
-        self._hooks = hooks
-        self._registry = registry
+        self._services = ctx.services.as_dict() if ctx.services else {}
+        self._events = ctx.events
+        self._hooks = ctx.hooks
+        self._registry = ctx.registry
+        self._metrics = ctx.metrics
+        self._tracer = ctx.tracer
+        self._health = ctx.health
+        self._caller = caller
+
         self._instance: BasePlugin | None = None
         self._module: Any = None
         self._loaded_at: float | None = None
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
-        self._metrics = metrics
-        self._tracer = tracer
-        self._health = health
+
         self._sm = StateMachine(
             manifest.name,
             on_change=self._on_state_change,
@@ -158,18 +148,14 @@ class LifecycleManager:
             )
 
         # Injection du contexte riche
+        params = self._ctx.as_plugin_context_params(
+            plugin_name=self.manifest.name,
+            caller=self._caller,
+        )
         ctx = PluginContext(
-            name=self.manifest.name,
-            services=self._services,
-            events=self._events,
-            hooks=self._hooks,
+            **params,
             env=self.manifest.env,
             config=getattr(self.manifest, "extra", {}),
-            caller=self._caller,
-            metrics=self._metrics,
-            tracer=self._tracer,
-            health=self._health,
-            registry=self._registry,
         )
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)

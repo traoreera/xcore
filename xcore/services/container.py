@@ -129,22 +129,16 @@ class ServiceContainer:
         self._services: dict[str, BaseService] = {}
         self._raw: dict[str, Any] = {}
         self._lazy_providers: dict[str, Any] = {}
+        self._providers = providers or []
 
-        # If no providers are provided, we use the default set
-        if providers is None:
-            self._providers = self._get_default_providers()
-        else:
-            self._providers = providers
-
-    @staticmethod
-    def _get_default_providers() -> list[BaseServiceProvider]:
-        """Returns the default list of core service providers."""
-        return [
+    def load_default_providers(self) -> None:
+        """Loads the default set of core service providers."""
+        self._providers.extend([
             DatabaseServiceProvider(),
             CacheServiceProvider(),
             SchedulerServiceProvider(),
             ExtensionServiceProvider(),
-        ]
+        ])
 
     def add_provider(self, provider: BaseServiceProvider) -> None:
         """Ajoute un fournisseur de services à la liste d'initialisation."""

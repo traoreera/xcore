@@ -99,11 +99,21 @@ def shared_services():
 @pytest.fixture
 def lifecycle_manager(mock_manifest, shared_services):
     """Create a LifecycleManager instance."""
-    return LifecycleManager(
-        manifest=mock_manifest,
-        services=shared_services,
+    from xcore.kernel.context import KernelContext
+    ctx = KernelContext(
+        config=MagicMock(),
+        services=MagicMock(),
         events=MagicMock(),
         hooks=MagicMock(),
+        registry=MagicMock(),
+        metrics=MagicMock(),
+        tracer=MagicMock(),
+        health=MagicMock(),
+    )
+    ctx.services.as_dict.return_value = shared_services
+    return LifecycleManager(
+        manifest=mock_manifest,
+        ctx=ctx,
     )
 
 

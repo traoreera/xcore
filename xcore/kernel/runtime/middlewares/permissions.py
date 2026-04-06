@@ -16,7 +16,7 @@ class PermissionMiddleware(Middleware):
         self._permissions = permissions
 
     async def __call__(
-        self, plugin_name, action, payload, next_call, *, handler=None, **kwargs
+        self, plugin_name, action, payload, next_call, handler, **kwargs
     ):
         resource = kwargs.get("resource") or f"{action}"
         try:
@@ -24,4 +24,4 @@ class PermissionMiddleware(Middleware):
         except PermissionDenied as e:
             logger.warning(f"[{plugin_name}] Appel refusé : {e}")
             return {"status": "error", "msg": str(e), "code": "permission_denied"}
-        return await next_call(plugin_name, action, payload, **kwargs)
+        return await next_call(plugin_name, action, payload, handler, **kwargs)

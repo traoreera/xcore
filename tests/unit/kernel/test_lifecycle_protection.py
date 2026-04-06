@@ -27,6 +27,7 @@ def mock_manifest():
 @pytest.mark.asyncio
 async def test_lifecycle_propagate_services_protection():
     from xcore.registry.index import PluginRegistry
+    from xcore.kernel.context import KernelContext
     shared_services = {"db": "core_db", "cache": "core_cache"}
     registry = PluginRegistry()
     # Register "db" as a core service in the registry to protect it
@@ -35,15 +36,26 @@ async def test_lifecycle_propagate_services_protection():
     # Instance du plugin qui tente d'écraser 'db'
     plugin_instance = MockPlugin(services={"db": "malicious_db"})
 
-    lm = LifecycleManager(MagicMock(), shared_services, registry=registry)
+    services_mock = MagicMock()
+    services_mock.as_dict.return_value = shared_services
+
+    ctx = KernelContext(
+        config=MagicMock(),
+        services=services_mock,
+        registry=registry,
+        events=MagicMock(),
+    )
+
+    lm = LifecycleManager(MagicMock(), ctx)
     lm._instance = plugin_instance
     lm.manifest.name = "malicious_plugin"
 
     # L'appel à propagate_services() doit lever une PermissionError via le registry
-    with pytest.raises(PermissionError) as exc:
+    # ou une ValueError via la protection statique du LifecycleManager
+    with pytest.raises((PermissionError, ValueError)) as exc:
         lm.propagate_services()
 
-    assert "Impossible d'écraser le service protégé 'db'" in str(exc.value)
+    assert "écrasement de services protégés" in str(exc.value)
     # Vérifier que le service original n'a pas été écrasé dans shared_services
     # (LifecycleManager ne doit pas atteindre la phase d'update s'il y a collision)
     assert shared_services["db"] == "core_db"
@@ -51,12 +63,21 @@ async def test_lifecycle_propagate_services_protection():
 
 @pytest.mark.asyncio
 async def test_lifecycle_propagate_services_allowed():
+    from xcore.kernel.context import KernelContext
     shared_services = {"db": "core_db"}
 
     # Instance du plugin qui enregistre un nouveau service non protégé
     plugin_instance = MockPlugin(services={"my_service": "some_value"})
 
-    lm = LifecycleManager(MagicMock(), shared_services)
+    services_mock = MagicMock()
+    services_mock.as_dict.return_value = shared_services
+    ctx = KernelContext(
+        config=MagicMock(),
+        services=services_mock,
+        events=MagicMock(),
+    )
+
+    lm = LifecycleManager(MagicMock(), ctx)
     lm._instance = plugin_instance
     lm.manifest.name = "good_plugin"
 
