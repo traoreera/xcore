@@ -22,9 +22,20 @@ def mock_config():
 
 @pytest.fixture
 def supervisor(mock_config):
+    from xcore.kernel.context import KernelContext
     services = MagicMock()
     services.as_dict.return_value = {}
-    return PluginSupervisor(mock_config, services)
+    ctx = KernelContext(
+        config=mock_config,
+        services=services,
+        events=MagicMock(),
+        hooks=MagicMock(),
+        registry=MagicMock(),
+        metrics=MagicMock(),
+        tracer=MagicMock(),
+        health=MagicMock(),
+    )
+    return PluginSupervisor(ctx)
 
 
 @pytest.mark.asyncio

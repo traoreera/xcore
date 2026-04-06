@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import PluginConfig
+    from ..context import KernelContext
 
 from ..permissions.engine import PermissionDenied, PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
@@ -61,7 +62,8 @@ class PluginSupervisor:
     Interface haut niveau pour interagir avec les plugins.
 
     Usage:
-        supervisor = PluginSupervisor(config, services, events, hooks, registry)
+        ctx = KernelContext(config, services, events, hooks, registry)
+        supervisor = PluginSupervisor(ctx)
         await supervisor.boot()
 
         result = await supervisor.call("my_plugin", "ping", {})
@@ -70,31 +72,23 @@ class PluginSupervisor:
         await supervisor.shutdown()
     """
 
-    def __init__(
-        self,
-        config: "PluginConfig",
-        services,  # ServiceContainer
-        events=None,
-        hooks=None,
-        registry=None,
-        metrics=None,
-        tracer=None,
-        health=None,
-    ) -> None:
-        self._config = config
-        self._services = services
-        self._events = events
-        self._hooks = hooks
-        self._registry = registry
+    def __init__(self, ctx: "KernelContext") -> None:
+        self._ctx = ctx
+        self._config = ctx.config
+        self._services = ctx.services
+        self._events = ctx.events
+        self._hooks = ctx.hooks
+        self._registry = ctx.registry
+        self._metrics = ctx.metrics
+        self._tracer = ctx.tracer
+        self._health = ctx.health
+
         self._rate = RateLimiterRegistry()
-        self._permissions = PermissionEngine(events=events)
+        self._permissions = PermissionEngine(events=self._events)
 
         self._loader: PluginLoader | None = None
         self._pipeline: MiddlewarePipeline | None = None
 
-        self._metrics = metrics
-        self._tracer = tracer
-        self._health = health
         self._middleware_registry = MiddlewareRegistry()
         self._setup_default_middlewares()
 
@@ -113,24 +107,13 @@ class PluginSupervisor:
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
-        svc_dict = (
-            self._services.as_dict() if hasattr(self._services, "as_dict") else {}
-        )
-
         # Souscription réactive aux événements de plugin
         if self._events:
             self._events.subscribe("plugin.*.services_registered", self._on_plugin_services_registered)
 
         self._loader = PluginLoader(
-            config=self._config,
-            services=svc_dict,
-            events=self._events,
-            hooks=self._hooks,
-            registry=self._registry,
+            ctx=self._ctx,
             caller=lambda name, action, payload: self.call(name, action, payload),
-            metrics=self._metrics,
-            tracer=self._tracer,
-            health=self._health,
         )
         report = await self._loader.load_all()
         logger.info(
