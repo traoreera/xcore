@@ -37,6 +37,7 @@ class _HandlerEntry:
     priority: int = 50
     once: bool = False
     name: str = ""
+    pattern: str = ""
 
 
 @dataclass
