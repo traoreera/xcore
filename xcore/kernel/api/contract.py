@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
+from .proto import PluginContext
+
 # Literal dispo Python 3.8+
 try:
     from typing import Literal
@@ -97,7 +99,7 @@ class TrustedBase(ABC):
     """
 
     def __init__(self) -> None:
-        self.ctx: Any = None  # injecté par LifecycleManager._inject_context()
+        self.ctx: PluginContext = None  # injecté par LifecycleManager._inject_context()
 
     async def _inject_context(self, ctx: Any) -> None:
         """Appelé par le framework — ne pas surcharger sans raison valide."""
