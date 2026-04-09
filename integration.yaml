@@ -39,7 +39,7 @@ services:
     db:
       type: sqlasync
       url: sqlite+aiosqlite:///db.sqlite3
-      echo: true
+      echo: false
     redis_db:
       type: redis
       url: redis://localhost:6379/0
@@ -73,11 +73,27 @@ services:
     #    trigger: interval
     #    minutes: 5
 
-# ── Observabilité ─────────────────────────────────────────────
+  # ── Observabilité ─────────────────────────────────────────────
+
+  extensions:
+    email:
+      module: extensions.email.email:EmailService
+      config:
+        smtp_host: mail.tangagroup.com #smtp.gmail.com
+        smtp_port: 465 #587
+        smtp_user: 200
+        smtp_password: l4hgj45j43j5rn
+        from_address: traoreera@gmail.com
+        from_name: "Mon Application"
+        use_tls: true
+        timeout: 10
+        max_retries: 3
+        queue_size: 100
+
 observability:
   logging:
     enabled: true
-    level:  DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    level: DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
     max_bytes: 52428800 # 50 MB par fichier

@@ -23,6 +23,7 @@ PATTERNS_IGNORE = [
     "*.log",  # Exemple de motif pour ignorer tous les fichiers .log
     "*.tmp",  # Ignorer tous les fichiers .tmp
     "temp/**/*",  # Ignorer le dossier temp et son contenu
+    "*.md",
 ]
 
 

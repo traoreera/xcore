@@ -95,7 +95,7 @@ DEFAULT_ALLOWED = {
     "asyncio",
     "logging",
     "__future__",
-    "xcore",
+    "xcore.*",
     "xcore.sdk.*",
 }
 

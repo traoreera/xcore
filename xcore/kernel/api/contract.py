@@ -137,6 +137,15 @@ class TrustedBase(ABC):
     def get_service(self, name: "Literal['cache']") -> "CacheService": ...  # noqa: F811
 
     @overload
+    def get_service(self, name: "Literal['mongodb']") -> "MongoDBAdapter": ...
+
+    @overload
+    def get_service(self, name:"Literal['redisAdapter']") -> "RedisAdapter": ...
+
+    @overload
+    def get_service(self, name:"Literal['syncdb']") -> "SQLAdapter": ...
+
+    @overload
     def get_service(
         self, name: "Literal['scheduler']"
     ) -> "SchedulerService": ...  # noqa: F811
