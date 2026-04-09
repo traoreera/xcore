@@ -44,8 +44,13 @@ class ExtensionLoader(BaseService):
                 svc = self._load(name, ext_cfg)
                 if hasattr(svc, "init"):
                     await svc.init()
-                self.extensions[name] = svc
-                logger.info(f"Extension '{name}' ✅")
+                if svc._status == ServiceStatus.READY:
+                    self.extensions[name] = svc
+                    logger.info(f"Extension '{name}' ✅")
+                else:
+                    logger.info(
+                        f"Extension '{name} as not started (status: {svc._status})'"
+                    )
             except Exception as e:
                 logger.error(f"Extension '{name}' ❌ : {e}")
         self._status = (

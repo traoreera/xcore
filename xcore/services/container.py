@@ -31,12 +31,9 @@ if TYPE_CHECKING:
     from ..configurations.sections import ServicesConfig
     from .cache.service import CacheService
     from .database.adapters.async_sql import AsyncSQLAdapter
-    from .database.adapters.mongodb import MongoDBAdapter
-    from .database.adapters.redis import RedisAdapter
-    from .database.adapters.sql import SQLAdapter
     from .scheduler.service import SchedulerService
 
-from .base import BaseService, BaseServiceProvider, ServiceStatus
+from .base import BaseService, BaseServiceProvider
 
 logger = logging.getLogger("xcore.services.container")
 
@@ -123,7 +120,9 @@ class ServiceContainer:
     """
 
     def __init__(
-        self, config: "ServicesConfig", providers: list[BaseServiceProvider] | None = None
+        self,
+        config: "ServicesConfig",
+        providers: list[BaseServiceProvider] | None = None,
     ) -> None:
         self._config = config
         self._services: dict[str, BaseService] = {}
@@ -133,12 +132,14 @@ class ServiceContainer:
 
     def load_default_providers(self) -> None:
         """Loads the default set of core service providers."""
-        self._providers.extend([
-            DatabaseServiceProvider(),
-            CacheServiceProvider(),
-            SchedulerServiceProvider(),
-            ExtensionServiceProvider(),
-        ])
+        self._providers.extend(
+            [
+                DatabaseServiceProvider(),
+                CacheServiceProvider(),
+                SchedulerServiceProvider(),
+                ExtensionServiceProvider(),
+            ]
+        )
 
     def add_provider(self, provider: BaseServiceProvider) -> None:
         """Ajoute un fournisseur de services à la liste d'initialisation."""
