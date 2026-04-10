@@ -25,8 +25,6 @@ from ...kernel.security.validation import ManifestValidator
 from ..api.contract import PluginHandler
 from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
 from .dependency import DependencyGraph
-from .lifecycle import LifecycleManager, LoadError
-from .state_machine import PluginState
 
 logger = logging.getLogger("xcore.runtime.loader")
 
