@@ -39,6 +39,7 @@ tmp/
 backgroundtask
 node_modules/
 docs/
+test.py
 
 .claude
 
