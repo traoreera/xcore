@@ -14,13 +14,15 @@ logger = logging.getLogger("xcore.services.cache.redis")
 class RedisCacheBackend:
     """
     Backend cache Redis.
-    Sérialise en JSON pour stocker n'importe quel type Python.
+    JSON serialization for all python type support.
 
     Usage:
+        ```python
         backend = RedisCacheBackend(url="redis://localhost:6379", ttl=300)
         await backend.connect()
         await backend.set("key", {"data": 1})
         value = await backend.get("key")
+        ```
     """
 
     def __init__(self, url: str, ttl: int = 300) -> None:
@@ -53,6 +55,35 @@ class RedisCacheBackend:
         ex = ttl if ttl is not None else self._ttl
         raw = json.dumps(value) if not isinstance(value, (str, bytes)) else value
         await self._client.set(key, raw, ex=ex if ex > 0 else None)
+
+    async def mget(self, keys: list[str]) -> dict[str, Any]:
+        """Récupère plusieurs clés via MGET."""
+        if not keys:
+            return {}
+        raw_values = await self._client.mget(keys)
+        results = {}
+        for key, raw in zip(keys, raw_values):
+            if raw is None:
+                results[key] = None
+                continue
+            try:
+                results[key] = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                results[key] = raw
+        return results
+
+    async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
+        """Définit plusieurs clés via Pipeline (pour supporter les TTL)."""
+        if not mapping:
+            return
+        ex = ttl if ttl is not None else self._ttl
+        async with self._client.pipeline() as pipe:
+            for key, value in mapping.items():
+                raw = (
+                    json.dumps(value) if not isinstance(value, (str, bytes)) else value
+                )
+                pipe.set(key, raw, ex=ex if ex > 0 else None)
+            await pipe.execute()
 
     async def delete(self, key: str) -> bool:
         return bool(await self._client.delete(key))

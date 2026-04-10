@@ -3,7 +3,7 @@
 # ============================================================
 PROJECT_PATH_APP := $(shell pwd)/core
 PROJECT_PATH := $(shell pwd)
-LOGS_FILE := $(shell pwd)/logs/dev.log
+LOGS_FILE := $(shell pwd)/log/app.log
 
 
 # Variables pour gestion liens symboliques
@@ -213,12 +213,12 @@ init: ## Initialiser le projet (permissions scripts + install + démarrage dev)
 # 🚀 Lancement de l'application
 # ============================================================
 
-run-dev: ## Lancer en mode développement (reload automatique)
+dev: ## Lancer en mode développement (reload automatique)
 	@echo "🚀 Lancement en mode développement..."
 	@$(MAKE) clean
 	@poetry run python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-run-st: ## Lancer en mode production / statique (sans reload)
+st: ## Lancer en mode production / statique (sans reload)
 	@echo "🚀 Lancement en mode statique..."
 	@$(MAKE) clean
 	@poetry run python -m uvicorn main:app --host 0.0.0.0 --port 8000
@@ -829,11 +829,6 @@ logs-health-check: ## Check-up santé complet du système (PRO)
 		echo "⚠️  Fichier $(LOGS_FILE) introuvable"; \
 	fi
 
-
-
-
-
-
 logs-comparison: ## Compare les logs avant/après ($(LOGS_FILE) vs $(LOGS_FILE).old)
 	@echo "🔄 COMPARAISON DES LOGS"
 	@echo "======================"
@@ -897,37 +892,6 @@ logs-alerts: ## Alertes automatiques basées sur les patterns
 	else \
 		echo "⚠️  Fichier $(LOGS_FILE) introuvable"; \
 	fi
-
-logs-dashboard: ## Dashboard temps réel avec rafraîchissement automatique
-	@echo "📊 DASHBOARD TEMPS RÉEL"
-	@echo "======================"
-	@echo "🔄 Rafraîchissement toutes les 5 secondes (Ctrl+C pour arrêter)"
-	@echo ""
-	@while true; do \
-		clear; \
-		echo "🕐 $$(date '+%Y-%m-%d %H:%M:%S') - Dashboard Logs"; \
-		echo "================================================"; \
-		if [ -f "$(LOGS_FILE)" ]; then \
-			echo "📊 STATISTIQUES:"; \
-			echo "Total: $$(wc -l < $(LOGS_FILE)) | INFO: $$(grep -c 'INFO' $(LOGS_FILE) || echo 0) | WARN: $$(grep -c 'WARNING' $(LOGS_FILE) || echo 0) | ERROR: $$(grep -c 'ERROR' $(LOGS_FILE) || echo 0)"; \
-			echo ""; \
-			echo "🕐 DERNIERS ÉVÉNEMENTS:"; \
-			echo "----------------------"; \
-			tail -8 $(LOGS_FILE); \
-			echo ""; \
-			echo "🚨 DERNIÈRES ERREURS:"; \
-			echo "--------------------"; \
-			grep "ERROR" $(LOGS_FILE) | tail -3 || echo "Aucune erreur récente"; \
-		else \
-			echo "⚠️  Fichier $(LOGS_FILE) introuvable"; \
-		fi; \
-		sleep 5; \
-	done
-
-
-# ============================================================
-# 🏗️  Build & Correction automatique du code
-# ============================================================
 
 build: ## Build complet du projet (clean + install + lint-fix + format)
 	@echo "🏗️  CONSTRUCTION DU PROJET"
@@ -1016,8 +980,6 @@ security-check: ## Vérification de sécurité basique
 	else \
 		echo "✅ Aucun mot de passe hardcodé détecté"; \
 	fi
-
-validate: ## Validation complète du projet
 	@echo "✅ VALIDATION DU PROJET"
 	@echo "====================="
 	@echo ""
@@ -1037,23 +999,6 @@ validate: ## Validation complète du projet
 	@echo "✅ Validation terminée!"
 
 
-# ============================================================
-# 🐳 Docker Commands
-# ============================================================
-
-docker-dev: ## Lancer l'application avec Docker (développement avec reload)
-	@echo "🐳 Lancement Docker en mode développement..."
-	@sudo docker compose -f ./docker/docker-compose.dev.yml up --build
-
-docker-prod: ## Lancer l'application avec Docker (production avec Gunicorn)
-	@echo "🐳 Lancement Docker en mode production..."
-	@sudo docker compose -f ./docker/docker-compose.prod.yml up --build -d
-
-docker-stop: ## Arrêter les conteneurs Docker
-	@echo "🛑 Arrêt des conteneurs Docker..."
-	@sudo docker compose down
-
-docker-clean: ## Nettoyer les conteneurs et images Docker
 	@echo "🧹 Nettoyage Docker..."
 	@sudo docker compose down -v
 	@sudo docker system prune -f

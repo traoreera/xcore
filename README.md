@@ -1,131 +1,176 @@
-# XCore Framework
+# ⚡ XCore Framework
 
-XCore est un framework d'orchestration modulaire basé sur **FastAPI**, conçu pour charger, isoler et gérer des plugins dans un environnement sécurisé (sandbox). Il permet de construire des applications extensibles où chaque fonctionnalité peut être développée, testée et déployée indépendamment.
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/traoreera/xcore)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.118+-green.svg)](https://fastapi.tiangolo.com/)
 
-## 🚀 Fonctionnalités Clés
+**XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
-- **Système de Plugins Dynamique** : Chargez, déchargez et appelez des plugins à chaud sans redémarrer le serveur.
-- **Sandboxing & Sécurité** : Exécution isolée des plugins avec un superviseur (gestion des timeouts, redémarrages automatiques, limitation de débit).
-- **Intégration de Services Native** : Support intégré pour SQL (PostgreSQL, MySQL, SQLite), NoSQL (Redis), Planification de tâches (APScheduler), et plus encore.
-- **Architecture Événementielle (Hooks)** : Un gestionnaire de hooks puissant permettant la communication inter-plugins et la réaction aux événements système.
-- **Hot Reloading** : Surveillance automatique du dossier `plugins/` pour recharger les modifications en temps réel.
-- **Génération de Documentation** : Outil intégré (`docgen`) pour agréger et générer la documentation technique du projet.
-- **Prêt pour la Production** : Configuration via YAML, gestion des variables d'environnement et logs structurés.
+## 🏗️ Architecture Overview
 
-## 🏗️ Architecture
+XCore follows a "minimal core" philosophy where most features are provided via plugins or shared services.
 
-Le projet est structuré autour de plusieurs composants fondamentaux :
+```mermaid
+flowchart TB
+    subgraph Core["XCore Kernel"]
+        X[Orchestrator] --> PS[Plugin Supervisor]
+        X --> EB[Event Bus]
+        X --> SC[Service Container]
+    end
+    
+    PS --> Trusted[Trusted Plugins]
+    PS --> Sandbox[Sandboxed Plugins]
+    
+    SC --> DB[(Database)]
+    SC --> RD[(Redis)]
+    SC --> SCH[Scheduler]
+```
 
-- **`Manager`** (`xcore/manager.py`) : L'orchestrateur principal qui coordonne le cycle de vie des plugins et l'intégration des services.
-- **`PluginManager`** (`xcore/sandbox/manager.py`) : Gère le chargement, la validation des signatures et l'exécution des plugins.
-- **`Sandbox`** (`xcore/sandbox/`) : Fournit l'environnement d'isolation pour l'exécution sécurisée du code tiers.
-- **`Integration`** (`xcore/integration/`) : Unifie l'accès aux services externes (bases de données, cache, scheduler) via une configuration centralisée.
+---
 
-## 🛠️ Installation
+## 🚀 Getting Started
 
-### Prérequis
+### Prerequisites
 
 - **Python 3.11+**
-- **Poetry** (gestionnaire de dépendances)
+- **Poetry** (Package Manager)
 
-### Étapes
+### Installation
 
-1. **Cloner le dépôt** :
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/traoreera/xcore
    cd xcore
    ```
 
-2. **Installer les dépendances** :
+2. **Install dependencies**:
    ```bash
    poetry install
    ```
 
-3. **Configurer l'environnement** :
-   Copiez le fichier d'exemple (si présent) ou créez un fichier `.env` à la racine :
-   ```env
-   DATABASE_URL=sqlite:///./xcore.db
-   REDIS_URL=redis://localhost:6379/0
-   WEBHOOK_SECRET=votre_secret_ici
-   ```
-
-4. **Lancer l'application** :
+3. **Run the development server**:
    ```bash
-   poetry run uvicorn main:app --reload
+   make run-dev
    ```
+### or use pip to install and use it
+    ```bash
+        uv add https://github.com/traoreera/xcore
+    ```
 
-## 🔌 Développement de Plugins
+---
 
-Chaque plugin doit résider dans le dossier `plugins/` et suivre cette structure minimale :
+## 💻 Usage
 
+### 1. Integration with FastAPI
+
+```python
+from fastapi import FastAPI
+from xcore import Xcore
+from contextlib import asynccontextmanager
+
+xcore = Xcore(config_path="xcore.yaml")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await xcore.boot(app)
+    yield
+    await xcore.shutdown()
+
+app = FastAPI(lifespan=lifespan)
 ```
-plugins/mon_plugin/
-├── plugin.yaml      # Manifeste du plugihttps://github.com/traoreera/xcore/tree/featuresn (nom, version, entrées)
-├── plugin.sig       # Signature de sécurité (si strict_trusted=True)
+
+### 2. Standalone Usage
+
+```python
+from xcore import Xcore
+
+async def main():
+    app = Xcore()
+    await app.boot()
+    
+    # Call a plugin action
+    result = await app.plugins.call("users_plugin", "get_user", {"id": 1})
+    print(result)
+    
+    await app.shutdown()
+```
+
+---
+
+## 🔌 Plugin Development
+
+Plugins reside in the `plugins/` directory. A standard plugin structure looks like this:
+
+```text
+plugins/my_plugin/
+├── plugin.yaml      # Manifest (metadata & entry point)
+├── plugin.sig       # Security signature (for trusted plugins)
 └── src/
-    └── main.py      # Code source principal
+    └── main.py      # Core logic
 ```
 
-### Exemple de `plugin.yaml` :
+### Example `plugin.yaml`
 ```yaml
-name: "mon_plugin"
-version: "1.0.0"
-entry_point: "src.main:Plugin"
-trusted: true
+name: my_plugin
+version: "2.0.0"
+author: Your Name
+description: "A sample plugin"
+execution_mode: trusted  # or "sandboxed"
+framework_version: ">=2.0"
+entry_point: src/main.py
+
+permissions:
+  - resource: "cache.*"
+    actions: ["read", "write"]
+    effect: allow
+
+resources:
+  timeout_seconds: 30
+  rate_limit:
+    calls: 100
+    period_seconds: 60
 ```
 
-## 📜 Scripts et Commandes
+---
 
-XCore propose une large gamme de commandes via **Poetry** et **Make** pour faciliter le développement et l'exploitation.
+## 🛠️ CLI Reference
 
-### Commandes Makefile (Recommandé)
+XCore comes with a powerful CLI for management and security.
 
-Utilisez `make help` pour voir toutes les commandes disponibles. Voici les plus courantes :
+| Command | Description |
+| :--- | :--- |
+| `xcore plugin list` | List all loaded plugins |
+| `xcore plugin load <name>` | Load a specific plugin |
+| `xcore plugin reload <name>` | Hot-reload a plugin |
+| `xcore plugin sign <path>` | Generate a security signature for a plugin |
+| `xcore plugin validate <path>`| Validate plugin manifest and structure |
+| `xcore services status` | Check the health of DB, Cache, and Scheduler |
+| `xcore health` | Perform a global system health check |
 
-- **Développement** :
-  - `make init` : Initialise le projet (installation + lancement dev).
-  - `make run-dev` : Lance le serveur en mode développement (port 8082, avec reload).
-  - `make run-st` : Lance le serveur en mode production/statique (port 8081).
-  - `make clean` : Nettoie les fichiers temporaires et caches Python.
+---
 
-- **Qualité et Build** :
-  - `make lint-fix` : Corrige automatiquement le formatage du code (Black, Isort, Autopep8).
-  - `make build` : Exécute le nettoyage, l'installation et le linting.
-  - `make test` : Lance la suite de tests unitaires.
+## 📜 Makefile Commands
 
-- **Gestion des Plugins** :
-  - `make add-plugin PLUGIN_NAME=nom` : Ajoute ou met à jour un plugin depuis un dépôt Git.
-  - `make rm-plugin PLUGIN_NAME=nom` : Supprime un plugin.
+| Command | Description |
+| :--- | :--- |
+| `make init` | Initialize project (install + run) |
+| `make test` | Run the test suite |
+| `make lint-fix` | Auto-format code (Black, Isort) |
+| `make docker-dev` | Spin up development environment with Docker |
+| `make logs-live` | View real-time structured logs |
 
-- **Supervision et Logs** :
-  - `make logs-live` : Affiche les logs en temps réel.
-  - `make logs-stats` : Affiche les statistiques des logs (erreurs, warnings, etc.).
-  - `make logs-health-check` : Effectue un bilan de santé complet du système via les logs.
+---
 
-- **Docker** :
-  - `make docker-dev` : Lance l'environnement de développement via Docker Compose.
-  - `make docker-prod` : Lance l'environnement de production via Docker Compose.
+## 📄 License
 
-### Scripts Poetry (Alternatifs)
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
-- `poetry run migrate` : Exécute les migrations de base de données.
-- `poetry run auto_migrate` : Génère et applique automatiquement les migrations.
-- `poetry run dbutils` : Outils de découverte de modèles.
+---
 
-## 📖 Documentation et Outils
+<p align="center">
+  Built with ❤️ by <b>Xcore team's</b>
+</p>
 
-XCore inclut des outils intégrés pour faciliter la maintenance et la documentation du code :
 
-- **`docgen`** : Un moteur interne qui agrège les fichiers Markdown du dossier `docs/` et peut analyser le code source pour générer une documentation technique structurée.
-- **`doc-gen-summaries.json`** : Un cache pour les résumés générés automatiquement.
-- **Sphinx** : Support optionnel pour la génération de documentation HTML statique via `make auto-docs`.
-
-Pour consulter la documentation technique existante, explorez le dossier `docs/` :
-- **Configurations** : `docs/configurations/` (base, core, redis, secure...).
-- **Intégration** : `docs/integration/` (config, core, services...).
-- **Sandbox** : `docs/sandbox/` (manager, router, supervisor...).
-- **Hooks** : `docs/hooks/`.
-
-## 📄 Licence
-
-Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+<!-- Automated minor fix for issue #46 -->

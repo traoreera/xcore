@@ -101,11 +101,30 @@ jobs:
 
   # ── GitHub Release ─────────────────────────────────────────────────────────
   release:
-    name: 🎉 Create GitHub Release
+    name: 🎉 Build & Create GitHub Release
     runs-on: ubuntu-latest
     needs: changelog
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: Build package
+        run: poetry build
+
+      - name: Verify dist contents
+        run: ls -lh dist/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -115,6 +134,9 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
           generate_release_notes: false
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
 
   # ── Notification de succès ─────────────────────────────────────────────────
   notify:

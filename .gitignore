@@ -38,9 +38,19 @@ htmlcov/
 tmp/
 backgroundtask
 node_modules/
+docs/
 
 .claude
 
 CLAUDE.md
 _build
 site
+plugins
+orchestra.db
+analyse.md
+.coverage
+coverage.*
+integration.yaml
+/app
+main.py
+/log

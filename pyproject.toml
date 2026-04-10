@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "xcore"
-version = "0.1.0"
+version = "2.0.0"
 description = "for base html core app"
 authors = ["Eliezer Traore <68350805+traoreera@users.noreply.github.com>"]
 license = "MIT"
@@ -21,13 +21,10 @@ watchdog = ">=6.0.0,<7.0.0"
 markdown = ">=3.8.2,<4.0.0"
 pillow = ">=11.2.1,<13.0.0"
 psutil = ">=7.0.0,<8.0.0"
-
 toml = "^0.10.2"
 uvicorn = "^0.38.0"
 
 # security
-bcrypt = "4.0.1"
-passlib = { extras = ["bcrypt"], version = ">=1.7.4,<2.0.0" }
 python-jose = ">=3.4.0,<4.0.0"
 
 
@@ -48,14 +45,15 @@ psycopg2 = "^2.9.11"
 aiosqlite = "^0.22.1"
 mysql-connector-python = "^9.4.0"
 sqlalchemy = ">=2.0.41,<3.0.0"
-fastapi = "^0.118.2"
+fastapi = {extras = ["standard"], version = "^0.135.1"}
 aiocache = "^0.12.3"
 redis = {extras = ["hiredis"], version = "^7.0.0"}
+pyyaml = "^6.0.3"
 
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.3.0"
-black = "^25.9.0"
+black = "^26.3.1"
 flake8 = "^7.3.0"
 autoflake = "^2.3.1"
 isort = "^6.1.0"
@@ -78,6 +76,12 @@ mkdocstrings = "^1.0.3"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "opshero (>=0.1.2,<0.2.0)",
+]
 
 [tool.flake8]
 max-line-length = 88

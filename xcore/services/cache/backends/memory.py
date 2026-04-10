@@ -1,5 +1,5 @@
 """
-memory.py — Backend cache mémoire : LRU + TTL + max_size.
+Backend cache mémoire : LRU + TTL + max_size.
 Zéro dépendance externe.
 """
 
@@ -69,6 +69,41 @@ class MemoryBackend:
 
     async def clear(self) -> None:
         self._store.clear()
+
+    async def mget(self, keys: list[str]) -> dict[str, Any]:
+        """Récupère plusieurs clés d'un coup."""
+        now = time.monotonic()
+        results = {}
+        for k in keys:
+            entry = self._store.get(k)
+            if entry is None:
+                self._misses += 1
+                results[k] = None
+                continue
+            if entry.expires_at is not None and now > entry.expires_at:
+                del self._store[k]
+                self._misses += 1
+                results[k] = None
+                continue
+            # LRU move
+            self._store.move_to_end(k)
+            self._hits += 1
+            results[k] = entry.value
+        return results
+
+    async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
+        """Définit plusieurs clés d'un coup."""
+        effective_ttl = ttl if ttl is not None else self._ttl
+        expires_at = (time.monotonic() + effective_ttl) if effective_ttl > 0 else None
+
+        for k, v in mapping.items():
+            if k in self._store:
+                self._store.move_to_end(k)
+            self._store[k] = _Entry(value=v, expires_at=expires_at)
+
+        # Éviction LRU si max_size dépassé
+        while len(self._store) > self._max_size:
+            self._store.popitem(last=False)
 
     async def keys(self, pattern: str | None = None) -> list[str]:
         import fnmatch

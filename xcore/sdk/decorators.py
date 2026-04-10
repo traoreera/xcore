@@ -2,6 +2,7 @@
 decorators.py — Décorateurs utilitaires pour les plugins xcore v2.
 
 Usage:
+```python
     from xcore.sdk import TrustedBase, action, require_service
 
     class Plugin(TrustedBase):
@@ -16,14 +17,19 @@ Usage:
         async def save(self, payload: dict) -> dict:
             db = self.get_service("db")
             ...
+    ```
 """
 
 from __future__ import annotations
 
-import asyncio
 import functools
+import inspect
 import logging
-from typing import Any, Callable
+from typing import Callable, Type, Literal
+
+from pydantic import BaseModel, ValidationError
+
+from ..kernel.api.contract import error
 
 logger = logging.getLogger("xcore.sdk.decorators")
 
@@ -74,38 +80,43 @@ def require_service(*service_names: str):
     return decorator
 
 
-def validate_payload(**schema: type):
+def validate_payload(
+    schema: Type[BaseModel],
+    type_response: Literal["dict", "BaseModel"] = "BaseModel",
+    unset: bool = True,
+):
     """
-    Valide les types des champs du payload.
+    Valide un payload via un modèle Pydantic.
     Retourne {"status": "error"} si la validation échoue.
 
     Usage:
-        @validate_payload(name=str, age=int)
+        ```python
+        class CreateUserModel(BaseModel):
+            name: str
+            age: int
+
+        @validate_payload(CreateUserModel)
         async def create_user(self, payload: dict) -> dict:
             ...
+        ```
     """
 
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
-        async def wrapper(self, payload: dict, *args, **kwargs):
-            for field, expected_type in schema.items():
-                if field not in payload:
-                    from ..kernel.api.contract import error
+        async def warpper(self, payload: dict, *args, **kwargs):
+            try:
+                validate = schema(**payload)
+            except ValidationError as e:
+                return error(e.errors(), "validation_error")
+            return (
+                await fn(self, validate, *args, **kwargs)
+                if type_response == "pydantic"
+                else await fn(
+                    self, validate.model_dump(exclude_unset=unset), *args, **kwargs
+                )
+            )
 
-                    return error(
-                        f"Champ obligatoire manquant : '{field}'", "validation_error"
-                    )
-                if not isinstance(payload[field], expected_type):
-                    from ..kernel.api.contract import error
-
-                    return error(
-                        f"'{field}' doit être de type {expected_type.__name__}, "
-                        f"reçu {type(payload[field]).__name__}",
-                        "validation_error",
-                    )
-            return await fn(self, payload, *args, **kwargs)
-
-        return wrapper
+        return warpper
 
     return decorator
 
@@ -118,6 +129,10 @@ def route(
     summary: str | None = None,
     status_code: int = 200,
     response_model=None,
+    dependencies: list | None = None,  # ← FastAPI Depends() par route
+    # ← RBAC déclaratif ["admin", "read:users"]
+    permissions: list[str] | None = None,
+    scopes: list[str] | None = None,  # ← OAuth2 scopes si besoin
 ):
     """
     Décorateur pour déclarer une route HTTP FastAPI directement sur le plugin.
@@ -152,6 +167,9 @@ def route(
             "summary": summary or fn.__name__.replace("_", " ").title(),
             "status_code": status_code,
             "response_model": response_model,
+            "dependencies": dependencies or [],
+            "permissions": permissions or [],
+            "scopes": scopes or [],
         }
         return fn
 
@@ -182,48 +200,57 @@ class RoutedPlugin:
                 return {"status": "running"}
     """
 
-    def get_router(self) -> "Any":
-        try:
-            from fastapi import APIRouter
-        except ImportError as e:
-            raise ImportError("fastapi non installé — pip install fastapi") from e
+    # xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
+
+    def RouterIn(self):
+        from fastapi import APIRouter, Depends
+
+        from xcore.kernel.api.rbac import RBACChecker
 
         router = APIRouter()
-        for attr_name in dir(self):
+
+        for attr_name in dir(self.__class__):
             method = getattr(self.__class__, attr_name, None)
-            if method is None or not callable(method):
-                continue
             route_info = getattr(method, "_xcore_route", None)
             if not route_info:
                 continue
 
-            # Crée un handler lié à self (closure)
             bound = getattr(self, attr_name)
 
-            # fastapi attend une fonction, pas une méthode bound
-            import functools
+            # ── Construit les dependencies ──────────────────────────
+            route_deps = list(route_info.get("dependencies", []))
 
-            @functools.wraps(method)
-            async def _handler(*args, _fn=bound, **kwargs):
-                import inspect
+            # RBAC automatique depuis `permissions`
+            required_perms = route_info.get("permissions", [])
+            if required_perms:
+                route_deps.append(Depends(RBACChecker(required_perms)))
 
-                sig = inspect.signature(_fn)
-                # Retire les paramètres FastAPI non présents dans la signature
-                filtered = {k: v for k, v in kwargs.items() if k in sig.parameters}
-                return (
-                    await _fn(**filtered)
-                    if asyncio.iscoroutinefunction(_fn)
-                    else _fn(**filtered)
-                )
+            # ── Handler ────────────────────────────────────────────
+            def make_handler(fn):
+                @functools.wraps(fn)
+                async def handler(**kwargs):
+                    return (
+                        await fn(**kwargs)
+                        if inspect.iscoroutinefunction(fn)
+                        else fn(**kwargs)
+                    )
+
+                sig = inspect.signature(fn)
+                params = [p for name, p in sig.parameters.items() if name != "self"]
+                handler.__signature__ = sig.replace(parameters=params)
+                return handler
+
+            handler = make_handler(bound)
 
             router.add_api_route(
                 path=route_info["path"],
-                endpoint=_handler,
+                endpoint=handler,
                 methods=[route_info["method"]],
                 tags=route_info["tags"],
                 summary=route_info["summary"],
                 status_code=route_info["status_code"],
                 response_model=route_info["response_model"],
+                dependencies=route_deps,  # ← ici, par route
             )
 
         return router if router.routes else None

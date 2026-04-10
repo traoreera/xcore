@@ -1,25 +1,25 @@
 """
-ConfigLoader v2 — charge xcore.yaml avec :
+ConfigLoader v2 — load xcore.yaml with :
   - substitution ${ENV_VAR}
-  - surcharges XCORE__SECTION__KEY=value
-  - valeurs par défaut sans aucun fichier (zero-config)
-  - clé secret_key auto-convertie bytes
+  - overloads XCORE__SECTION__KEY=value
+  - default values
+  - secret_key automatically converted to bytes
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .helper import _resolve
 from .sections import (
     AppConfig,
     CacheConfig,
     DatabaseConfig,
     LoggingConfig,
+    MarketplaceConfig,
     MetricsConfig,
     ObservabilityConfig,
     PluginConfig,
@@ -27,79 +27,29 @@ from .sections import (
     SecurityConfig,
     ServicesConfig,
     TracingConfig,
+    XcoreConfig,
 )
 
 logger = logging.getLogger("xcore.config")
-
-_ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
-
-
-# ─────────────────────────────────────────────────────────────
-# Résolution des variables d'environnement dans le YAML
-# ─────────────────────────────────────────────────────────────
-
-
-def _resolve(value: Any) -> Any:
-    """Remplace ${VAR} dans toute la structure YAML."""
-    if isinstance(value, str):
-
-        def _sub(m: re.Match) -> str:
-            var = m.group(1)
-            resolved = os.environ.get(var)
-            if resolved is None:
-                logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
-                return ""
-            return resolved
-
-        return _ENV_PATTERN.sub(_sub, value)
-    if isinstance(value, dict):
-        return {k: _resolve(v) for k, v in value.items()}
-    return [_resolve(v) for v in value] if isinstance(value, list) else value
-
-
-# ─────────────────────────────────────────────────────────────
-# Config globale
-# ─────────────────────────────────────────────────────────────
-
-
-@dataclass
-class XcoreConfig:
-    app: AppConfig = field(default_factory=AppConfig)
-    plugins: PluginConfig = field(default_factory=PluginConfig)
-    services: ServicesConfig = field(default_factory=ServicesConfig)
-    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
-    security: SecurityConfig = field(default_factory=SecurityConfig)
-    raw: dict[str, Any] = field(default_factory=dict)
-
-
-# ─────────────────────────────────────────────────────────────
-# Loader
-# ─────────────────────────────────────────────────────────────
 
 
 class ConfigLoader:
     """
     Charge xcore.yaml (ou xcore.json) et expose une XcoreConfig typée.
 
-    Ordre de résolution :
-      1. Lecture YAML / JSON
-      2. Injection .env (si app.dotenv défini)
+    Resolution process:
+      1. Read YAML / JSON
+      2. Injection .env
       3. Substitution ${VAR}
-      4. Surcharges XCORE__SECTION__KEY depuis l'environnement
-      5. Parsing en dataclasses
-
-    Aucun fichier → valeurs par défaut (zero-config).
-
-    Usage:
-        cfg = ConfigLoader.load()
-        cfg = ConfigLoader.load("config/xcore.yaml")
+      4. Overloads XCORE__SECTION__KEY
+      5. Parsing dataclasses
     """
 
     DEFAULT_PATHS = [
-        Path("integration.yaml"),
-        Path("integration.yml"),
-        Path("integration.json"),
-        Path("config/integration.yaml"),
+        Path("xcore.yaml"),
+        Path("xcore.yml"),
+        Path("xcore.json"),
+        Path("config/xcore.yaml"),
     ]
 
     @classmethod
@@ -110,12 +60,9 @@ class ConfigLoader:
         raw = cls._apply_env_overrides(raw)
         return cls._parse(raw)
 
-    # ── YAML / JSON ───────────────────────────────────────────
-
     @classmethod
     def _read(cls, path: str | Path | None) -> dict[str, Any]:
         candidates = [Path(path)] if path else cls.DEFAULT_PATHS
-
         for candidate in candidates:
             if not candidate.exists():
                 continue
@@ -131,19 +78,16 @@ class ConfigLoader:
 
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
-                logger.info(f"Configuration chargée : {candidate}")
+                logger.info(f"conf loaded : {candidate}")
                 return data
             except ImportError:
-                logger.warning("pyyaml non installé — pip install pyyaml")
+                logger.warning("pyyaml not installed — pip install pyyaml")
                 return {}
             except Exception as e:
-                logger.error(f"Impossible de lire {candidate} : {e}")
+                logger.error(f"error reading {candidate} : {e}")
                 return {}
-
-        logger.info("Aucun fichier xcore.yaml trouvé — valeurs par défaut.")
+        logger.info("No config file found. Using defaults.")
         return {}
-
-    # ── .env ──────────────────────────────────────────────────
 
     @classmethod
     def _load_dotenv(cls, raw: dict[str, Any]) -> None:
@@ -158,15 +102,12 @@ class ConfigLoader:
             from dotenv import load_dotenv
 
             load_dotenv(dotenv_path=path, override=False)
-            logger.info(f".env chargé : {path}")
+            logger.info(f".env loaded : {path}")
         except ImportError:
-            logger.warning("python-dotenv non installé — pip install python-dotenv")
-
-    # ── Surcharges ENV ────────────────────────────────────────
+            logger.warning("python-dotenv not installed — pip install python-dotenv")
 
     @classmethod
     def _apply_env_overrides(cls, raw: dict[str, Any]) -> dict[str, Any]:
-        """XCORE__APP__DEBUG=true surcharge app.debug."""
         prefix = "XCORE__"
         for key, value in os.environ.items():
             if not key.startswith(prefix):
@@ -175,7 +116,6 @@ class ConfigLoader:
             target = raw
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
-            # Coercition de type
             if isinstance(value, str):
                 if value.lower() in ("true", "1", "yes"):
                     value = True
@@ -186,8 +126,6 @@ class ConfigLoader:
             target[parts[-1]] = value
         return raw
 
-    # ── Parsers ───────────────────────────────────────────────
-
     @classmethod
     def _parse(cls, raw: dict[str, Any]) -> XcoreConfig:
         return XcoreConfig(
@@ -196,6 +134,7 @@ class ConfigLoader:
             services=cls._parse_services(raw.get("services", {})),
             observability=cls._parse_observability(raw.get("observability", {})),
             security=cls._parse_security(raw.get("security", {})),
+            marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
             raw=raw,
         )
 
@@ -211,6 +150,8 @@ class ConfigLoader:
             secret_key=sk,
             plugin_prefix=d.get("plugin_prefix", "/plugin"),
             plugin_tags=d.get("plugin_tags", []),
+            server_key=d.get("server_key"),
+            server_key_iterations=d.get("server_key_iterations", 100000),
         )
 
     @staticmethod
@@ -256,7 +197,6 @@ class ConfigLoader:
             max_size=c.get("max_size", 1000),
             url=c.get("url"),
         )
-
         s = d.get("scheduler", {})
         scheduler = SchedulerConfig(
             enabled=s.get("enabled", True),
@@ -264,7 +204,6 @@ class ConfigLoader:
             timezone=s.get("timezone", "UTC"),
             jobs=s.get("jobs", []),
         )
-
         return ServicesConfig(
             databases=dbs,
             cache=cache,
@@ -310,10 +249,17 @@ class ConfigLoader:
             ),
         )
 
+    @staticmethod
+    def _parse_marketplace(d: dict) -> MarketplaceConfig:
+        return MarketplaceConfig(
+            url=d.get("url", "https://marketplace.xcore.dev"),
+            api_key=d.get("api_key", ""),
+            timeout=d.get("timeout", 10),
+            cache_ttl=d.get("cache_ttl", 300),
+        )
 
-# ─────────────────────────────────────────────────────────────
-# Singleton global
-# ─────────────────────────────────────────────────────────────
+
+# ── Singleton global ──────────────────────────────────────────
 
 _config: XcoreConfig | None = None
 

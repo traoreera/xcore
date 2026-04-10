@@ -1,23 +1,38 @@
 """
 supervisor.py — Orchestrateur haut niveau du système de plugins.
 
-Agrège : PluginLoader + rate limiter + retry + routing appels.
+Agrège : PluginLoader + PermissionEngine + rate limiter + retry + routing appels.
 C'est lui qu'expose Xcore via xcore.plugins.
 """
 
+
 from __future__ import annotations
 
-import asyncio
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...configurations.sections import PluginConfig
+    from ..context import KernelContext
 
-from ..sandbox.limits import RateLimiterRegistry, RateLimitExceeded
+from ..permissions.engine import PermissionEngine
+from ..sandbox.limits import RateLimiterRegistry
 from .loader import PluginLoader
+from .middlewares import (
+    Middleware,
+    MiddlewarePipeline,
+    MiddlewareRegistry,
+    PermissionMiddleware,
+    RateLimitMiddleware,
+    RetryMiddleware,
+    TracingMiddleware
+)
 
 logger = logging.getLogger("xcore.runtime.supervisor")
+
+
+
+
 
 
 class PluginSupervisor:
@@ -25,7 +40,8 @@ class PluginSupervisor:
     Interface haut niveau pour interagir avec les plugins.
 
     Usage:
-        supervisor = PluginSupervisor(config, services, events, hooks, registry)
+        ctx = KernelContext(config, services, events, hooks, registry)
+        supervisor = PluginSupervisor(ctx)
         await supervisor.boot()
 
         result = await supervisor.call("my_plugin", "ping", {})
@@ -34,35 +50,48 @@ class PluginSupervisor:
         await supervisor.shutdown()
     """
 
-    def __init__(
-        self,
-        config: "PluginConfig",
-        services,  # ServiceContainer
-        events=None,
-        hooks=None,
-        registry=None,
-    ) -> None:
-        self._config = config
-        self._services = services
-        self._events = events
-        self._hooks = hooks
-        self._registry = registry
+    def __init__(self, ctx: "KernelContext") -> None:
+        self._ctx = ctx
+        self._config = ctx.config
+        self._services = ctx.services
+        self._events = ctx.events
+        self._hooks = ctx.hooks
+        self._registry = ctx.registry
+        self._metrics = ctx.metrics
+        self._tracer = ctx.tracer
+        self._health = ctx.health
+
         self._rate = RateLimiterRegistry()
+        self._permissions = PermissionEngine(events=self._events)
 
         self._loader: PluginLoader | None = None
+        self._pipeline: MiddlewarePipeline | None = None
+
+        self._middleware_registry = MiddlewareRegistry()
+        self._setup_default_middlewares()
+
+    def _setup_default_middlewares(self) -> None:
+        """Registers default middleware factories."""
+        self._middleware_registry.register(
+            "tracing", lambda ctx: TracingMiddleware(ctx.get("tracer"), ctx.get("metrics"))
+        )
+        self._middleware_registry.register(
+            "rate_limit", lambda ctx: RateLimitMiddleware(ctx.get("rate"))
+        )
+        self._middleware_registry.register(
+            "permissions", lambda ctx: PermissionMiddleware(ctx.get("permissions"))
+        )
+        self._middleware_registry.register("retry", lambda _: RetryMiddleware())
 
     async def boot(self) -> None:
         """Instancie le loader et charge tous les plugins."""
-        # Le container de services est un dict partagé par référence
-        svc_dict = (
-            self._services.as_dict() if hasattr(self._services, "as_dict") else {}
-        )
+        # Souscription réactive aux événements de plugin
+        if self._events:
+            self._events.subscribe("plugin.*.services_registered", self._on_plugin_services_registered)
 
         self._loader = PluginLoader(
-            config=self._config,
-            services=svc_dict,
-            events=self._events,
-            hooks=self._hooks,
+            ctx=self._ctx,
+            caller=lambda name, action, payload: self.call(name, action, payload),
         )
         report = await self._loader.load_all()
         logger.info(
@@ -70,81 +99,144 @@ class PluginSupervisor:
             f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
         )
 
-        # Enregistrement dans le registry si disponible
+        # Enregistrement des services noyau comme "protégés" dans le registre
         if self._registry:
-            for name in report["loaded"]:
-                self._registry.register(name, self._loader.get(name))
+            for name, svc in self._services.as_dict().items():
+                try:
+                    self._registry.register_core_service(name, svc)
+                except Exception as e:
+                    logger.warning(f"Erreur lors de l'enregistrement du service noyau '{name}': {e}")
 
-        # Émettre l'événement de démarrage
+        # Note: L'enregistrement des permissions, rate limits et registry
+        # est maintenant géré de manière réactive via _on_plugin_services_registered
+
+        # Initialisation du pipeline de middlewares via le registry
+        # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
+        mw_context = {
+            "tracer": self._tracer,
+            "metrics": self._metrics,
+            "rate": self._rate,
+            "permissions": self._permissions,
+        }
+        self._pipeline = self._middleware_registry.create_pipeline(
+            names=["tracing", "rate_limit", "permissions", "retry"],
+            context=mw_context,
+            final_handler=self._dispatch,
+        )
+
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
 
+    def _register_rate_limits(self, plugin_names: list[str]) -> None:
+        """Enregistre les rate limits de chaque plugin dans le RateLimiterRegistry."""
+        from ..sandbox.limits import RateLimitConfig as LimitsRateLimitConfig
+
+        for name in plugin_names:
+            try:
+                handler = self._loader.get(name)
+                manifest = getattr(handler, "manifest", None)
+                if manifest and hasattr(manifest, "resources"):
+                    rl = manifest.resources.rate_limit
+                    config = LimitsRateLimitConfig(
+                        calls=rl.calls,
+                        period_seconds=rl.period_seconds,
+                    )
+                    self._rate.register(name, config)
+                    logger.debug(
+                        f"[{name}] Rate limit : {rl.calls}/{rl.period_seconds}s"
+                    )
+            except Exception as e:
+                logger.error(f"[{name}] Erreur enregistrement rate limit : {e}")
+
+    async def _on_plugin_services_registered(self, event) -> None:
+        """Handler réactif appelé quand un plugin a enregistré ses services."""
+        plugin_name = event.data.get("plugin")
+        if not plugin_name:
+            return
+
+        logger.debug(f"Configuration réactive pour '{plugin_name}'")
+
+        # 1. Chargement des permissions
+        self._load_permissions([plugin_name])
+
+        # 2. Enregistrement des rate limits
+        self._register_rate_limits([plugin_name])
+
+        # 3. Enregistrement dans le registry si disponible
+        if self._registry and self._loader:
+            with contextlib.suppress(KeyError):
+                self._registry.register(plugin_name, self._loader.get(plugin_name))
+
+    def _load_permissions(self, plugin_names: list[str]) -> None:
+        """Charge les policies de chaque plugin dans le PermissionEngine."""
+        for name in plugin_names:
+            try:
+                handler = self._loader.get(name)
+                manifest = getattr(handler, "manifest", None)
+                raw_permissions = getattr(manifest, "permissions", None)
+                self._permissions.load_from_manifest(name, raw_permissions)
+                logger.debug(f"[{name}] Permissions chargées")
+            except Exception as e:
+                logger.error(f"[{name}] Erreur chargement permissions : {e}")
+                # Fail-closed : si on ne peut pas charger, deny all
+                self._permissions.load_from_manifest(name, None)
+
     # ── Appel ─────────────────────────────────────────────────
 
-    async def call(self, plugin_name: str, action: str, payload: dict) -> dict:
+    async def call(self, plugin_name, action, payload, *, resource=None) -> dict:
         """
-        Route un appel vers le plugin approprié.
-
-        Applique :
-          - Rate limiting
-          - Retry (selon manifest)
-          - Gestion d'erreur standardisée
+        Appelle une action sur un plugin via la pipeline de middlewares.
         """
-        if self._loader is None:
+        if self._loader is None or self._pipeline is None:
             return self._err("Supervisor non démarré", "not_ready")
-
-        try:
-            await self._rate.check(plugin_name)
-        except RateLimitExceeded as e:
-            return self._err(str(e), "rate_limit_exceeded")
 
         if not self._loader.has(plugin_name):
             return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
 
         handler = self._loader.get(plugin_name)
-        return await self._call_with_retry(plugin_name, handler, action, payload)
 
-    async def _call_with_retry(
-        self, name: str, handler, action: str, payload: dict
+        # Exécution de la pipeline (inclut tracing, retry, rate limit et permissions)
+        return await self._pipeline.execute(
+            plugin_name, action, payload, handler=handler, resource=resource
+        )
+
+    async def _dispatch(
+        self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
-        manifest = getattr(handler, "manifest", None)
-        retry_cfg = getattr(manifest, "runtime", None)
-        max_attempts = (
-            getattr(getattr(retry_cfg, "retry", None), "max_attempts", 1)
-            if retry_cfg
-            else 1
-        )
-        backoff = (
-            getattr(getattr(retry_cfg, "retry", None), "backoff_seconds", 0.0)
-            if retry_cfg
-            else 0.0
-        )
-
-        last_err = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                return await handler.call(action, payload)
-            except Exception as e:
-                last_err = e
-                if attempt < max_attempts:
-                    logger.warning(
-                        f"[{name}] Tentative {attempt} échouée, retry dans {backoff}s"
-                    )
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 60.0)
-
-        logger.error(f"[{name}] Toutes les tentatives échouées : {last_err}")
-        return self._err(str(last_err), "all_retries_failed")
+        """Dernière étape du pipeline : exécution réelle."""
+        if handler is None:
+            handler = self._loader.get(plugin_name)
+        return await handler.call(action, payload)
 
     # ── Gestion dynamique ─────────────────────────────────────
+
+    def register_middleware(self, middleware: Middleware, first: bool = False) -> None:
+        """
+        Enregistre dynamiquement un middleware dans la pipeline.
+
+        Si first=True, le middleware est placé en début de chaîne
+        (exécuté avant les autres).
+        """
+        if self._pipeline is None:
+            raise RuntimeError("Le pipeline n'est pas encore initialisé. Appelez boot() d'abord.")
+        self._pipeline.add_middleware(middleware, first=first)
+        logger.info(f"Middleware {middleware.__class__.__name__} enregistré dynamiquement.")
+
+    def get_active_middlewares(self) -> list[Middleware]:
+        """Retourne la liste des middlewares actifs dans la pipeline."""
+        return [] if self._pipeline is None else self._pipeline.get_middlewares()
 
     async def load(self, plugin_name: str) -> None:
         if self._loader:
             await self._loader.load(plugin_name)
+            self._load_permissions([plugin_name])
+            self._register_rate_limits([plugin_name])
 
     async def reload(self, plugin_name: str) -> None:
         if self._loader:
             await self._loader.reload(plugin_name)
+            # Rechargement des permissions après reload (le manifeste peut avoir changé)
+            self._load_permissions([plugin_name])
             if self._events:
                 await self._events.emit(f"plugin.{plugin_name}.reloaded", {})
 
@@ -166,11 +258,17 @@ class PluginSupervisor:
         return self._loader.all_names() if self._loader else []
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
-        """
-        Délègue au loader la collecte des APIRouter exposés par les plugins.
-        Appelé par Xcore._attach_router() après le boot.
-        """
         return self._loader.collect_plugin_routers() if self._loader else []
+
+    def permissions_status(self) -> dict:
+        """Expose l'état du moteur de permissions (audit log + policies)."""
+        return self._permissions.status()
+
+    def permissions_audit(
+        self, plugin_name: str | None = None, limit: int = 100
+    ) -> list[dict]:
+        """Retourne le journal d'audit des permissions."""
+        return self._permissions.audit_log(plugin_name, limit)
 
     # ── Arrêt ─────────────────────────────────────────────────
 

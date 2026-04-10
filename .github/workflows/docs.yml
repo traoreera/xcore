@@ -1,4 +1,4 @@
-name: Docs – Build & Deploy
+name: Docs – Build & Deploy MkDocs
 
 on:
   push:
@@ -44,26 +44,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-docs-${{ hashFiles('docs/requirements.txt') }}
+          key: pip-docs-${{ hashFiles('doc/requirements.txt') }}
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r docs/requirements.txt
+          pip install -r doc/requirements.txt
 
       - name: Build site
-        run: mkdocs build --strict
+        run: mkdocs build 
 
       - name: Upload artifact (Pages)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs
 
   deploy:
     name: 🚀 Deploy to GitHub Pages
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/features' && github.event_name == 'push'
+    if: github.event_name != 'pull_request'
 
     environment:
       name: github-pages

@@ -1,45 +1,69 @@
 """
-context.py — Contexte riche injecté dans chaque plugin.
+Rich context injected into each plugin.
 
-PluginContext remplace le simple dict de services de la v1.
-Il donne accès aux services, à l'event bus, aux hooks,
-aux variables d'environnement et à la config du plugin.
+PluginContext replaces the simple services dictionary from v1.
+It provides access to services, the event bus, hooks, environment
+variables, and the plugin configuration.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable, TYPE_CHECKING
 
-
+if TYPE_CHECKING:
+    from .proto import EventBus, HookManager
+    from ..observability import Tracer, MetricsRegistry, HealthChecker
+    from ...registry import PluginRegistry
 @dataclass
 class PluginContext:
     """
-    Contexte injecté dans chaque plugin Trusted au moment du chargement.
+    Context injected into each Trusted plugin at load time.
 
-    Attributs:
-        name:     nom du plugin
-        services: dict partagé des services (BDD, cache, autres plugins…)
-        events:   EventBus — émettre/souscrire des événements
-        hooks:    HookManager — hooks prioritaires avec wildcards
-        env:      variables d'environnement résolues depuis plugin.yaml
-        config:   bloc `extra` du manifeste (config arbitraire du plugin)
+    Attributes:
+
+        name: plugin name
+        services: shared dictionary of services (database, cache, other plugins, etc.)
+        events: EventBus — emit/subscribe to events
+        hooks: HookManager — priority hooks with wildcards
+        env: environment variables resolved from plugin.yaml
+        config: `extra` block of the manifest (arbitrary plugin configuration)
     """
 
     name: str
     services: dict[str, Any] = field(default_factory=dict)
-    events: Any = None  # EventBus
-    hooks: Any = None  # HookManager
+    events: EventBus = None  # EventBus
+    hooks: HookManager = None  # HookManager
     env: dict[str, str] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
+    caller: Callable[[str, str, dict], Awaitable[dict]] | None = None
+
+    metrics: MetricsRegistry = None  # MetricsRegistry
+    tracer: Tracer = None  # Tracer
+    health: HealthChecker = None  # HealthChecker
+    registry: PluginRegistry = None  # PluginRegistry
 
     def get_service(self, name: str) -> Any:
-        """Accès sécurisé à un service avec message d'erreur clair."""
+        """
+        Accès sécurisé à un service avec vérification de scoping via le registry
+        si disponible, sinon via le container partagé.
+        """
+        # Priorité au registry pour le respect des scopes (public/private/protected)
+        if self.registry:
+            try:
+                return self.registry.get_service(name, requester=self.name)
+            except (KeyError, PermissionError) as e:
+                # Si non trouvé ou refusé par le registry, on tente le container
+                # (Certains services noyau ne sont pas forcément dans le registry)
+                if isinstance(e, PermissionError):
+                    raise
+
+        # Fallback sur le container direct
         svc = self.services.get(name)
         if svc is None:
             raise KeyError(
-                f"[{self.name}] Service '{name}' indisponible. "
-                f"Disponibles : {sorted(self.services.keys())}"
+                f"[{self.name}] Service '{name}' unavailable. "
+                f"available : {sorted(self.services.keys())}"
             )
         return svc
 

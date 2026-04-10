@@ -1,5 +1,5 @@
 """
-loader.py — Chargeur de services tiers (extensions).
+Chargeur de services tiers (extensions).
 
 Permet de déclarer des services custom dans xcore.yaml :
 
@@ -44,11 +44,18 @@ class ExtensionLoader(BaseService):
                 svc = self._load(name, ext_cfg)
                 if hasattr(svc, "init"):
                     await svc.init()
-                self.extensions[name] = svc
-                logger.info(f"Extension '{name}' ✅")
+                if svc._status == ServiceStatus.READY:
+                    self.extensions[name] = svc
+                    logger.info(f"Extension '{name}' ✅")
+                else:
+                    logger.info(
+                        f"Extension '{name} as not started (status: {svc._status})'"
+                    )
             except Exception as e:
                 logger.error(f"Extension '{name}' ❌ : {e}")
-        self._status = ServiceStatus.READY
+        self._status = (
+            ServiceStatus.READY if self.extensions else ServiceStatus.DEGRADED
+        )
 
     def _load(self, name: str, cfg: dict) -> Any:
         module_path = cfg.get("module")

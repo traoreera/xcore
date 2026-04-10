@@ -7,6 +7,9 @@ Import recommandé dans un plugin :
 """
 
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
+from ..kernel.api.rbac import RBACChecker, require_permission, require_role
+from .adapter.asyncsql import BaseAsyncRepository
+from .adapter.syncsql import BaseSyncRepository
 from .decorators import (
     AutoDispatchMixin,
     RoutedPlugin,
@@ -18,6 +21,7 @@ from .decorators import (
     validate_payload,
 )
 from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
+from .routers import RouterRegistry
 
 __all__ = [
     "TrustedBase",
@@ -36,4 +40,10 @@ __all__ = [
     "route",
     "RoutedPlugin",
     "AutoDispatchMixin",
+    "BaseAsyncRepository",
+    "BaseSyncRepository",
+    "RBACChecker",
+    "require_permission",
+    "require_role",
+    "RouterRegistry",
 ]

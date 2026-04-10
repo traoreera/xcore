@@ -1,15 +1,15 @@
 """
-engine.py — Moteur d'évaluation des permissions.
-
-Le PermissionEngine est le singleton qui :
-  1. Charge les PolicySet depuis les manifestes au démarrage
-  2. Répond aux requêtes d'autorisation à chaque appel de plugin
-  3. Émet des événements d'audit (allow/deny)
+---Permission Evaluation Engine
+The PermissionEngine is the singleton that:
+    1. Loads PolicySets from manifests at startup
+    2. Responds to authorization requests on every plugin call
+    3. Emits audit events (allow/deny)
 """
 
 from __future__ import annotations
 
 import logging
+from collections import deque
 
 from .policies import PolicyEffect, PolicySet
 
@@ -17,36 +17,39 @@ logger = logging.getLogger("xcore.permissions.engine")
 
 
 class PermissionDenied(Exception):
-    """Levée quand une permission est refusée."""
+    """Raise when a permission check fails."""
 
 
 class PermissionEngine:
     """
-    Moteur de permissions centralisé.
+    Central engine for permission evaluation.
 
     Usage:
+    ```python
         engine = PermissionEngine()
         engine.load_from_manifest("my_plugin", manifest.permissions)
 
-        # Vérification
+        # verify
         engine.check("my_plugin", resource="db.users", action="write")
-        # → lève PermissionDenied si refusé
+        # → raise PermissionDenied if not allowed
 
-        # Test sans lever
+        # Test without lever
         ok = engine.allows("my_plugin", "db.users", "write")
+    ```
     """
 
-    def __init__(self, events=None) -> None:
+    def __init__(self, events=None, max_audit=100_000) -> None:
         self._policies: dict[str, PolicySet] = {}
         self._events = events
-        self._audit_log: list[dict] = []
+        self._audit_log: deque[dict] = deque(maxlen=max_audit)
+        self._cache: dict[tuple[str, str, str], PolicyEffect] = {}
 
     def load_from_manifest(
         self, plugin_name: str, raw_permissions: list[dict] | None
     ) -> None:
-        """Charge les policies d'un plugin depuis son manifeste."""
+        """load policies from manifest"""
+        self._cache.clear()  # Invalidate cache on policy change
         if not raw_permissions:
-            # Sans policies déclarées → deny all (fail-closed)
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
             logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
         else:
@@ -55,13 +58,13 @@ class PermissionEngine:
             logger.debug(f"[{plugin_name}] {len(ps.policies)} règle(s) chargée(s)")
 
     def grant_all(self, plugin_name: str) -> None:
-        """Accordé pour les plugins Trusted avec strict_trusted=False."""
+        """Grant all permissions to a plugin."""
+        self._cache.clear()  # Invalidate cache on policy change
         self._policies[plugin_name] = PolicySet.allow_all(plugin_name)
 
     def check(self, plugin_name: str, resource: str, action: str) -> None:
         """
-        Vérifie une permission. Lève PermissionDenied si refusé.
-        À appeler dans les services avant d'exécuter une opération.
+        verify permission and raise PermissionDenied if not allowed.
         """
         effect = self._evaluate(plugin_name, resource, action)
         self._audit(plugin_name, resource, action, effect)
@@ -71,7 +74,7 @@ class PermissionEngine:
             )
 
     def allows(self, plugin_name: str, resource: str, action: str) -> bool:
-        """Retourne True si autorisé, False sinon (pas d'exception)."""
+        """Returns True if the plugin is allowed to perform the action on the resource."""
         try:
             self.check(plugin_name, resource, action)
             return True
@@ -79,11 +82,20 @@ class PermissionEngine:
             return False
 
     def _evaluate(self, plugin_name: str, resource: str, action: str) -> PolicyEffect:
+        # Check cache first
+        cache_key = (plugin_name, resource, action)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         ps = self._policies.get(plugin_name)
         if ps is None:
             logger.warning(f"[{plugin_name}] Aucune policy chargée → DENY")
-            return PolicyEffect.DENY
-        return ps.evaluate(resource, action)
+            effect = PolicyEffect.DENY
+        else:
+            effect = ps.evaluate(resource, action)
+
+        self._cache[cache_key] = effect
+        return effect
 
     def _audit(
         self, plugin_name: str, resource: str, action: str, effect: PolicyEffect
@@ -101,12 +113,18 @@ class PermissionEngine:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
-        log = (
-            self._audit_log
-            if not plugin_name
-            else [e for e in self._audit_log if e["plugin"] == plugin_name]
-        )
-        return log[-limit:]
+        """Returns the audit log, filtered by plugin name if provided, up to the limit."""
+        from itertools import islice
+
+        # Iterate in reverse to get the latest entries first
+        it = reversed(self._audit_log)
+        if plugin_name:
+            it = (e for e in it if e["plugin"] == plugin_name)
+
+        # Slice to the limit and return in chronological order
+        results = list(islice(it, limit))
+        results.reverse()
+        return results
 
     def status(self) -> dict:
         return {

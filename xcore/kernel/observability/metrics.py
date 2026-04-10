@@ -1,6 +1,6 @@
 """
-metrics.py — Registre de métriques léger (memory backend par défaut).
-Interface compatible Prometheus si le backend est configuré.
+— Lightweight metrics registry (default memory backend).
+Prometheus-compatible interface if the backend is configured.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ from typing import Any
 
 @dataclass
 class Counter:
+    """A counter metric."""
+
     name: str
     labels: dict[str, str] = field(default_factory=dict)
     _value: float = 0.0
@@ -69,15 +71,16 @@ class Histogram:
 
 class MetricsRegistry:
     """
-    Registre central des métriques.
+        A simple in-memory metrics registry.
 
-    Usage:
-        registry = MetricsRegistry()
-        calls = registry.counter("plugin.calls", labels={"plugin": "my_plugin"})
-        calls.inc()
+        Usage:
+    ```python
+            registry = MetricsRegistry()
+            calls = registry.counter("plugin.calls", labels={"plugin": "my_plugin"})
+            calls.inc()
 
-        latency = registry.histogram("plugin.latency_seconds")
-        latency.observe(0.042)
+            latency = registry.histogram("plugin.latency_seconds")
+            latency.observe(0.042)```
     """
 
     def __init__(self) -> None:
@@ -92,17 +95,20 @@ class MetricsRegistry:
         return self._counters[key]
 
     def gauge(self, name: str, labels: dict | None = None) -> Gauge:
+        """Return a gauge metric."""
         key = f"{name}:{labels}"
         if key not in self._gauges:
             self._gauges[key] = Gauge(name=name, labels=labels or {})
         return self._gauges[key]
 
     def histogram(self, name: str) -> Histogram:
+        """Return a histogram metric."""
         if name not in self._histograms:
             self._histograms[name] = Histogram(name=name)
         return self._histograms[name]
 
     def snapshot(self) -> dict[str, Any]:
+        """Return a snapshot of the metrics registry."""
         return {
             "counters": {k: v.value for k, v in self._counters.items()},
             "gauges": {k: v.value for k, v in self._gauges.items()},

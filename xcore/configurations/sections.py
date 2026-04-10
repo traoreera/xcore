@@ -17,12 +17,13 @@ class AppConfig:
     secret_key: bytes = b"change-me-in-production"
     plugin_prefix: str = "/plugin"
     plugin_tags: list[str] = field(default_factory=list)
+    server_key: bytes | str = b"change-me-in-production"
+    server_key_iterations: int = 100_000
 
 
 @dataclass
 class DatabaseConfig:
     name: str = "default"
-    # sqlite | postgresql | mysql | mongodb | redis | sqlasync
     type: str = "sqlite"
     url: str = "sqlite:///./xcore.db"
     pool_size: int = 5
@@ -110,3 +111,33 @@ class SecurityConfig:
     rate_limit_default: dict[str, Any] = field(
         default_factory=lambda: {"calls": 100, "period_seconds": 60}
     )
+
+
+@dataclass
+class MarketplaceConfig:
+    """
+    Configuration du client marketplace.
+
+    Dans xcore.yaml :
+        marketplace:
+          url: https://marketplace.xcore.dev
+          api_key: ${XCORE_MARKETPLACE_KEY}
+          timeout: 10
+          cache_ttl: 300
+    """
+
+    url: str = "https://marketplace.xcore.dev"
+    api_key: str = ""
+    timeout: int = 10
+    cache_ttl: int = 300
+
+
+@dataclass
+class XcoreConfig:
+    app: AppConfig = field(default_factory=AppConfig)
+    plugins: PluginConfig = field(default_factory=PluginConfig)
+    services: ServicesConfig = field(default_factory=ServicesConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    security: SecurityConfig = field(default_factory=SecurityConfig)
+    marketplace: MarketplaceConfig = field(default_factory=MarketplaceConfig)
+    raw: dict[str, Any] = field(default_factory=dict)

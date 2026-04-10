@@ -20,7 +20,6 @@ class PluginState(str, Enum):
     UNLOADED = "unloaded"
     LOADING = "loading"
     READY = "ready"
-    RUNNING = "running"
     UNLOADING = "unloading"
     RELOADING = "reloading"
     FAILED = "failed"
@@ -31,12 +30,10 @@ _TRANSITIONS: dict[PluginState, dict[str, PluginState]] = {
     PluginState.UNLOADED: {"load": PluginState.LOADING},
     PluginState.LOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.READY: {
-        "call": PluginState.RUNNING,
         "unload": PluginState.UNLOADING,
         "reload": PluginState.RELOADING,
         "error": PluginState.FAILED,
     },
-    PluginState.RUNNING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.UNLOADING: {"ok": PluginState.UNLOADED, "error": PluginState.FAILED},
     PluginState.RELOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
     PluginState.FAILED: {"reset": PluginState.UNLOADED},
@@ -82,7 +79,7 @@ class StateMachine:
 
     @property
     def is_available(self) -> bool:
-        return self._state in (PluginState.READY, PluginState.RUNNING)
+        return self._state == PluginState.READY
 
     def transition(self, event: str) -> PluginState:
         """

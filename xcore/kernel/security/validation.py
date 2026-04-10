@@ -9,8 +9,18 @@ import ast
 import json
 import os
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
+
+from xcore.sdk.plugin_base import PluginDependency
+
+from .section import (
+    DEFAULT_ALLOWED,
+    DEFAULT_FORBIDDEN,
+    FORBIDDEN_ATTRIBUTES,
+    FORBIDDEN_BUILTINS,
+    ScanResult,
+    _SimpleManifest,
+)
 
 # ─────────────────────────────────────────────────────────────
 # Manifest
@@ -25,6 +35,7 @@ _ENV_VAR_RE = re.compile(r"^\$\{(.+)\}$")
 
 
 def _resolve_env(value: str) -> str:
+    # TODO: update env suporte ask, generate, eg: {var:?} {var:-} {var:generate.len(64)}
     m = _ENV_VAR_RE.match(str(value))
     if not m:
         return str(value)
@@ -42,7 +53,10 @@ class ManifestValidator:
 
     def load_and_validate(self, plugin_dir: Path):
         """Retourne un PluginManifest ou lève ManifestError."""
+        from xcore import __version__
+
         from ..api.contract import ExecutionMode  # import local pour éviter cycle
+        from ..api.versioning import check_compatibility
 
         plugin_dir = Path(plugin_dir).resolve()
         raw = self._read_raw(plugin_dir)
@@ -51,14 +65,18 @@ class ManifestValidator:
             if not raw.get(field_name):
                 raise ManifestError(f"Champ obligatoire manquant : '{field_name}'")
 
+        check_compatibility(
+            raw.get("framework_version", f"=={__version__}"), __version__
+        )
+
         raw_mode = raw.get("execution_mode", "legacy").lower()
         try:
             mode = ExecutionMode(raw_mode)
-        except ValueError:
+        except ValueError as e:
             raise ManifestError(
                 f"execution_mode invalide : {raw_mode!r}. "
                 f"Valeurs : {[m.value for m in ExecutionMode]}"
-            )
+            ) from e
 
         # Injection dotenv si demandé
         self._inject_dotenv(raw.get("envconfiguration"), plugin_dir)
@@ -66,9 +84,17 @@ class ManifestValidator:
         # Résolution des ${VAR}
         resolved_env = {k: _resolve_env(v) for k, v in raw.get("env", {}).items()}
 
-        requires = raw.get("requires", []) or []
-        if not isinstance(requires, list):
+        # Parse des dépendances avec version
+        requires_raw = raw.get("requires", []) or []
+        if not isinstance(requires_raw, list):
             raise ManifestError("'requires' doit être une liste")
+
+        requires = []
+        for dep in requires_raw:
+            try:
+                requires.append(PluginDependency.from_raw(dep))
+            except ValueError as e:
+                raise ManifestError(f"Dépendance invalide: {e}") from e
 
         return _build_manifest(raw, mode, resolved_env, requires, plugin_dir)
 
@@ -82,7 +108,7 @@ class ManifestValidator:
     @staticmethod
     def _yaml(path: Path) -> dict:
         try:
-            import yaml
+            import yaml  # type: ignore
 
             with open(path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
@@ -96,11 +122,16 @@ class ManifestValidator:
 
     @staticmethod
     def _inject_dotenv(cfg: dict | None, plugin_dir: Path) -> None:
-        """FIX #4 v1 : gestion correcte du bloc envconfiguration."""
+        """FIX #4 v1 : gestion correction du bloc envconfiguration."""
         if not cfg or not cfg.get("inject", False):
             return
         env_file = cfg.get("env_file", ".env")
         env_path = (plugin_dir / env_file).resolve()
+
+        # Sécurité : vérifie que le fichier .env est bien dans le dossier du plugin
+        if not env_path.is_relative_to(plugin_dir.resolve()):
+            raise ManifestError(f"Tentative de traversal via env_file : {env_file!r}")
+
         if not env_path.exists():
             raise ManifestError(
                 f"envconfiguration.inject=true mais '{env_path}' introuvable."
@@ -125,116 +156,9 @@ def _build_manifest(
     return PluginManifest.from_raw(raw, mode, resolved_env, requires, plugin_dir)
 
 
-class _SimpleManifest:
-    """Manifeste minimal quand le SDK complet n'est pas disponible."""
-
-    def __init__(self, raw, mode, env, requires, plugin_dir):
-        self.name = str(raw["name"])
-        self.version = str(raw["version"])
-        self.execution_mode = mode
-        self.author = raw.get("author", "unknown")
-        self.description = raw.get("description", "")
-        self.framework_version = raw.get("framework_version", ">=2.0")
-        self.entry_point = raw.get("entry_point", "src/main.py")
-        self.allowed_imports = raw.get("allowed_imports", [])
-        self.env = env
-        self.requires = requires
-        self.plugin_dir = plugin_dir
-        self.extra = {}
-
-        # Defaults resources/runtime
-        from types import SimpleNamespace
-
-        rl = SimpleNamespace(calls=100, period_seconds=60)
-        self.resources = SimpleNamespace(
-            timeout_seconds=10, max_memory_mb=128, max_disk_mb=50, rate_limit=rl
-        )
-        hc = SimpleNamespace(enabled=True, interval_seconds=30, timeout_seconds=3)
-        retry = SimpleNamespace(max_attempts=1, backoff_seconds=0.0)
-        self.runtime = SimpleNamespace(health_check=hc, retry=retry)
-        fs = SimpleNamespace(allowed_paths=["data/"], denied_paths=["src/"])
-        self.filesystem = fs
-
-
 # ─────────────────────────────────────────────────────────────
 # AST Scanner (repris de sandbox/sandbox/scanner.py v1)
 # ─────────────────────────────────────────────────────────────
-
-DEFAULT_FORBIDDEN = {
-    "os",
-    "sys",
-    "subprocess",
-    "shutil",
-    "signal",
-    "ctypes",
-    "cffi",
-    "mmap",
-    "socket",
-    "ssl",
-    "http",
-    "urllib",
-    "httpx",
-    "requests",
-    "aiohttp",
-    "websockets",
-    "importlib",
-    "imp",
-    "builtins",
-    "inspect",
-    "gc",
-    "tracemalloc",
-    "dis",
-    "tempfile",
-    "glob",
-    "exec",
-    "eval",
-    "compile",
-    "pickle",
-    "shelve",
-    "marshal",
-}
-
-DEFAULT_ALLOWED = {
-    "json",
-    "re",
-    "math",
-    "random",
-    "datetime",
-    "time",
-    "pathlib",
-    "typing",
-    "dataclasses",
-    "enum",
-    "functools",
-    "itertools",
-    "collections",
-    "string",
-    "hashlib",
-    "base64",
-    "asyncio",
-    "logging",
-}
-
-
-@dataclass
-class ScanResult:
-    passed: bool = True
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-    scanned: list[str] = field(default_factory=list)
-
-    def add_error(self, msg: str) -> None:
-        self.errors.append(msg)
-        self.passed = False
-
-    def add_warning(self, msg: str) -> None:
-        self.warnings.append(msg)
-
-    def __str__(self) -> str:
-        lines = [f"Scan {'✅' if self.passed else '❌'}"]
-        lines += [f"  ❌ {e}" for e in self.errors]
-        lines += [f"  ⚠️  {w}" for w in self.warnings]
-        return "\n".join(lines)
 
 
 class ASTScanner:
@@ -244,21 +168,39 @@ class ASTScanner:
         self.forbidden = DEFAULT_FORBIDDEN | (extra_forbidden or set())
         self.allowed = DEFAULT_ALLOWED | (extra_allowed or set())
 
-    def scan(self, plugin_dir: Path, whitelist: list[str] | None = None) -> ScanResult:
+    def scan(
+        self,
+        plugin_dir: Path,
+        whitelist: list[str] | None = None,
+        entry_point: str = "src/main.py",
+    ) -> ScanResult:
         result = ScanResult()
-        src_dir = plugin_dir / "src"
+        plugin_dir = plugin_dir.resolve()
+        entry_path = (plugin_dir / entry_point).resolve()
+
+        # Sécurité : l'entry point doit être dans le dossier du plugin
+        if not entry_path.is_relative_to(plugin_dir):
+            result.add_error(f"Entry point hors du dossier plugin : {entry_point!r}")
+            return result
+
+        if not entry_path.exists():
+            result.add_error(f"Entry point introuvable : {entry_point!r}")
+            return result
+
+        # Le dossier à scanner est celui de l'entry point (souvent src/)
+        src_dir = entry_path.parent
         extra_ok = set(whitelist or [])
 
-        if not src_dir.exists():
-            result.add_error(f"Répertoire src/ introuvable dans {plugin_dir}")
-            return result
+        # On scanne tout le dossier src_dir récursivement
+        py_files = set(src_dir.rglob("*.py"))
+        # On s'assure d'inclure l'entry point lui-même s'il n'était pas dans un .py (rare)
+        py_files.add(entry_path)
 
-        py_files = list(src_dir.rglob("*.py"))
         if not py_files:
-            result.add_warning("Aucun fichier .py dans src/")
+            result.add_warning(f"Aucun fichier .py trouvé à partir de {src_dir}")
             return result
 
-        for py_file in py_files:
+        for py_file in sorted(py_files):
             self._scan_file(py_file, result, extra_ok)
             result.scanned.append(str(py_file.relative_to(plugin_dir)))
 
@@ -275,10 +217,11 @@ class ASTScanner:
             result.add_error(f"{path.name}: lecture : {e}")
             return
 
-        visitor = _ImportVisitor(
+        visitor = _SecurityVisitor(
             forbidden=self.forbidden,
             allowed=self.allowed | extra_allowed,
             filename=path.name,
+            path=path,
         )
         visitor.visit(tree)
         for e in visitor.errors:
@@ -289,23 +232,22 @@ class ASTScanner:
             result.add_warning(w)
 
 
-class _ImportVisitor(ast.NodeVisitor):
-    def __init__(self, forbidden, allowed, filename):
+class _SecurityVisitor(ast.NodeVisitor):
+    def __init__(self, forbidden, allowed, filename, path):
         self.forbidden = forbidden
         self.allowed = allowed
         self.filename = filename
         self.errors: list[str] = []
         self.warnings: list[str] = []
+        self.path: Path = path
 
     def _check(self, module: str, lineno: int) -> None:
         root = module.split(".")[0]
         if root in self.forbidden:
-            self.errors.append(
-                f"{self.filename}:{lineno}: import interdit : {module!r}"
-            )
+            self.errors.append(f"{self.path}:{lineno}: import interdit : {module!r}")
         elif root not in self.allowed:
             self.warnings.append(
-                f"{self.filename}:{lineno}: import non whitelisté : {module!r}"
+                f"{self.path}:{lineno}: import non whitelisté : {module!r}"
             )
 
     def visit_Import(self, node: ast.Import) -> None:
@@ -315,10 +257,31 @@ class _ImportVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
             self._check(node.module, node.lineno)
+        for alias in node.names:
+            self._check(alias.name, node.lineno)
 
     def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+        # __import__ est déjà capturé par visit_Name car il est dans FORBIDDEN_BUILTINS
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id in FORBIDDEN_BUILTINS:
             self.errors.append(
-                f"{self.filename}:{node.lineno}: __import__() dynamique interdit"
+                f"{self.path}:{node.lineno}: utilisation de built-in interdit : {node.id!r}"
+            )
+        elif node.id in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: utilisation de nom interdit : {node.id!r}"
+            )
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if node.attr in FORBIDDEN_ATTRIBUTES:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès à l'attribut sensible interdit : {node.attr!r}"
+            )
+        elif node.attr in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès à un module interdit via attribut : {node.attr!r}"
             )
         self.generic_visit(node)

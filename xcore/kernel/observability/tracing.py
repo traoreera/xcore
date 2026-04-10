@@ -13,6 +13,8 @@ from typing import Any, Generator
 
 @dataclass
 class Span:
+    """Span de tracing."""
+
     name: str
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     span_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
@@ -38,7 +40,7 @@ class Span:
 
 
 class Tracer:
-    """Tracer avec backend noop (extensible vers OpenTelemetry)."""
+    """Tracer with a backend noop (extend with OpenTelemetry)."""
 
     def __init__(self, service_name: str = "xcore") -> None:
         self.service_name = service_name
@@ -46,6 +48,7 @@ class Tracer:
 
     @contextmanager
     def span(self, name: str, **attrs) -> Generator[Span, None, None]:
+        """Create a span and yield it."""
         s = Span(name=name, attributes=attrs)
         try:
             yield s
@@ -58,6 +61,7 @@ class Tracer:
             self._spans.append(s)
 
     def export(self) -> list[dict]:
+        """Export spans."""
         return [
             {
                 "name": s.name,
@@ -72,4 +76,5 @@ class Tracer:
 
 
 def noop_tracer() -> Tracer:
+    """Return a noop tracer."""
     return Tracer("noop")

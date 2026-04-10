@@ -37,6 +37,8 @@ class PluginRegistry:
     def __init__(self, config: "PluginConfig | None" = None) -> None:
         self._config = config
         self._entries: dict[str, dict[str, Any]] = {}
+        # service_name -> metadata
+        self._exported_services: dict[str, dict[str, Any]] = {}
 
     def register(self, name: str, handler: Any, metadata: dict | None = None) -> None:
         manifest = getattr(handler, "manifest", None)
@@ -57,7 +59,78 @@ class PluginRegistry:
         logger.debug(f"[registry] enregistré : '{name}'")
 
     def unregister(self, name: str) -> None:
+        # Nettoie aussi les services exportés par ce plugin
+        self._exported_services = {
+            s: meta
+            for s, meta in self._exported_services.items()
+            if meta.get("plugin") != name
+        }
         self._entries.pop(name, None)
+
+    def register_service(
+        self,
+        plugin_name: str,
+        service_name: str,
+        service_obj: Any,
+        metadata: dict | None = None,
+        scope: str = "public",
+    ) -> None:
+        """Enregistre un service exporté par un plugin."""
+        # Vérification de la protection contre l'écrasement
+        if service_name in self._exported_services:
+            old_meta = self._exported_services[service_name]
+            if old_meta.get("scope") == "protected":
+                raise PermissionError(
+                    f"Impossible d'écraser le service protégé '{service_name}' "
+                    f"(propriétaire actuel: {old_meta.get('plugin')})"
+                )
+
+        self._exported_services[service_name] = {
+            "plugin": plugin_name,
+            "obj": service_obj,
+            "scope": scope,
+            **(metadata or {}),
+        }
+        logger.debug(
+            f"[registry] service '{service_name}' enregistré par '{plugin_name}' (scope: {scope})"
+        )
+
+    def register_core_service(self, name: str, obj: Any, metadata: dict | None = None) -> None:
+        """Enregistre un service noyau (protégé par défaut)."""
+        self.register_service("kernel", name, obj, metadata=metadata, scope="protected")
+
+    def get_service(self, service_name: str, requester: str | None = None) -> Any:
+        """
+        Récupère un service avec vérification de scoping.
+        Scoping supporté :
+          - 'public' (défaut) : accessible par tous les plugins.
+          - 'private' : accessible uniquement par le plugin propriétaire.
+        """
+        if service_name not in self._exported_services:
+            raise KeyError(f"Service '{service_name}' non trouvé.")
+
+        meta = self._exported_services[service_name]
+        scope = meta.get("scope", "public")
+        owner = meta.get("plugin")
+
+        # Vérification du scope private
+        if scope == "private" and requester != owner:
+            raise PermissionError(
+                f"Accès refusé au service privé '{service_name}'. "
+                f"Propriétaire: '{owner}', Requérant: '{requester}'"
+            )
+
+        return meta["obj"]
+
+    def list_services(self) -> list[dict]:
+        return [
+            {
+                "name": name,
+                "plugin": meta["plugin"],
+                "scope": meta.get("scope", "public"),
+            }
+            for name, meta in self._exported_services.items()
+        ]
 
     def has(self, name: str) -> bool:
         return name in self._entries
