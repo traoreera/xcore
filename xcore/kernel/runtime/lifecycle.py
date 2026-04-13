@@ -62,7 +62,7 @@ class LifecycleManager:
         self._loaded_at: float | None = None
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
-        self.plugin_middlewares: list[Any] = []
+        self.plugin_middlewares: dict[Any] = {}
 
         self._sm = StateMachine(
             manifest.name,
@@ -324,7 +324,7 @@ class LifecycleManager:
         try:
             middlewares = add_middlewares()
             if middlewares is not None:
-                self.plugin_middlewares.append(middlewares)
+                self.plugin_middlewares.update(middlewares)
                 logger.info(
                     f"[{self.manifest.name}] 🔄 Middlewares collectés "
                     f"({len(self.plugin_middlewares)} middleware(s))"

@@ -338,6 +338,6 @@ class PluginLoader:
             ):
                 middlewares.append(handler.plugin_middlewares)
         try:
-            return middlewares[0]
+            return middlewares
         except:
             return middlewares
