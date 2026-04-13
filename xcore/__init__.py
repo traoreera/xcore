@@ -216,9 +216,14 @@ class Xcore:
 
         for middleware in self.plugins.collect_app_state():
             if middleware:
-                app.state.__setattr__(
-                key=f"{middleware['name']}", value=middleware["state"]
-            )
+                states = middleware.get("state")
+                for key, value in states.items():
+                    app.state.__setattr__(
+                        key=f"{middleware['name']}_{key}", value=value
+                    )
+                    self._logger.info(
+                        f"{middleware['name']}📦 état {middleware['name']}_{key} mis à jour"
+                    )
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI
 
