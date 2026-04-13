@@ -35,8 +35,9 @@ class LoadError(Exception):
 
 class LifecycleManager:
     """
-        Manages the complete lifecycle of a Trusted plugin in memory.
+    Manages the complete lifecycle of a Trusted plugin in memory.
     """
+
     PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
 
     def __init__(
@@ -61,6 +62,7 @@ class LifecycleManager:
         self._loaded_at: float | None = None
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
+        self.plugin_middlewares: list[Any] = []
 
         self._sm = StateMachine(
             manifest.name,
@@ -167,6 +169,7 @@ class LifecycleManager:
 
         # Collecte le router HTTP custom si le plugin en expose un
         self._collect_router()
+        self._collect_middlewares()
 
     async def _invoke_hooks(self, hook_names: list[str]) -> None:
         """Invoque une série de hooks sur l'instance s'ils existent."""
@@ -310,6 +313,25 @@ class LifecycleManager:
         except Exception as e:
             logger.error(f"[{self.manifest.name}] get_router() erreur : {e}")
 
+    def _collect_middlewares(self) -> None:
+        add_middlewares = getattr(self._instance, "add_middleware", None)
+        if add_middlewares is None:
+            return
+
+        if not callable(add_middlewares):
+            return
+
+        try:
+            middlewares = add_middlewares()
+            if middlewares is not None:
+                self.plugin_middlewares.append(middlewares)
+                logger.info(
+                    f"[{self.manifest.name}] 🔄 Middlewares collectés "
+                    f"({len(self.plugin_middlewares)} middleware(s))"
+                )
+        except Exception as e:
+            logger.error(f"[{self.manifest.name}] get_middlewares() erreur : {e}")
+
     # ── Propagation des services (fix #3 v1) ──────────────────
 
     def propagate_services(self, *, is_reload: bool = False) -> dict:
@@ -332,10 +354,10 @@ class LifecycleManager:
         if not instance_services:
             return self._services
 
-        #if collisions := set(instance_services.keys()) & self.PROTECTED_SERVICES:
+        # if collisions := set(instance_services.keys()) & self.PROTECTED_SERVICES:
         #    raise ValueError(
         #        f"[{self.manifest.name}] Tentative d'écrasement de services protégés "
-        #Tentative         f"par le noyau : {collisions}"
+        # Tentative         f"par le noyau : {collisions}"
         #    )
 
         # Enregistrement explicite dans le registre pour le scoping/discovery

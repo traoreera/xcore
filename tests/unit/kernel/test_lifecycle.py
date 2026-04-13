@@ -278,7 +278,8 @@ class Plugin(BasePlugin):
         await lifecycle_manager.load()
 
         results = await asyncio.gather(
-            lifecycle_manager.call("ping1", {}), lifecycle_manager.call("ping2", {})
+            lifecycle_manager.call(
+                "ping1", {}), lifecycle_manager.call("ping2", {})
         )
 
         assert len(results) == 2
@@ -465,13 +466,15 @@ class Plugin(BasePlugin):
         test_file = tmp_path / "test_module.py"
         test_file.write_text("test_var = 'hello'")
 
-        module = lifecycle_manager._import_module("test_module_import", test_file)
+        module = lifecycle_manager._import_module(
+            "test_module_import", test_file)
         assert module.test_var == "hello"
 
     def test_on_state_change(self, lifecycle_manager):
         """Test state change callback."""
         lifecycle_manager._events = MagicMock()
-        lifecycle_manager._on_state_change(PluginState.UNLOADED, PluginState.LOADING)
+        lifecycle_manager._on_state_change(
+            PluginState.UNLOADED, PluginState.LOADING)
 
         lifecycle_manager._events.emit_sync.assert_called_once()
         call_args = lifecycle_manager._events.emit_sync.call_args

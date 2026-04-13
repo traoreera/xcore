@@ -25,7 +25,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from typing import Callable, Type, Literal
+from typing import Callable, Literal, Type
 
 from pydantic import BaseModel, ValidationError
 
@@ -236,7 +236,8 @@ class RoutedPlugin:
                     )
 
                 sig = inspect.signature(fn)
-                params = [p for name, p in sig.parameters.items() if name != "self"]
+                params = [p for name, p in sig.parameters.items()
+                          if name != "self"]
                 handler.__signature__ = sig.replace(parameters=params)
                 return handler
 

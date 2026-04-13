@@ -40,7 +40,8 @@ class DependencyGraph(Generic[T]):
         Means 'node' requires 'depends_on'.
         """
         if node not in self._nodes:
-            raise ValueError(f"Node '{node}' not in graph. Call add_node first.")
+            raise ValueError(
+                f"Node '{node}' not in graph. Call add_node first.")
         if depends_on not in self._nodes:
             # Note: We might want to allow external dependencies that are not in this batch,
             # but for topo_sort within a batch, both must be present.
@@ -59,10 +60,12 @@ class DependencyGraph(Generic[T]):
         """
         # Kahn's algorithm
         # Copy in-degrees (number of dependencies each node has)
-        in_degree = {name: len(deps) for name, deps in self._dependencies.items()}
+        in_degree = {name: len(deps)
+                     for name, deps in self._dependencies.items()}
 
         # Queue of nodes with no dependencies
-        queue = deque([name for name, degree in in_degree.items() if degree == 0])
+        queue = deque(
+            [name for name, degree in in_degree.items() if degree == 0])
 
         ordered_names = []
         while queue:

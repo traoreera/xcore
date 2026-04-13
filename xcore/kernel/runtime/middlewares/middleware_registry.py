@@ -21,7 +21,8 @@ class MiddlewareRegistry:
 
     def __init__(self) -> None:
         # factory: (context_dict) -> Middleware
-        self._factories: dict[str, Callable[[dict[str, Any]], "Middleware"]] = {}
+        self._factories: dict[str, Callable[[
+            dict[str, Any]], "Middleware"]] = {}
 
     def register(self, name: str, factory: Callable[[dict[str, Any]], "Middleware"]) -> None:
         """Registers a middleware factory."""

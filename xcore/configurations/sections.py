@@ -137,7 +137,8 @@ class XcoreConfig:
     app: AppConfig = field(default_factory=AppConfig)
     plugins: PluginConfig = field(default_factory=PluginConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
-    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
+    observability: ObservabilityConfig = field(
+        default_factory=ObservabilityConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
     marketplace: MarketplaceConfig = field(default_factory=MarketplaceConfig)
     raw: dict[str, Any] = field(default_factory=dict)

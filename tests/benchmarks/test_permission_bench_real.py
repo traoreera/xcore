@@ -12,7 +12,8 @@ def benchmark_permissions():
     permissions = [
         {"resource": "db.users.*", "actions": ["read"], "effect": "allow"},
         {"resource": "db.admin.*", "actions": ["*"], "effect": "deny"},
-        {"resource": "cache.*", "actions": ["read", "write"], "effect": "allow"},
+        {"resource": "cache.*",
+            "actions": ["read", "write"], "effect": "allow"},
         {"resource": "fs.tmp.*", "actions": ["write"], "effect": "allow"},
         {"resource": "api.v1.*", "actions": ["call"], "effect": "allow"},
         {"resource": "internal.*", "actions": ["*"], "effect": "deny"},

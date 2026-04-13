@@ -8,7 +8,8 @@ import pytest
 import yaml
 
 from xcore.configurations.loader import ConfigLoader
-from xcore.configurations.sections import AppConfig, PluginConfig, ServicesConfig
+from xcore.configurations.sections import (AppConfig, PluginConfig,
+                                           ServicesConfig)
 
 
 class TestConfigLoader:

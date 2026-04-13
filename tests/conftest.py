@@ -232,7 +232,8 @@ def mock_redis():
 def test_user(db_session):
     """Crée un utilisateur de test en base."""
     try:
-        from extensions.services.database import User  # adapter selon ton modèle
+        from extensions.services.database import \
+            User  # adapter selon ton modèle
         from extensions.services.security import hash_password
 
         user = User(

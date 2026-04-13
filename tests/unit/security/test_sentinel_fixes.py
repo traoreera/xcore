@@ -1,7 +1,10 @@
 import ast
 from pathlib import Path
+
 import pytest
+
 from xcore.kernel.security.validation import ASTScanner
+
 
 def test_ast_scanner_blocks_new_forbidden_builtins(tmp_path):
     src_dir = tmp_path / "src"
@@ -25,6 +28,7 @@ def leak_info():
     assert "utilisation de built-in interdit : 'vars'" in error_msgs
     assert "utilisation de built-in interdit : 'input'" in error_msgs
     assert "utilisation de built-in interdit : 'help'" in error_msgs
+
 
 def test_ast_scanner_blocks_new_forbidden_modules(tmp_path):
     src_dir = tmp_path / "src"

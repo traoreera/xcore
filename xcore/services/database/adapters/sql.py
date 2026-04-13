@@ -40,7 +40,8 @@ class SQLAdapter:
             from sqlalchemy import create_engine
             from sqlalchemy.orm import sessionmaker
         except ImportError as e:
-            raise ImportError("sqlalchemy non installé — pip install sqlalchemy") from e
+            raise ImportError(
+                "sqlalchemy non installé — pip install sqlalchemy") from e
 
         self._engine = create_engine(
             self.url,

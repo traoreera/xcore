@@ -78,7 +78,8 @@ async def _plugin_list(args) -> None:
     cfg = _load_config(args)
     plugin_dir = Path(cfg.plugins.directory)
     if not plugin_dir.exists():
-        console.print(f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
+        console.print(
+            f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
         return
     plugins = sorted(
         d.name
@@ -108,7 +109,8 @@ async def _plugin_list(args) -> None:
                 desc = m.get("description", "")
                 table.add_row(p, f"v{version}", mode, desc)
             except Exception:
-                table.add_row(p, "[red]?[/]", "[red]?[/]", "[red]Erreur de lecture[/]")
+                table.add_row(p, "[red]?[/]", "[red]?[/]",
+                              "[red]Erreur de lecture[/]")
         else:
             table.add_row(
                 p,
@@ -127,7 +129,8 @@ async def _plugin_health(args) -> None:
     cfg = _load_config(args)
     plugin_dir = Path(cfg.plugins.directory)
     if not plugin_dir.exists():
-        console.print(f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
+        console.print(
+            f"[bold red]❌ Dossier plugins introuvable :[/] {plugin_dir}")
         return
 
     plugins = sorted(
@@ -220,7 +223,8 @@ async def _plugin_install(args) -> None:
 
     elif source == "zip" or (url and (url.endswith(".zip") or url.startswith("http"))):
         if not url:
-            console.print(f"[bold red]❌ Erreur :[/] --url requis pour --source zip")
+            console.print(
+                f"[bold red]❌ Erreur :[/] --url requis pour --source zip")
             sys.exit(1)
         await _install_from_zip(name, url, dest)
 
@@ -252,7 +256,8 @@ async def _install_from_git(name: str, url: str, dest: Path) -> None:
     )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
-        console.print(f"[bold red]❌ git clone échoué :[/] {stderr.decode().strip()}")
+        console.print(
+            f"[bold red]❌ git clone échoué :[/] {stderr.decode().strip()}")
         sys.exit(1)
 
 
@@ -272,14 +277,15 @@ async def _install_from_zip(name: str, url: str, dest: Path) -> None:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             # Détecte un sous-dossier racine dans le zip
             members = zf.namelist()
-            prefix = members[0].split("/")[0] + "/" if "/" in members[0] else ""
+            prefix = members[0].split(
+                "/")[0] + "/" if "/" in members[0] else ""
 
             dest_resolved = dest.resolve()
             dest_resolved.mkdir(parents=True, exist_ok=True)
 
             for member in members:
                 stripped = (
-                    member[len(prefix) :]
+                    member[len(prefix):]
                     if prefix and member.startswith(prefix)
                     else member
                 )
@@ -372,7 +378,8 @@ async def _plugin_remove(args) -> None:
         )
         sys.exit(1)
 
-    confirm = Confirm.ask(f"[bold red]⚠️  Supprimer '{name}' ?[/]", default=False)
+    confirm = Confirm.ask(
+        f"[bold red]⚠️  Supprimer '{name}' ?[/]", default=False)
     if not confirm:
         console.print("Annulé.")
         return
@@ -436,7 +443,8 @@ async def _plugin_info(args) -> None:
 
     # Permissions
     if manifest.permissions:
-        info.append(f"\n[bold white]Permissions ({len(manifest.permissions)}) :[/]")
+        info.append(
+            f"\n[bold white]Permissions ({len(manifest.permissions)}) :[/]")
         for p in manifest.permissions:
             effect = p.get("effect", "allow")
             symbol = "✅" if effect == "allow" else "❌"
@@ -446,7 +454,8 @@ async def _plugin_info(args) -> None:
 
     content = Group(*info)
     title = f"[bold green]🔌 {escape(manifest.name)} v{escape(manifest.version)}[/]"
-    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
+    console.print(Panel(content, title=title,
+                  expand=False, border_style="cyan"))
 
 
 # ── sign / verify / validate ──────────────────────────────────
@@ -633,7 +642,8 @@ async def handle_services(args) -> None:
                 color = "orange1"
 
             # On retire les clés déjà affichées dans les colonnes
-            details = {k: v for k, v in info.items() if k not in ("name", "status")}
+            details = {k: v for k, v in info.items(
+            ) if k not in ("name", "status")}
             details_str = ", ".join(f"{k}={v}" for k, v in details.items())
 
             table.add_row(
@@ -645,7 +655,8 @@ async def handle_services(args) -> None:
         console.print(table)
         if status.get("registered_keys"):
             keys = ", ".join(status["registered_keys"])
-            console.print(f"\n[bold cyan]Clés enregistrées :[/] [dim]{escape(keys)}[/]")
+            console.print(
+                f"\n[bold cyan]Clés enregistrées :[/] [dim]{escape(keys)}[/]")
 
 
 async def handle_health(args) -> None:

@@ -64,11 +64,13 @@ def _compute_hmac(manifest, secret_key: bytes) -> str:
     src_dir = (root / entry_path.parent).resolve()
 
     if not src_dir.exists():
-        raise SignatureError(f"Répertoire source {src_dir} introuvable dans {root}")
+        raise SignatureError(
+            f"Répertoire source {src_dir} introuvable dans {root}")
 
     # Ensure src_dir is within root or is the root itself
     if not src_dir.is_relative_to(root):
-        raise SignatureError(f"Répertoire source {src_dir} hors du dossier plugin.")
+        raise SignatureError(
+            f"Répertoire source {src_dir} hors du dossier plugin.")
 
     files = sorted(
         p for p in src_dir.rglob("*") if p.is_file() and not _should_ignore(p, root)
@@ -113,12 +115,14 @@ def verify_plugin(manifest, secret_key: bytes) -> None:
     sig_path = manifest.plugin_dir / SIG_FILENAME
 
     if not sig_path.exists():
-        raise SignatureError(f"[{manifest.name}] Signature manquante ({SIG_FILENAME}).")
+        raise SignatureError(
+            f"[{manifest.name}] Signature manquante ({SIG_FILENAME}).")
 
     try:
         sig_data = json.loads(sig_path.read_text())
     except Exception as e:
-        raise SignatureError(f"[{manifest.name}] Fichier .sig illisible : {e}") from e
+        raise SignatureError(
+            f"[{manifest.name}] Fichier .sig illisible : {e}") from e
 
     stored = sig_data.get("digest")
     if not stored:

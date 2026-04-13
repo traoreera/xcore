@@ -1,7 +1,10 @@
-import pytest
 import asyncio
+
+import pytest
+
 from xcore.kernel.events.bus import EventBus
 from xcore.kernel.events.section import Event
+
 
 @pytest.mark.asyncio
 async def test_wildcard_subscription():
@@ -20,6 +23,7 @@ async def test_wildcard_subscription():
     assert "user.deleted" in received
     assert "product.created" not in received
 
+
 @pytest.mark.asyncio
 async def test_wildcard_priority():
     bus = EventBus()
@@ -37,6 +41,7 @@ async def test_wildcard_priority():
 
     assert order == ["high", "low"]
 
+
 @pytest.mark.asyncio
 async def test_wildcard_once():
     bus = EventBus()
@@ -52,6 +57,7 @@ async def test_wildcard_once():
 
     assert count == 1
     assert bus.handler_count("user.*") == 0
+
 
 @pytest.mark.asyncio
 async def test_multiple_wildcards():

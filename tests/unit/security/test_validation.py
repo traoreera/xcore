@@ -8,12 +8,8 @@ from pathlib import Path
 import pytest
 
 from xcore.kernel.api.contract import ExecutionMode
-from xcore.kernel.security.validation import (
-    ASTScanner,
-    ManifestError,
-    ManifestValidator,
-    ScanResult,
-)
+from xcore.kernel.security.validation import (ASTScanner, ManifestError,
+                                              ManifestValidator, ScanResult)
 
 
 class TestManifestValidator:

@@ -73,8 +73,10 @@ async def _mkt_list(args) -> None:
     table.add_column(
         "Nom", style="cyan", no_wrap=True, max_width=32, overflow="ellipsis"
     )
-    table.add_column("Version", style="magenta", max_width=16, overflow="ellipsis")
-    table.add_column("Auteur", style="green", max_width=24, overflow="ellipsis")
+    table.add_column("Version", style="magenta",
+                     max_width=16, overflow="ellipsis")
+    table.add_column("Auteur", style="green",
+                     max_width=24, overflow="ellipsis")
     table.add_column("Note")
     table.add_column("Description", style="white")
 
@@ -186,7 +188,8 @@ async def _mkt_show(args) -> None:
             sys.exit(1)
 
     if not plugin:
-        error_console.print(f"[bold red]❌ Plugin '{escape(name)}' introuvable.[/]")
+        error_console.print(
+            f"[bold red]❌ Plugin '{escape(name)}' introuvable.[/]")
         sys.exit(1)
 
     info = [
@@ -212,7 +215,8 @@ async def _mkt_show(args) -> None:
 
     content += f"\n[italic grey70]Pour installer :[/]\n  [bold]xcore plugin install {escape(name)}[/]"
     title = f"[bold green]📦 {escape(plugin.get('name', name))} v{escape(str(plugin.get('version', '?')))}[/]"
-    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
+    console.print(Panel(content, title=title,
+                  expand=False, border_style="cyan"))
 
 
 # ── rate ──────────────────────────────────────────────────────

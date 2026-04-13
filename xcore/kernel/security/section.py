@@ -136,7 +136,8 @@ class _SimpleManifest:
         self.env = env
         # Convertit les dépendances en PluginDependency si ce sont des strings
         self.requires = [
-            dep if isinstance(dep, PluginDependency) else PluginDependency.from_raw(dep)
+            dep if isinstance(
+                dep, PluginDependency) else PluginDependency.from_raw(dep)
             for dep in requires
         ]
         self.plugin_dir = plugin_dir
@@ -149,7 +150,8 @@ class _SimpleManifest:
         self.resources = SimpleNamespace(
             timeout_seconds=10, max_memory_mb=128, max_disk_mb=50, rate_limit=rl
         )
-        hc = SimpleNamespace(enabled=True, interval_seconds=30, timeout_seconds=3)
+        hc = SimpleNamespace(
+            enabled=True, interval_seconds=30, timeout_seconds=3)
         retry = SimpleNamespace(max_attempts=1, backoff_seconds=0.0)
         self.runtime = SimpleNamespace(health_check=hc, retry=retry)
         fs = SimpleNamespace(allowed_paths=["data/"], denied_paths=["src/"])

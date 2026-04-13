@@ -1,9 +1,13 @@
 
-import pytest
-from pathlib import Path
 import json
+from pathlib import Path
+
+import pytest
 import yaml
-from xcore.kernel.security.signature import sign_plugin, verify_plugin, SignatureError
+
+from xcore.kernel.security.signature import (SignatureError, sign_plugin,
+                                             verify_plugin)
+
 
 class MockManifest:
     def __init__(self, name, version, plugin_dir, entry_point="src/main.py"):
@@ -11,6 +15,7 @@ class MockManifest:
         self.version = version
         self.plugin_dir = Path(plugin_dir)
         self.entry_point = entry_point
+
 
 def test_signature_bypass_outside_src(tmp_path):
     """
@@ -37,7 +42,8 @@ def test_signature_bypass_outside_src(tmp_path):
     }
     (plugin_dir / "plugin.yaml").write_text(yaml.dump(manifest_data))
 
-    manifest = MockManifest("my_plugin", "1.0.0", plugin_dir, entry_point="app/main.py")
+    manifest = MockManifest("my_plugin", "1.0.0",
+                            plugin_dir, entry_point="app/main.py")
     secret_key = b"secret"
 
     # Sign the plugin
@@ -55,6 +61,7 @@ def test_signature_bypass_outside_src(tmp_path):
     with pytest.raises(SignatureError):
         verify_plugin(manifest, secret_key)
 
+
 def test_signature_root_entry_point(tmp_path):
     """
     Test that modifying code at the root can bypass signature verification
@@ -71,7 +78,8 @@ def test_signature_root_entry_point(tmp_path):
     root_main = plugin_dir / "main.py"
     root_main.write_text("print('Safe root code')")
 
-    manifest = MockManifest("root_plugin", "1.0.0", plugin_dir, entry_point="main.py")
+    manifest = MockManifest("root_plugin", "1.0.0",
+                            plugin_dir, entry_point="main.py")
     secret_key = b"secret"
 
     # Sign
@@ -83,6 +91,7 @@ def test_signature_root_entry_point(tmp_path):
 
     try:
         verify_plugin(manifest, secret_key)
-        pytest.fail("Signature verification should have failed after modifying code at root!")
+        pytest.fail(
+            "Signature verification should have failed after modifying code at root!")
     except SignatureError:
         pass

@@ -42,7 +42,8 @@ def test_registry_service_scoping():
     )
 
     # Access by owner should work
-    assert registry.get_service("private_svc", requester="plugin1") == {"secret": 123}
+    assert registry.get_service("private_svc", requester="plugin1") == {
+        "secret": 123}
 
     # Access by others should fail
     with pytest.raises(PermissionError):

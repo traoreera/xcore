@@ -11,13 +11,9 @@ from unittest.mock import patch
 import pytest
 
 # Test the components we can import
-from xcore.kernel.sandbox.worker import (
-    FilesystemGuard,
-    _apply_memory_limit,
-    _load_manifest,
-    _PluginImportHook,
-    _PluginManifest,
-)
+from xcore.kernel.sandbox.worker import (FilesystemGuard, _apply_memory_limit,
+                                         _load_manifest, _PluginImportHook,
+                                         _PluginManifest)
 
 
 class TestPluginManifest:
@@ -68,7 +64,8 @@ class TestApplyMemoryLimit:
                     mock_setrlimit.assert_called_once()
                     # Check the limit is 100MB in bytes
                     call_args = mock_setrlimit.call_args
-                    assert call_args[0][1] == (100 * 1024 * 1024, 100 * 1024 * 1024)
+                    assert call_args[0][1] == (
+                        100 * 1024 * 1024, 100 * 1024 * 1024)
 
 
 class TestFilesystemGuard:
@@ -291,7 +288,8 @@ class TestFilesystemGuardEdgeCases:
 
     def test_empty_allowed_paths(self, tmp_path):
         """Test guard with empty allowed paths."""
-        guard = FilesystemGuard(plugin_dir=tmp_path, allowed_paths=[], denied_paths=[])
+        guard = FilesystemGuard(plugin_dir=tmp_path,
+                                allowed_paths=[], denied_paths=[])
         # With no allowed paths, everything should be denied (fail-closed)
         assert guard.is_allowed(tmp_path / "any/file.txt") is False
 

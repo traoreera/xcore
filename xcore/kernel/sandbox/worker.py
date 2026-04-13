@@ -90,9 +90,11 @@ class FilesystemGuard:
                     if resolved.is_relative_to(self._plugin_dir):
                         results.append(resolved)
                     else:
-                        logger.warning(f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}")
+                        logger.warning(
+                            f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}")
                 except Exception as e:
-                    logger.warning(f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}")
+                    logger.warning(
+                        f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}")
             return results
 
         self._allowed = _resolve_safe(allowed_paths, ["data/"])
@@ -181,7 +183,8 @@ class FilesystemGuard:
                 )
             finally:
                 guard._in_guard = was
-            raise PermissionError(f"[sandbox] {label} interdit dans le sandbox")
+            raise PermissionError(
+                f"[sandbox] {label} interdit dans le sandbox")
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
@@ -261,7 +264,8 @@ class FilesystemGuard:
             "is_dir",
         ]:
             if hasattr(_Path, op):
-                setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
+                setattr(_Path, op, _guarded_op(
+                    getattr(_Path, op), f"Path.{op}"))
 
         # ── Couche 2 : Exécution dynamique ────────────────────────────────────
 
@@ -359,7 +363,8 @@ class FilesystemGuard:
                 return _real_spec_from_file(name, location, *args, **kwargs)
             # Un plugin sandbox ne doit pas charger de .py arbitraire depuis le
             # système de fichiers hors de son propre namespace déjà établi.
-            _block(f"importlib.util.spec_from_file_location('{name}', '{location}')")
+            _block(
+                f"importlib.util.spec_from_file_location('{name}', '{location}')")
 
         def _guarded_find_spec(name, *args, **kwargs):
             if guard._in_guard:
@@ -405,7 +410,8 @@ class FilesystemGuard:
             with contextlib.suppress(AttributeError):
                 _ctypes.pythonapi = _blocked_ctypes_api("pythonapi")
             with contextlib.suppress(AttributeError):
-                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api("cdll.LoadLibrary")
+                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api(
+                    "cdll.LoadLibrary")
         logger.debug(
             f"[sandbox] Guard installé (4 couches) — "
             f"allowed={[str(p) for p in self._allowed]}, "
@@ -462,7 +468,7 @@ class _PluginImportHook:
             return None
         # Traduit xcore_plugin_<uid>.foo.bar → src_dir/foo/bar.py (ou package)
         # retire le préfixe + "."
-        relative = fullname[len(self._pkg_prefix) + 1 :]
+        relative = fullname[len(self._pkg_prefix) + 1:]
         return self._spec_for(fullname, relative)
 
     # ── Résolution ────────────────────────────────────────────────────────────
@@ -517,7 +523,7 @@ class _PluginImportHook:
         if fullname in sys.modules:
             return sys.modules[fullname]
         relative = (
-            fullname[len(self._pkg_prefix) + 1 :]
+            fullname[len(self._pkg_prefix) + 1:]
             if fullname != self._pkg_prefix
             else ""
         )
@@ -548,7 +554,8 @@ class _PluginImportHook:
             root.__path__ = [str(self._src_dir)]
             root.__package__ = self._pkg_prefix
             sys.modules[self._pkg_prefix] = root
-        logger.debug(f"[{self._uid}] Import hook installé (src={self._src_dir})")
+        logger.debug(
+            f"[{self._uid}] Import hook installé (src={self._src_dir})")
 
     def uninstall(self) -> None:
         """Retire ce hook et nettoie tous les modules du namespace."""
@@ -681,7 +688,8 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         except Exception as e:
             logger.warning(f"Impossible de lire le manifeste ({fname}) : {e}")
 
-    logger.warning(f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
+    logger.warning(
+        f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
     return manifest
 
 
@@ -734,7 +742,8 @@ async def _run(plugin_dir: Path) -> None:
     manifest = _load_manifest(plugin_dir)
 
     # 2. Installation du guard filesystem (AVANT tout chargement de code plugin)
-    guard = FilesystemGuard(plugin_dir, manifest.allowed_paths, manifest.denied_paths)
+    guard = FilesystemGuard(
+        plugin_dir, manifest.allowed_paths, manifest.denied_paths)
     guard.install()
 
     # 3. Chargement du plugin dans son namespace isolé
@@ -810,7 +819,8 @@ async def _run(plugin_dir: Path) -> None:
             }
         except Exception as e:
             logger.exception(f"Erreur handle({action})")
-            response = {"status": "error", "msg": str(e), "code": "handler_error"}
+            response = {"status": "error", "msg": str(
+                e), "code": "handler_error"}
 
         _send(transport, response)
 
@@ -833,7 +843,8 @@ async def _run(plugin_dir: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps({"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
+        print(json.dumps(
+            {"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
         sys.exit(1)
 
     _apply_memory_limit()

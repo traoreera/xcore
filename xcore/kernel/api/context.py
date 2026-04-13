@@ -9,12 +9,14 @@ variables, and the plugin configuration.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 if TYPE_CHECKING:
-    from .proto import EventBus, HookManager
-    from ..observability import Tracer, MetricsRegistry, HealthChecker
     from ...registry import PluginRegistry
+    from ..observability import HealthChecker, MetricsRegistry, Tracer
+    from .proto import EventBus, HookManager
+
+
 @dataclass
 class PluginContext:
     """

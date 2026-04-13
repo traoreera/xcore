@@ -14,21 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from .helper import _resolve
-from .sections import (
-    AppConfig,
-    CacheConfig,
-    DatabaseConfig,
-    LoggingConfig,
-    MarketplaceConfig,
-    MetricsConfig,
-    ObservabilityConfig,
-    PluginConfig,
-    SchedulerConfig,
-    SecurityConfig,
-    ServicesConfig,
-    TracingConfig,
-    XcoreConfig,
-)
+from .sections import (AppConfig, CacheConfig, DatabaseConfig, LoggingConfig,
+                       MarketplaceConfig, MetricsConfig, ObservabilityConfig,
+                       PluginConfig, SchedulerConfig, SecurityConfig,
+                       ServicesConfig, TracingConfig, XcoreConfig)
 
 logger = logging.getLogger("xcore.config")
 
@@ -104,7 +93,8 @@ class ConfigLoader:
             load_dotenv(dotenv_path=path, override=False)
             logger.info(f".env loaded : {path}")
         except ImportError:
-            logger.warning("python-dotenv not installed — pip install python-dotenv")
+            logger.warning(
+                "python-dotenv not installed — pip install python-dotenv")
 
     @classmethod
     def _apply_env_overrides(cls, raw: dict[str, Any]) -> dict[str, Any]:
@@ -112,7 +102,7 @@ class ConfigLoader:
         for key, value in os.environ.items():
             if not key.startswith(prefix):
                 continue
-            parts = key[len(prefix) :].lower().split("__")
+            parts = key[len(prefix):].lower().split("__")
             target = raw
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
@@ -132,7 +122,8 @@ class ConfigLoader:
             app=cls._parse_app(raw.get("app", {})),
             plugins=cls._parse_plugins(raw.get("plugins", {})),
             services=cls._parse_services(raw.get("services", {})),
-            observability=cls._parse_observability(raw.get("observability", {})),
+            observability=cls._parse_observability(
+                raw.get("observability", {})),
             security=cls._parse_security(raw.get("security", {})),
             marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
             raw=raw,

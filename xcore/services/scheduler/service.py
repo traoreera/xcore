@@ -77,7 +77,8 @@ class SchedulerService(BaseService):
 
                 jobstores["default"] = RedisJobStore()
             except ImportError:
-                logger.warning("apscheduler[redis] not install — fallback memory")
+                logger.warning(
+                    "apscheduler[redis] not install — fallback memory")
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
@@ -111,7 +112,8 @@ class SchedulerService(BaseService):
                 **kwargs,
             )
         except Exception as e:
-            logger.error(f"Impossible de charger le job '{job_cfg.get('id')}' : {e}")
+            logger.error(
+                f"Impossible de charger le job '{job_cfg.get('id')}' : {e}")
 
     # ── API publique ──────────────────────────────────────────
 
