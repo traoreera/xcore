@@ -8,7 +8,8 @@ def summarize_by_file(chunks, cfg):
     Groupe les chunks par fichier (path) et génère un résumé par chunk.
     Retourne un dict : path -> liste de résumés partiels + métadonnées du fichier.
     """
-    file_map = defaultdict(lambda: {"summaries": [], "module": None, "filename": None})
+    file_map = defaultdict(
+        lambda: {"summaries": [], "module": None, "filename": None})
 
     for chunk in chunks:
         path = chunk["path"]

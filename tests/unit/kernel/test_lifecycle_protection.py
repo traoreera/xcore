@@ -26,8 +26,8 @@ def mock_manifest():
 
 @pytest.mark.asyncio
 async def test_lifecycle_propagate_services_protection():
-    from xcore.registry.index import PluginRegistry
     from xcore.kernel.context import KernelContext
+    from xcore.registry.index import PluginRegistry
     shared_services = {"db": "core_db", "cache": "core_cache"}
     registry = PluginRegistry()
     # Register "db" as a core service in the registry to protect it

@@ -33,8 +33,10 @@ class RetryMiddleware(Middleware):
 
         # Extraction sécurisée des paramètres de retry
         retry_params = getattr(retry_cfg, "retry", None) if retry_cfg else None
-        max_attempts = getattr(retry_params, "max_attempts", 1) if retry_params else 1
-        backoff = getattr(retry_params, "backoff_seconds", 0.0) if retry_params else 0.0
+        max_attempts = getattr(
+            retry_params, "max_attempts", 1) if retry_params else 1
+        backoff = getattr(retry_params, "backoff_seconds",
+                          0.0) if retry_params else 0.0
 
         last_err = None
         for attempt in range(1, max_attempts + 1):

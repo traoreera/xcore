@@ -3,11 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from xcore.kernel.security.validation import (
-    DEFAULT_ALLOWED,
-    DEFAULT_FORBIDDEN,
-    _SecurityVisitor,
-)
+from xcore.kernel.security.validation import (DEFAULT_ALLOWED,
+                                              DEFAULT_FORBIDDEN,
+                                              _SecurityVisitor)
 
 
 class TestASTBypass:

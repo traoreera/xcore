@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ..context import KernelContext
 
 from ...kernel.security.validation import ManifestValidator
-
 # from ...sdk.plugin_base import PluginDependency
 from ..api.contract import PluginHandler
 from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
@@ -70,7 +69,8 @@ class PluginLoader:
         # Activator registry (Strategy Pattern)
         self._activators = ActivatorRegistry()
         self._activators.register(ExecutionMode.TRUSTED, TrustedActivator())
-        self._activators.register(ExecutionMode.SANDBOXED, SandboxedActivator())
+        self._activators.register(
+            ExecutionMode.SANDBOXED, SandboxedActivator())
         self._activators.register(ExecutionMode.LEGACY, TrustedActivator())
 
         self._validator = ManifestValidator()
@@ -212,14 +212,16 @@ class PluginLoader:
     async def load(self, plugin_name: str) -> None:
         plugin_dir = Path(self._config.directory) / plugin_name
         if not plugin_dir.is_dir():
-            raise FileNotFoundError(f"Dossier plugin introuvable : {plugin_dir}")
+            raise FileNotFoundError(
+                f"Dossier plugin introuvable : {plugin_dir}")
 
         manifest = self._validator.load_and_validate(plugin_dir)
 
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
-                logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
+                logger.info(
+                    f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
                 await self.load(dep_name)
 
         await self._activate(manifest)
@@ -254,7 +256,8 @@ class PluginLoader:
         if name in self._handlers:
             return self._handlers[name]
         available = sorted(list(self._handlers.keys()))
-        raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
+        raise KeyError(
+            f"Plugin '{name}' non trouvé. Disponibles : {available}")
 
     def has(self, name: str) -> bool:
         return name in self._handlers
@@ -289,7 +292,8 @@ class PluginLoader:
                 # dep est un PluginDependency object
                 dep_name = dep.name if hasattr(dep, "name") else str(dep)
                 if dep_name not in graph:
-                    raise ValueError(f"[{m.name}] Missing dependency '{dep_name}'")
+                    raise ValueError(
+                        f"[{m.name}] Missing dependency '{dep_name}'")
                 graph.add_dependency(m.name, dep_name)
 
         return graph.get_ordered()
@@ -321,3 +325,20 @@ class PluginLoader:
             if hasattr(handler, "plugin_router") and handler.plugin_router is not None:
                 routers.append((name, handler.plugin_router))
         return routers
+
+    def collect_middlewares(self) -> list[Any]:
+        """
+        Collecte tous les middlewares exposés par les plugins chargés.
+
+        Retourne une liste de middlewares pour chaque plugin ayant implémenté add_middlewares().
+
+        Utilisé par Xcore._attach_middlewares() pour monter les middlewares sur l'app FastAPI.
+        """
+        middlewares = []
+        for name, handler in self._handlers.items():
+            if (
+                hasattr(handler, "plugin_middlewares")
+                and handler.plugin_middlewares is not None
+            ):
+                middlewares.append(handler.plugin_middlewares)
+        return middlewares

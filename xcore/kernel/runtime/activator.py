@@ -59,7 +59,8 @@ class TrustedActivator(PluginActivator):
             entry_point=manifest.entry_point,
         )
         if not scan.passed:
-            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
+            logger.warning(
+                f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
 
         lm = LifecycleManager(
             manifest,

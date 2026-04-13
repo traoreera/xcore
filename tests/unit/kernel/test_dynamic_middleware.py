@@ -1,8 +1,11 @@
-import pytest
 import asyncio
-from xcore.kernel.runtime.supervisor import PluginSupervisor, Middleware
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from xcore.kernel.runtime.loader import PluginLoader
-from unittest.mock import MagicMock, AsyncMock
+from xcore.kernel.runtime.supervisor import Middleware, PluginSupervisor
+
 
 class DummyMiddleware(Middleware):
     def __init__(self, name, calls):
@@ -14,6 +17,7 @@ class DummyMiddleware(Middleware):
         res = await next_call(plugin_name, action, payload, handler, **kwargs)
         self.calls.append(f"after:{self.name}")
         return res
+
 
 @pytest.mark.asyncio
 async def test_dynamic_middleware_registration():

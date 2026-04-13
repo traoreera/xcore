@@ -23,19 +23,14 @@ from pathlib import Path
 
 from xcore.sdk.plugin_base import PluginDependency
 
-from .section import (
-    DEFAULT_ALLOWED,
-    DEFAULT_FORBIDDEN,
-    FORBIDDEN_ATTRIBUTES,
-    FORBIDDEN_BUILTINS,
-    ScanResult,
-    _SimpleManifest,
-)
+from .section import (DEFAULT_ALLOWED, DEFAULT_FORBIDDEN, FORBIDDEN_ATTRIBUTES,
+                      FORBIDDEN_BUILTINS, ScanResult, _SimpleManifest)
 
 # ── Chargement de l'extension C++ (optionnel) ────────────────
 
 try:
-    from .scanner_core import ImportClassifier as _CppClassifier  # type: ignore
+    from .scanner_core import \
+        ImportClassifier as _CppClassifier  # type: ignore
 
     print("AST-> Cpp Classifier")
     _CPP_AVAILABLE = True
@@ -100,7 +95,8 @@ class ManifestValidator:
 
         for field_name in ("name", "version"):
             if not raw.get(field_name):
-                raise ManifestError(f"Champ obligatoire manquant : '{field_name}'")
+                raise ManifestError(
+                    f"Champ obligatoire manquant : '{field_name}'")
 
         check_compatibility(
             raw.get("framework_version", f"=={__version__}"), __version__
@@ -116,7 +112,8 @@ class ManifestValidator:
             ) from e
 
         self._inject_dotenv(raw.get("envconfiguration"), plugin_dir)
-        resolved_env = {k: _resolve_env(v) for k, v in raw.get("env", {}).items()}
+        resolved_env = {k: _resolve_env(v)
+                        for k, v in raw.get("env", {}).items()}
 
         requires_raw = raw.get("requires", []) or []
         if not isinstance(requires_raw, list):
@@ -160,7 +157,8 @@ class ManifestValidator:
         env_file = cfg.get("env_file", ".env")
         env_path = (plugin_dir / env_file).resolve()
         if not env_path.is_relative_to(plugin_dir.resolve()):
-            raise ManifestError(f"Tentative de traversal via env_file : {env_file!r}")
+            raise ManifestError(
+                f"Tentative de traversal via env_file : {env_file!r}")
         if not env_path.exists():
             raise ManifestError(
                 f"envconfiguration.inject=true mais '{env_path}' introuvable."
@@ -213,7 +211,8 @@ def _parse_allowed_imports(raw_list: list[str]) -> tuple[set[str], list[str]]:
             prefix = entry[:-2]
             if _looks_like_module(prefix):
                 prefixes.append(prefix)
-                exact.add(prefix)  # "sqlalchemy" couvre aussi "import sqlalchemy"
+                # "sqlalchemy" couvre aussi "import sqlalchemy"
+                exact.add(prefix)
             else:
                 skipped.append(entry)
         elif _looks_like_module(entry):
@@ -249,7 +248,8 @@ class ASTScanner:
         allowed_raw = DEFAULT_ALLOWED | (extra_allowed or set())
 
         # Sépare exact vs wildcards une seule fois à la construction
-        self._allowed_exact: set[str] = {p for p in allowed_raw if not p.endswith(".*")}
+        self._allowed_exact: set[str] = {
+            p for p in allowed_raw if not p.endswith(".*")}
         self._allowed_prefixes: list[str] = [
             p[:-2] for p in allowed_raw if p.endswith(".*")
         ]
@@ -290,7 +290,8 @@ class ASTScanner:
         entry_path = (plugin_dir / entry_point).resolve()
 
         if not entry_path.is_relative_to(plugin_dir):
-            result.add_error(f"Entry point hors du dossier plugin : {entry_point!r}")
+            result.add_error(
+                f"Entry point hors du dossier plugin : {entry_point!r}")
             return result
         if not entry_path.exists():
             result.add_error(f"Entry point introuvable : {entry_point!r}")
@@ -319,7 +320,8 @@ class ASTScanner:
                 extra_allowed=extra_exact | {f"{p}.*" for p in m_prefixes},
             )
         else:
-            scanner = self if not extra_exact else ASTScanner(extra_allowed=extra_exact)
+            scanner = self if not extra_exact else ASTScanner(
+                extra_allowed=extra_exact)
 
         py_files = sorted(set(src_dir.rglob("*.py")) | {entry_path})
         if not py_files:
@@ -328,7 +330,8 @@ class ASTScanner:
 
         # ── Scan des imports (C++ ou Python) ─────────────────
         if scanner._cpp is not None:
-            cpp_results = scanner._cpp.scan_directory(str(src_dir), local_modules)
+            cpp_results = scanner._cpp.scan_directory(
+                str(src_dir), local_modules)
             for fr in cpp_results:
                 for e in fr.errors:
                     result.add_error(e)
@@ -366,7 +369,8 @@ class ASTScanner:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    self._check_py(alias.name, node.lineno, path, result, local_modules)
+                    self._check_py(alias.name, node.lineno,
+                                   path, result, local_modules)
 
             elif isinstance(node, ast.ImportFrom):
                 # Seul node.module est le module source.
@@ -448,7 +452,8 @@ def _check_builtins_and_attrs(
                     f"{path}:{node.lineno}: built-in interdit : {node.id!r}"
                 )
             elif node.id in forbidden:
-                result.add_error(f"{path}:{node.lineno}: nom interdit : {node.id!r}")
+                result.add_error(
+                    f"{path}:{node.lineno}: nom interdit : {node.id!r}")
 
         elif isinstance(node, ast.Attribute):
             if node.attr in FORBIDDEN_ATTRIBUTES:

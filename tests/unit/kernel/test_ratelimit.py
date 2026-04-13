@@ -2,12 +2,9 @@ import time
 
 import pytest
 
-from xcore.kernel.sandbox.limits import (
-    RateLimitConfig,
-    RateLimiter,
-    RateLimiterRegistry,
-    RateLimitExceeded,
-)
+from xcore.kernel.sandbox.limits import (RateLimitConfig, RateLimiter,
+                                         RateLimiterRegistry,
+                                         RateLimitExceeded)
 
 
 def test_ratelimiter_basic():

@@ -125,7 +125,8 @@ class PolicySet:
         """Permissive policy — for internal use / testing only."""
         return cls(
             plugin_name=plugin_name,
-            policies=[Policy(resource="*", actions=["*"], effect=PolicyEffect.ALLOW)],
+            policies=[Policy(resource="*", actions=["*"],
+                             effect=PolicyEffect.ALLOW)],
         )
 
     @classmethod

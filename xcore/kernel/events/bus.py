@@ -79,7 +79,8 @@ class EventBus:
 
         # If it's a wildcard, pre-compile and store it
         if any(c in event_name for c in "*?[]") and event_name not in self._wildcard_patterns:
-            self._wildcard_patterns[event_name] = re.compile(fnmatch.translate(event_name))
+            self._wildcard_patterns[event_name] = re.compile(
+                fnmatch.translate(event_name))
 
         entry = _HandlerEntry(
             handler=handler,

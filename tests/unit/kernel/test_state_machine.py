@@ -4,11 +4,8 @@ Tests for StateMachine.
 
 import pytest
 
-from xcore.kernel.runtime.state_machine import (
-    InvalidTransition,
-    PluginState,
-    StateMachine,
-)
+from xcore.kernel.runtime.state_machine import (InvalidTransition, PluginState,
+                                                StateMachine)
 
 
 class TestPluginState:

@@ -1,7 +1,11 @@
 
-import pytest
 from unittest.mock import MagicMock
-from xcore.kernel.runtime.middlewares.middleware import Middleware, MiddlewarePipeline
+
+import pytest
+
+from xcore.kernel.runtime.middlewares.middleware import (Middleware,
+                                                         MiddlewarePipeline)
+
 
 class MockMiddleware(Middleware):
     def __init__(self, name):
@@ -11,6 +15,7 @@ class MockMiddleware(Middleware):
     async def __call__(self, plugin_name, action, payload, next_call, handler, **kwargs):
         self.calls.append((plugin_name, action, payload))
         return await next_call(plugin_name, action, payload, handler, **kwargs)
+
 
 @pytest.mark.asyncio
 async def test_compiled_pipeline_execution_order():
@@ -30,6 +35,7 @@ async def test_compiled_pipeline_execution_order():
     assert mw1.calls == [("plugin", "action", {"data": 1})]
     assert mw2.calls == [("plugin", "action", {"data": 1})]
 
+
 @pytest.mark.asyncio
 async def test_compiled_pipeline_handler_propagation():
     received_handlers = []
@@ -40,6 +46,7 @@ async def test_compiled_pipeline_handler_propagation():
             return await next_call(plugin_name, action, payload, handler, **kwargs)
 
     mw = HandlerTrackingMiddleware()
+
     async def final_handler(p, a, pay, handler, **kwargs):
         received_handlers.append(handler)
         return {"status": "ok"}

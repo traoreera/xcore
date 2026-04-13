@@ -1,4 +1,5 @@
-from .ipc import IPCChannel, IPCError, IPCProcessDead, IPCResponse, IPCTimeoutError
+from .ipc import (IPCChannel, IPCError, IPCProcessDead, IPCResponse,
+                  IPCTimeoutError)
 from .isolation import DiskQuotaExceeded, DiskWatcher, MemoryLimiter
 from .limits import RateLimiter, RateLimiterRegistry, RateLimitExceeded
 from .process_manager import SandboxConfig, SandboxProcessManager

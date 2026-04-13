@@ -10,13 +10,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from xcore.services.base import BaseService, BaseServiceProvider, ServiceStatus
-from xcore.services.container import (
-    CacheServiceProvider,
-    DatabaseServiceProvider,
-    ExtensionServiceProvider,
-    SchedulerServiceProvider,
-    ServiceContainer,
-)
+from xcore.services.container import (CacheServiceProvider,
+                                      DatabaseServiceProvider,
+                                      ExtensionServiceProvider,
+                                      SchedulerServiceProvider,
+                                      ServiceContainer)
 
 
 # Mock service classes for testing
@@ -225,7 +223,8 @@ class TestServiceContainer:
     async def test_health_with_failing_service(self, container):
         """Test health check with failing service."""
         service = MockService()
-        service.health_check = AsyncMock(return_value=(False, "Connection failed"))
+        service.health_check = AsyncMock(
+            return_value=(False, "Connection failed"))
         container._services["test"] = service
 
         result = await container.health()
@@ -237,7 +236,8 @@ class TestServiceContainer:
     async def test_health_exception(self, container):
         """Test health check when service raises exception."""
         service = MockService()
-        service.health_check = AsyncMock(side_effect=Exception("Health check failed"))
+        service.health_check = AsyncMock(
+            side_effect=Exception("Health check failed"))
         container._services["test"] = service
 
         result = await container.health()

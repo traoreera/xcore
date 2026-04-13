@@ -8,6 +8,7 @@ ExecutionMode: Enum of execution modes.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, TypeVar, overload, runtime_checkable
 
@@ -15,7 +16,7 @@ from .proto import PluginContext
 
 # Literal dispo Python 3.8+
 try:
-    from typing import Literal
+    from typing import Awaitable, Callable, Literal
 except ImportError:
     from typing_extensions import Literal  # type: ignore[assignment]
 
@@ -31,6 +32,13 @@ if TYPE_CHECKING:
     from ...services.scheduler.service import SchedulerService
 
 T = TypeVar("T")
+
+
+@dataclass
+class Middleware:
+    name: str
+    middleware: Any
+    params: dict = field(default_factory=dict)
 
 
 class ExecutionMode(str, Enum):
@@ -117,7 +125,8 @@ class TrustedBase(ABC):
         payload: dict | None = None,
     ) -> dict:
         if self.ctx is None:
-            raise RuntimeError("call_plugin appelé avant injection du contexte.")
+            raise RuntimeError(
+                "call_plugin appelé avant injection du contexte.")
         if self.ctx.caller is None:
             raise RuntimeError(
                 f"[{self.ctx.name}] call_plugin() non disponible "
@@ -140,15 +149,14 @@ class TrustedBase(ABC):
     def get_service(self, name: "Literal['mongodb']") -> "MongoDBAdapter": ...
 
     @overload
-    def get_service(self, name:"Literal['redisAdapter']") -> "RedisAdapter": ...
-
-    @overload
-    def get_service(self, name:"Literal['syncdb']") -> "SQLAdapter": ...
-
-    @overload
     def get_service(
-        self, name: "Literal['scheduler']"
-    ) -> "SchedulerService": ...  # noqa: F811
+        self, name: "Literal['redisAdapter']") -> "RedisAdapter": ...
+
+    @overload
+    def get_service(self, name: "Literal['syncdb']") -> "SQLAdapter": ...
+
+    @overload
+    def get_service(self, name: "Literal['scheduler']") -> "SchedulerService": ...  # noqa: F811
 
     @overload
     def get_service(self, name: str) -> Any: ...  # noqa: F811
@@ -223,6 +231,18 @@ class TrustedBase(ABC):
 
     @abstractmethod
     async def handle(self, action: str, payload: dict) -> dict: ...
+
+    def add_middleware(self) -> dict:
+        """
+        Ajoute un middleware à l'exécution.
+        :return: {
+            "name": str,
+            "middleware": Middleware_class,
+            "params": dict,
+        }
+
+        """
+        return {}
 
     # ── Hooks cycle de vie (optionnels) ───────────────────────────────────────
 

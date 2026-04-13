@@ -37,7 +37,8 @@ class MigrationRunner:
         try:
             from alembic.config import Config  # type:ignore
         except ImportError as e:
-            raise ImportError("alembic non installé — pip install alembic") from e
+            raise ImportError(
+                "alembic non installé — pip install alembic") from e
 
         cfg = Config()
         cfg.set_main_option("sqlalchemy.url", self.db_url)

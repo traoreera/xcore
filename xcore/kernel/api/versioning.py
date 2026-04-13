@@ -52,7 +52,7 @@ def check_compatibility(framework_version_expr: str, core_version: str) -> bool:
         part = part.strip()
         for op in (">=", "<=", ">", "<", "=="):
             if part.startswith(op):
-                target = APIVersion.parse(part[len(op) :])
+                target = APIVersion.parse(part[len(op):])
                 ok = {
                     ">=": core >= target,
                     "<=": core <= target,

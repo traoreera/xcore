@@ -45,7 +45,8 @@ class DiskWatcher:
             "used_mb": self.current_size_mb(),
             "max_mb": self._max_disk_mb,
             "used_pct": (
-                round(used / self._max_bytes * 100, 1) if self._max_bytes else 0
+                round(used / self._max_bytes * 100,
+                      1) if self._max_bytes else 0
             ),
             "ok": used <= self._max_bytes if self._max_bytes else True,
         }

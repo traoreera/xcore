@@ -23,7 +23,8 @@ class AuthBackend(Protocol):
 
     async def extract_token(self, request: RequestAdapter) -> str | None: ...
 
-    async def has_permission(self, payload: AuthPayload, permission: str) -> bool: ...
+    async def has_permission(self, payload: AuthPayload,
+                             permission: str) -> bool: ...
 
 
 # ── Registry singleton ────────────────────────────────────────

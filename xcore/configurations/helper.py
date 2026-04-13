@@ -18,7 +18,8 @@ def _resolve(value: Any) -> Any:
             var = m.group(1)
             resolved = os.environ.get(var)
             if resolved is None:
-                logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
+                logger.warning(
+                    f"Variable d'environnement non définie : ${{{var}}}")
                 return ""
             return resolved
 
