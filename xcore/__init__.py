@@ -21,8 +21,13 @@ from .__version__ import __version__
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
-from .kernel.observability import (HealthChecker, MetricsRegistry, Tracer,
-                                   configure_logging, get_logger)
+from .kernel.observability import (
+    HealthChecker,
+    MetricsRegistry,
+    Tracer,
+    configure_logging,
+    get_logger,
+)
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor
@@ -209,11 +214,10 @@ class Xcore:
                 f"sous {wrapper.prefix}"
             )
 
-        for middleware in self.plugins.collect_middlewares():
-            app.add_middleware(
-                middleware.get("middleware", middleware.get(
-                    "handler", lambda: None)),
-                **middleware.get("params", middleware.get("option", {})),
+        for middleware in self.plugins.collect_app_state():
+            if middleware:
+                app.state.__setattr__(
+                key=f"{middleware['name']}", value=middleware["state"]
             )
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI

@@ -125,8 +125,7 @@ class TrustedBase(ABC):
         payload: dict | None = None,
     ) -> dict:
         if self.ctx is None:
-            raise RuntimeError(
-                "call_plugin appelé avant injection du contexte.")
+            raise RuntimeError("call_plugin appelé avant injection du contexte.")
         if self.ctx.caller is None:
             raise RuntimeError(
                 f"[{self.ctx.name}] call_plugin() non disponible "
@@ -149,8 +148,7 @@ class TrustedBase(ABC):
     def get_service(self, name: "Literal['mongodb']") -> "MongoDBAdapter": ...
 
     @overload
-    def get_service(
-        self, name: "Literal['redisAdapter']") -> "RedisAdapter": ...
+    def get_service(self, name: "Literal['redisAdapter']") -> "RedisAdapter": ...
 
     @overload
     def get_service(self, name: "Literal['syncdb']") -> "SQLAdapter": ...
@@ -232,13 +230,12 @@ class TrustedBase(ABC):
     @abstractmethod
     async def handle(self, action: str, payload: dict) -> dict: ...
 
-    def add_middleware(self) -> dict:
+    def add_state(self) -> dict:
         """
         Ajoute un middleware à l'exécution.
         :return: {
             "name": str,
-            "middleware": Middleware_class,
-            "params": dict,
+            "state": app_state
         }
 
         """

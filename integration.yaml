@@ -15,10 +15,10 @@ plugins:
   directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "hiuhihihi"
+  secret_key: "123456"
 
   # true = refuse tout plugin Trusted non signé
-  strict_trusted: false
+  strict_trusted: true
 
   # Intervalle du watcher de rechargement à chaud (secondes)
   # Mettre à 0 pour désactiver en prod si tu gères les reloads via API
@@ -74,21 +74,6 @@ services:
     #    minutes: 5
 
   # ── Observabilité ─────────────────────────────────────────────
-
-  extensions:
-    email:
-      module: extensions.email.email:EmailService
-      config:
-        smtp_host: mail.tangagroup.com #smtp.gmail.com
-        smtp_port: 465 #587
-        smtp_user: 200
-        smtp_password: l4hgj45j43j5rn
-        from_address: traoreera@gmail.com
-        from_name: "Mon Application"
-        use_tls: true
-        timeout: 10
-        max_retries: 3
-        queue_size: 100
 
 observability:
   logging:
