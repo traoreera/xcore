@@ -314,7 +314,7 @@ class LifecycleManager:
             logger.error(f"[{self.manifest.name}] get_router() erreur : {e}")
 
     def _collect_middlewares(self) -> None:
-        add_middlewares = getattr(self._instance, "add_middleware", None)
+        add_middlewares = getattr(self._instance, "add_state", None)
         if add_middlewares is None:
             return
 
@@ -331,6 +331,7 @@ class LifecycleManager:
                 )
         except Exception as e:
             logger.error(f"[{self.manifest.name}] get_middlewares() erreur : {e}")
+            print(e)
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
