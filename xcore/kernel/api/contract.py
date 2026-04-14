@@ -208,20 +208,24 @@ class TrustedBase(ABC):
 
     def get_router(self) -> "Any | None":
         """
-        Surcharger pour exposer des routes HTTP FastAPI custom.
-        Retourne un APIRouter ou None (défaut = pas de routes).
+        Surcharger pour exposer des routes HTTP custom.
+        Retourne un objet router (ex: APIRouter pour FastAPI, Blueprint pour Flask)
+        ou None (défaut = pas de routes).
         Monté automatiquement sous /plugins/<plugin_name>/<prefix>.
 
-        Exemple :
+        Exemple FastAPI :
             def get_router(self):
                 from fastapi import APIRouter
                 router = APIRouter(prefix="/items", tags=["items"])
-
-                @router.get("/")
-                async def list_items():
-                    ...
-
+                ...
                 return router
+
+        Exemple Flask :
+            def get_router(self):
+                from flask import Blueprint
+                bp = Blueprint("my_plugin", __name__)
+                ...
+                return bp
         """
         return None
 
