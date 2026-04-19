@@ -31,11 +31,8 @@ from .section import (DEFAULT_ALLOWED, DEFAULT_FORBIDDEN, FORBIDDEN_ATTRIBUTES,
 try:
     from .scanner_core import \
         ImportClassifier as _CppClassifier  # type: ignore
-
-    print("AST-> Cpp Classifier")
     _CPP_AVAILABLE = True
 except ImportError:
-    print("AST-> python Classifier")
     _CppClassifier = None
     _CPP_AVAILABLE = False
 
@@ -87,8 +84,7 @@ class ManifestValidator:
     def load_and_validate(self, plugin_dir: Path):
         from xcore import __version__
 
-        from ..api.contract import ExecutionMode
-        from ..api.versioning import check_compatibility
+        from ..api import ExecutionMode, check_compatibility
 
         plugin_dir = Path(plugin_dir).resolve()
         raw = self._read_raw(plugin_dir)

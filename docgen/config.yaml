@@ -10,12 +10,12 @@ cache:
 model:
   base_url: http://localhost:11434/v1
   api_key: lm-studio
-  model_name: novaforgeai/deepseek-coder:6.7b-optimized
+  model_name: qwen2.5-coder:1.5b-instruct
   temperature: 0.1
 
 generation:
   max_file_chunk_chars: 8000
-  include_extensions: [".py", ".yaml", ".json", ".md"]
+  include_extensions: [".py", ".yaml", ".json", ".md", '.cpp']
   exclude_dirs:
     [
       ".git",

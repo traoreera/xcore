@@ -21,13 +21,8 @@ from .__version__ import __version__
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
-from .kernel.observability import (
-    HealthChecker,
-    MetricsRegistry,
-    Tracer,
-    configure_logging,
-    get_logger,
-)
+from .kernel.observability import (HealthChecker, MetricsRegistry, Tracer,
+                                   configure_logging, get_logger)
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor
@@ -110,8 +105,8 @@ class Xcore:
         self._logger.info(f"━━━ xcore v{__version__} démarrage ━━━")
 
         # 0. Validation clés secrètes en production
-        if self._config.app.env == "production":
-            self._validate_secret_keys()
+
+        self._validate_secret_keys()
 
         # etape intermediare
         # configuration de l'observabilite
@@ -148,6 +143,7 @@ class Xcore:
         )
         self.plugins = PluginSupervisor(ctx)
         await self.plugins.boot()
+        self.plugins_lists = self.plugins.list_plugins()
 
         # 5. Attache le router FastAPI si une app est fournie
         if app is not None:
@@ -232,7 +228,10 @@ class Xcore:
         if self._config.app.env != "production":
             return
         default_key = b"change-me-in-production"
-        if self._config.app.secret_key == default_key:
+        if (
+            self._config.app.secret_key == default_key
+            or self._config.app.server_key == default_key
+        ):
             raise RuntimeError(
                 "SECRET_KEY par défaut détecté en production ! "
                 "Configurez app.secret_key dans votre xcore.yaml"
