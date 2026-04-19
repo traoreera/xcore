@@ -44,10 +44,12 @@ class TracingMiddleware(Middleware):
 
         # Span de tracing optionnel
         if self._tracer:
-            async with self._tracer.span(f"{plugin_name}.{action}") as span:
+            with self._tracer.span(f"{plugin_name}.{action}") as span:
                 span.set_attribute("plugin", plugin_name)
                 span.set_attribute("action", action)
-                result = await next_call(plugin_name, action, payload, handler, **kwargs)
+                result = await next_call(
+                    plugin_name, action, payload, handler, **kwargs
+                )
 
                 if isinstance(result, dict) and result.get("status") == "error":
                     span.set_status("error")

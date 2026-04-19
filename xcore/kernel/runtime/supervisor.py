@@ -97,6 +97,15 @@ class PluginSupervisor:
             f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
         )
 
+        # kernel virtual handler
+        from .kernel_handler import KernelHandler
+
+        self._loader._handlers["kernel"] = KernelHandler(self._ctx, self)
+        self._permissions.grant_all("kernel")
+        from ..sandbox.limits import RateLimitConfig
+
+        self._rate.register("kernel", RateLimitConfig(calls=10_000, period_seconds=60))
+
         # Enregistrement des services noyau comme "protégés" dans le registre
         if self._registry:
             for name, svc in self._services.as_dict().items():
@@ -126,6 +135,7 @@ class PluginSupervisor:
 
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
+        return report
 
     def _register_rate_limits(self, plugin_names: list[str]) -> None:
         """Enregistre les rate limits de chaque plugin dans le RateLimiterRegistry."""

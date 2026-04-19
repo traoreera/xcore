@@ -35,10 +35,10 @@ class ConfigLoader:
     """
 
     DEFAULT_PATHS = [
-        Path("xcore.yaml"),
-        Path("xcore.yml"),
-        Path("xcore.json"),
-        Path("config/xcore.yaml"),
+        Path("integation.yaml"),
+        Path("integation.yml"),
+        Path("integation.json"),
+        Path("config/integation.yaml"),
     ]
 
     @classmethod
@@ -141,7 +141,7 @@ class ConfigLoader:
             secret_key=sk,
             plugin_prefix=d.get("plugin_prefix", "/plugin"),
             plugin_tags=d.get("plugin_tags", []),
-            server_key=d.get("server_key"),
+            server_key=d.get("server_key", 'change-me-in-production'),
             server_key_iterations=d.get("server_key_iterations", 100000),
         )
 
