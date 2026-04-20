@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: devops/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_URL=postgresql://user:pass@db:5432/xcore
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ../plugins:/app/plugins
+      - ../xcore.yaml:/app/xcore.yaml
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=xcore
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

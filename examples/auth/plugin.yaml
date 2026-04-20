@@ -1,0 +1,5 @@
+name: auth
+version: "1.0.0"
+execution_mode: trusted
+entry_point: src/main.py
+description: "Enterprise Auth Plugin with JWT support"

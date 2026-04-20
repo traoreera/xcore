@@ -55,7 +55,7 @@ async def test_lifecycle_propagate_services_protection():
     with pytest.raises((PermissionError, ValueError)) as exc:
         lm.propagate_services()
 
-    assert "écrasement de services protégés" in str(exc.value)
+    assert "écraser le service protégé" in str(exc.value)
     # Vérifier que le service original n'a pas été écrasé dans shared_services
     # (LifecycleManager ne doit pas atteindre la phase d'update s'il y a collision)
     assert shared_services["db"] == "core_db"

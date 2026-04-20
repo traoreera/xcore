@@ -1,0 +1,7 @@
+name: chatbot
+version: "1.0.0"
+execution_mode: sandboxed
+entry_point: src/main.py
+description: "Isolated Chatbot Plugin (Sandboxed for security)"
+filesystem:
+  allowed_paths: ["data/", "logs/"]
