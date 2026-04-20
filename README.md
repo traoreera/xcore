@@ -7,14 +7,33 @@
 
 **XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
+> **Build robust, scalable, and secure applications using the Modular Monolith pattern.**
+
+---
+
+## ✨ Key Features
+
+*   🧩 **Plugin-First Architecture**: Everything is a module. Load, unload, and hot-reload features without downtime.
+*   🛡️ **Multi-Layer Sandbox**: Securely execute third-party code using AST scanning, OS process isolation, and resource limits.
+*   🚀 **Performance-Oriented**: Built with `asyncio` and optimized middleware pipelines (< 6µs overhead).
+*   🔧 **Shared Services**: Out-of-the-box support for SQL/NoSQL Databases, Redis Caching, and Task Scheduling.
+*   📡 **Async Messaging**: Decoupled communication via a high-performance Event Bus and Hook system.
+*   🔐 **PBAC Security**: Granular, policy-based access control for every inter-plugin call and service access.
+
+---
+
 ## 🏗️ Architecture Overview
 
-XCore follows a "minimal core" philosophy where most features are provided via plugins or shared services.
+XCore bridges the gap between rigid monoliths and complex microservices by providing a **Modular Monolith** kernel.
 
 ```mermaid
 flowchart TB
-    subgraph Core["XCore Kernel"]
-        X[Orchestrator] --> PS[Plugin Supervisor]
+    subgraph App["FastAPI Application"]
+        FA[HTTP Routes]
+    end
+
+    subgraph Kernel["XCore Kernel"]
+        X[Engine] --> PS[Plugin Supervisor]
         X --> EB[Event Bus]
         X --> SC[Service Container]
     end
@@ -29,40 +48,17 @@ flowchart TB
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### Prerequisites
+### 1. Installation
 
-- **Python 3.11+**
-- **Poetry** (Package Manager)
+```bash
+pip install xcore-framework
+# Or using poetry
+poetry add xcore-framework
+```
 
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/traoreera/xcore
-   cd xcore
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   poetry install
-   ```
-
-3. **Run the development server**:
-   ```bash
-   make run-dev
-   ```
-### or use pip to install and use it
-    ```bash
-        uv add https://github.com/traoreera/xcore
-    ```
-
----
-
-## 💻 Usage
-
-### 1. Integration with FastAPI
+### 2. Initialize the Kernel
 
 ```python
 from fastapi import FastAPI
@@ -80,85 +76,56 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 ```
 
-### 2. Standalone Usage
+### 3. Create a Plugin
 
-```python
-from xcore import Xcore
-
-async def main():
-    app = Xcore()
-    await app.boot()
-    
-    # Call a plugin action
-    result = await app.plugins.call("users_plugin", "get_user", {"id": 1})
-    print(result)
-    
-    await app.shutdown()
-```
-
----
-
-## 🔌 Plugin Development
-
-Plugins reside in the `plugins/` directory. A standard plugin structure looks like this:
-
-```text
-plugins/my_plugin/
-├── plugin.yaml      # Manifest (metadata & entry point)
-├── plugin.sig       # Security signature (for trusted plugins)
-└── src/
-    └── main.py      # Core logic
-```
-
-### Example `plugin.yaml`
+**`plugins/hello/plugin.yaml`**:
 ```yaml
-name: my_plugin
-version: "2.0.0"
-author: Your Name
-description: "A sample plugin"
-execution_mode: trusted  # or "sandboxed"
-framework_version: ">=2.0"
+name: hello
+version: "1.0.0"
+execution_mode: trusted
 entry_point: src/main.py
+```
 
-permissions:
-  - resource: "cache.*"
-    actions: ["read", "write"]
-    effect: allow
+**`plugins/hello/src/main.py`**:
+```python
+from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok
 
-resources:
-  timeout_seconds: 30
-  rate_limit:
-    calls: 100
-    period_seconds: 60
+class Plugin(AutoDispatchMixin, TrustedBase):
+    @action("greet")
+    async def greet(self, payload: dict):
+        name = payload.get("name", "World")
+        return ok(message=f"Hello, {name}!")
+```
+
+### 4. Call it via CLI
+
+```bash
+xcore plugin call hello greet '{"name": "Developer"}'
+# Output: {"status": "ok", "message": "Hello, Developer!"}
 ```
 
 ---
 
-## 🛠️ CLI Reference
-
-XCore comes with a powerful CLI for management and security.
+## 🛠️ CLI at a Glance
 
 | Command | Description |
 | :--- | :--- |
-| `xcore plugin list` | List all loaded plugins |
-| `xcore plugin load <name>` | Load a specific plugin |
-| `xcore plugin reload <name>` | Hot-reload a plugin |
-| `xcore plugin sign <path>` | Generate a security signature for a plugin |
-| `xcore plugin validate <path>`| Validate plugin manifest and structure |
+| `xcore plugin list` | List all installed and active plugins |
+| `xcore plugin reload <name>` | Hot-reload a plugin without restarting the app |
+| `xcore plugin sign <path>` | Generate a cryptographic signature for a plugin |
+| `xcore plugin validate <path>`| Perform an AST scan and manifest validation |
 | `xcore services status` | Check the health of DB, Cache, and Scheduler |
-| `xcore health` | Perform a global system health check |
 
 ---
 
-## 📜 Makefile Commands
+## 📚 Documentation
 
-| Command | Description |
-| :--- | :--- |
-| `make init` | Initialize project (install + run) |
-| `make test` | Run the test suite |
-| `make lint-fix` | Auto-format code (Black, Isort) |
-| `make docker-dev` | Spin up development environment with Docker |
-| `make logs-live` | View real-time structured logs |
+Visit our [Full Documentation](https://xcore.readthedocs.io) for:
+- [Installation Guide](docs/getting-started/installation.md)
+- [Security Deep Dive](docs/guides/security.md)
+- [Plugin Development Guide](docs/guides/creating-plugins.md)
+- [Architecture & Decisions](docs/architecture/overview.md)
+- [SDK Reference](docs/reference/sdk.md)
 
 ---
 
@@ -169,8 +136,5 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ---
 
 <p align="center">
-  Built with ❤️ by <b>Xcore team's</b>
+  Built with ❤️ by the <b>XCore Team</b>
 </p>
-
-
-<!-- Automated minor fix for issue #46 -->

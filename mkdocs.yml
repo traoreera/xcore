@@ -3,12 +3,13 @@ site_description: Production-grade plugin-first Python framework
 site_author: XCore Team
 site_url: https://xcore.readthedocs.io
 
-docs_dir: doc
-site_dir: docs
-
+docs_dir: docs
+site_dir: site
 
 theme:
   name: material
+  logo: material/lightning-bolt
+  favicon: material/lightning-bolt
   palette:
     - scheme: default
       primary: indigo
@@ -26,8 +27,11 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.expand
+    - navigation.top
+    - navigation.tracking
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
     - content.code.annotate
     - content.tabs.link
@@ -66,38 +70,32 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Guides:
       - Creating Plugins: guides/creating-plugins.md
-      - Create Services: guides/creating-services.md
-      - Working with Services: guides/services.md
       - Event & Hook System: guides/events.md
-      - Marketplace Guide: guides/marketplace.md
-      - Monitoring: guides/monitoring.md
       - Security Deep Dive: guides/security.md
-      - Scaling: guides/scaling.md
+      - Working with Services: guides/services.md
+      - Marketplace Guide: guides/marketplace.md
+      - Monitoring & Observability: guides/monitoring.md
+      - Scaling Analysis: guides/scaling.md
       - Troubleshooting: guides/troubleshooting.md
   - Architecture:
       - Overview: architecture/overview.md
       - Technical Decisions: architecture/decisions.md
+      - Scaling Analysis: architecture/scaling_analysis.md
+      - Audit Report: architecture/audit_report.md
   - Reference:
-      - Configuration: reference/configuration.md
-      - CLI Reference: reference/cli.md
-      - SDK Reference: reference/sdk.md
       - API Reference: reference/api.md
+      - CLI Reference: reference/cli.md
+      - Configuration: reference/configuration.md
+      - SDK Reference: reference/sdk.md
   - Development:
       - Contributing: development/contributing.md
       - Testing: development/testing.md
   - Deployment:
       - Deployment Guide: deployment/guide.md
-  
   - Examples:
       - Overview: examples/README.md
-      - Basic Plugin: examples/basic-plugin.md
-      - Complete Plugin: examples/complete-plugin.md
-      - Trusted Plugin: examples/trusted-plugin.md
-      - Sandbox plugin: examples/sandboxed-plugin.md
   - About:
-      - Versions: versions.md
-      - License: LICENSE
-
+      - License: LICENSE.md
 
 extra:
   social:

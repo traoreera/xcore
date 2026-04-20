@@ -1,0 +1,8 @@
+app:
+  name: "Weather App"
+  env: "development"
+
+services:
+  cache:
+    backend: "memory"
+    ttl: 60

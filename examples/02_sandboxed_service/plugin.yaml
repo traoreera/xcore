@@ -1,0 +1,15 @@
+name: sandboxed_service
+version: "1.0.0"
+author: "XCore Team"
+description: "A secure sandboxed service"
+execution_mode: sandboxed
+entry_point: src/main.py
+
+resources:
+  max_memory_mb: 128
+  timeout_seconds: 5
+
+allowed_imports:
+  - math
+  - json
+  - datetime

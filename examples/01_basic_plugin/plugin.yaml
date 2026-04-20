@@ -1,0 +1,6 @@
+name: basic_plugin
+version: "1.0.0"
+author: "XCore Team"
+description: "A simple hello world plugin"
+execution_mode: trusted
+entry_point: src/main.py
