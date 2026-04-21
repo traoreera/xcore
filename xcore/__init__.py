@@ -256,22 +256,32 @@ class Xcore:
         # On log l'intention.
 
     def _attach_middlewares(self, app, framework):
-        if framework != "fastapi":
-            # Pour l'instant on ne supporte l'injection d'état que pour FastAPI
+        if framework not in ["fastapi", "flask"]:
+            # Django n'a pas de conteneur d'état global standard sur l'objet 'app'
             return
 
         for middleware in self.plugins.collect_app_state():
-            if middleware:
-                states = middleware.get("state")
-                for key, value in states.items():
-                    app.state.__setattr__(
-                        key=f"{middleware['name']}_{key}", value=value
-                    )
-                    self._logger.info(
-                        f"{middleware['name']}📦 état {middleware['name']}_{key} mis à jour"
-                    )
+            if not middleware:
+                continue
 
-        app.openapi_schema = None  # force la regen du schéma OpenAPI
+            states = middleware.get("state", {})
+            plugin_name = middleware.get("name")
+
+            for key, value in states.items():
+                full_key = f"{plugin_name}_{key}"
+
+                if framework == "fastapi":
+                    app.state.__setattr__(full_key, value)
+                elif framework == "flask":
+                    # Pour Flask, on utilise app.extensions (standard pour les plugins)
+                    if not hasattr(app, "extensions"):
+                        app.extensions = {}
+                    app.extensions[full_key] = value
+
+                self._logger.info(f"{plugin_name}📦 état {full_key} injecté")
+
+        if framework == "fastapi":
+            app.openapi_schema = None  # force la regen du schéma OpenAPI
 
     def _validate_secret_keys(self) -> None:
         """Bloque le démarrage en production si les clés secrètes sont celles par défaut."""
