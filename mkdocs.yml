@@ -3,9 +3,8 @@ site_description: Production-grade plugin-first Python framework
 site_author: XCore Team
 site_url: https://xcore.readthedocs.io
 
-docs_dir: doc
-site_dir: docs
-
+docs_dir: docs
+site_dir: site
 
 theme:
   name: material
@@ -26,11 +25,14 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.expand
+    - navigation.top
+    - navigation.tracking
     - search.suggest
     - search.highlight
     - content.code.copy
     - content.code.annotate
     - content.tabs.link
+    - toc.follow
 
 plugins:
   - search
@@ -56,6 +58,8 @@ markdown_extensions:
   - pymdownx.tasklist:
       custom_checkbox: true
   - tables
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
 
@@ -66,7 +70,7 @@ nav:
       - Quick Start: getting-started/quickstart.md
   - Guides:
       - Creating Plugins: guides/creating-plugins.md
-      - Create Services: guides/creating-services.md
+      - Creating Services: guides/creating-services.md
       - Working with Services: guides/services.md
       - Event & Hook System: guides/events.md
       - Marketplace Guide: guides/marketplace.md
@@ -77,6 +81,8 @@ nav:
   - Architecture:
       - Overview: architecture/overview.md
       - Technical Decisions: architecture/decisions.md
+      - Audit Report: architecture/architecture_audit_report.md
+      - Scaling Analysis: architecture/scaling_analysis.md
   - Reference:
       - Configuration: reference/configuration.md
       - CLI Reference: reference/cli.md
