@@ -198,6 +198,10 @@ class FilesystemGuard:
             def wrapper(*args, **kwargs):
                 if guard._in_guard:
                     return func(*args, **kwargs)
+
+                # Permet aux opérations internes de pathlib/os pendant le chargement
+                # d'être ignorées par le guard si elles proviennent du framework.
+                # Mais ici on veut être plus restrictif.
                 try:
                     bound = sig.bind_partial(*args, **kwargs).arguments
                     paths = [
@@ -316,24 +320,57 @@ class FilesystemGuard:
         _real_import = builtins.__import__
 
         def _guarded_import(name, *args, **kwargs):
+            # IMPORTANT: Toujours utiliser _in_guard pour autoriser les imports internes du framework
             if guard._in_guard:
                 return _real_import(name, *args, **kwargs)
+
             root = name.split(".")[0]
             if root in _FORBIDDEN_MODULES:
-                _block(f"__import__('{name}')", name)
+                # Protection contre la réentrance si _block ou logger importent quelque chose
+                guard._in_guard = True
+                try:
+                    _block(f"__import__('{name}')", name)
+                finally:
+                    guard._in_guard = False
+
+            # On n'active PAS _in_guard pendant _real_import globalement pour permettre le filtrage des sub-imports.
+            # Au lieu de cela, c'est _blocked_exec qui devra être plus intelligent.
             return _real_import(name, *args, **kwargs)
 
+        import types as _types
+
         def _blocked_exec(code, *args, **kwargs):
+            if guard._in_guard:
+                return _real_exec(code, *args, **kwargs)
+
+            # Autorise exec() sur des objets code (utilisé par importlib)
+            # mais bloque exec("string") pour le plugin.
+            if isinstance(code, _types.CodeType):
+                return _real_exec(code, *args, **kwargs)
+
             _block("exec()", type(code).__name__)
 
         def _blocked_eval(expr, *args, **kwargs):
+            if guard._in_guard:
+                return _real_eval(expr, *args, **kwargs)
             _block("eval()", type(expr).__name__)
 
         def _blocked_compile(source, *args, **kwargs):
+            if guard._in_guard:
+                return _real_compile(source, *args, **kwargs)
+            # compile() est strictement interdit aux plugins pour éviter la création
+            # d'objets code contournant les restrictions sur exec().
             _block("compile()", type(source).__name__)
 
         def _blocked_input(prompt=None):
+            if guard._in_guard:
+                return _real_input(prompt)
             _block("input()")
+
+        _real_exec = builtins.exec
+        _real_eval = builtins.eval
+        _real_compile = builtins.compile
+        _real_input = builtins.input
 
         builtins.__import__ = _guarded_import
         builtins.exec = _blocked_exec
@@ -343,8 +380,11 @@ class FilesystemGuard:
 
         # ── Couche 3 : importlib post-chargement ──────────────────────────────
 
+        # Pré-chargement des modules nécessaires aux guards pour éviter la réentrance
+        guard._in_guard = True
         import importlib as _importlib
         import importlib.util as _importlib_util
+        guard._in_guard = False
 
         _real_import_module = _importlib.import_module
         _real_spec_from_file = _importlib_util.spec_from_file_location
@@ -355,7 +395,11 @@ class FilesystemGuard:
                 return _real_import_module(name, package)
             root = name.lstrip(".").split(".")[0]
             if root in _FORBIDDEN_MODULES:
-                _block(f"importlib.import_module('{name}')", name)
+                guard._in_guard = True
+                try:
+                    _block(f"importlib.import_module('{name}')", name)
+                finally:
+                    guard._in_guard = False
             return _real_import_module(name, package)
 
         def _guarded_spec_from_file(name, location=None, *args, **kwargs):
@@ -363,15 +407,23 @@ class FilesystemGuard:
                 return _real_spec_from_file(name, location, *args, **kwargs)
             # Un plugin sandbox ne doit pas charger de .py arbitraire depuis le
             # système de fichiers hors de son propre namespace déjà établi.
-            _block(
-                f"importlib.util.spec_from_file_location('{name}', '{location}')")
+            guard._in_guard = True
+            try:
+                _block(
+                    f"importlib.util.spec_from_file_location('{name}', '{location}')")
+            finally:
+                guard._in_guard = False
 
         def _guarded_find_spec(name, *args, **kwargs):
             if guard._in_guard:
                 return _real_find_spec(name, *args, **kwargs)
             root = name.split(".")[0]
             if root in _FORBIDDEN_MODULES:
-                _block(f"importlib.util.find_spec('{name}')", name)
+                guard._in_guard = True
+                try:
+                    _block(f"importlib.util.find_spec('{name}')", name)
+                finally:
+                    guard._in_guard = False
             return _real_find_spec(name, *args, **kwargs)
 
         _importlib.import_module = _guarded_import_module
@@ -382,8 +434,10 @@ class FilesystemGuard:
         # ctypes.CDLL/cdll déjà bloqués → on ferme les APIs restantes.
 
         with contextlib.suppress(ImportError):
+            guard._in_guard = True
             import ctypes as _ctypes
             import sys
+            guard._in_guard = False
 
             def _blocked_ctypes_api(label):
                 def _inner(*args, **kwargs):
@@ -747,7 +801,13 @@ async def _run(plugin_dir: Path) -> None:
     guard.install()
 
     # 3. Chargement du plugin dans son namespace isolé
-    plugin = _load_plugin(plugin_dir, manifest)
+    # On active temporairement le guard pour le chargement interne par le framework
+    # pour permettre à pathlib.resolve() et entry.exists() de fonctionner.
+    guard._in_guard = True
+    try:
+        plugin = _load_plugin(plugin_dir, manifest)
+    finally:
+        guard._in_guard = False
 
     if hasattr(plugin, "on_load"):
         await plugin.on_load()
