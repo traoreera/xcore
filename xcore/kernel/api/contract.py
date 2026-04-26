@@ -118,12 +118,7 @@ class TrustedBase(ABC):
     # xcore/kernel/api/contract.py
     # Ajouter après get_service_as(), avant get_router()
 
-    async def call_plugin(
-        self,
-        plugin_name: str,
-        action: str,
-        payload: dict | None = None,
-    ) -> dict:
+    async def call_plugin(self,plugin_name: str,action: str,payload: dict | None = None,) -> dict:
         if self.ctx is None:
             raise RuntimeError(
                 "call_plugin appelé avant injection du contexte.")

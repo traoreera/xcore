@@ -15,7 +15,7 @@ plugins:
   directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "123456"
+  secret_key: "12345"
 
   # true = refuse tout plugin Trusted non signé
   strict_trusted: true
@@ -47,7 +47,7 @@ services:
 
   # ── Cache ────────────────────────────────────────────────────
   cache:
-    backend: redis
+    backend: redisrhverujierf
     url: redis://localhost:6379/0
     ttl: 300 # TTL par défaut en secondes
     max_size: 10000 # ignoré en mode redis, actif en mode memory

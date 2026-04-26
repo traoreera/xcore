@@ -32,27 +32,36 @@ logger = logging.getLogger("xcore.worker")
 # ─────────────────────────────────────────────────────────────────────────────
 #  Limite mémoire
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def _apply_memory_limit() -> None:
-    max_mb = int(os.environ.get("_SANDBOX_MAX_MEM_MB", "0"))
-    if max_mb <= 0 or sys.platform == "win32":
+def _apply_resource_limits() -> None:
+    if sys.platform == "win32":
         return
     try:
         import resource
 
-        limit = max_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        logger.debug(f"Limite mémoire : {max_mb}MB")
+        # ── Mémoire ───────────────────────────────────────────────────────
+        max_mb = int(os.environ.get("_SANDBOX_MAX_MEM_MB", "0"))
+        if max_mb > 0:
+            limit = max_mb * 1024 * 1024
+            with contextlib.suppress(Exception):
+                resource.setrlimit(resource.RLIMIT_DATA, (limit, limit))
+            with contextlib.suppress(Exception):
+                resource.setrlimit(resource.RLIMIT_RSS, (limit, limit))
+            logger.debug(f"Limite mémoire : {max_mb}MB (DATA+RSS)")
+
+        # ── CPU ───────────────────────────────────────────────────────────
+        max_cpu_s = int(os.environ.get("_SANDBOX_MAX_CPU_SEC", "0"))
+        if max_cpu_s > 0:
+            # soft = envoi SIGXCPU quand la limite est atteinte (attrapable)
+            # hard = SIGKILL irrécupérable, fixé légèrement au-dessus
+            soft = max_cpu_s
+            hard = max_cpu_s + 5  # 5s de grâce pour un éventuel cleanup
+            resource.setrlimit(resource.RLIMIT_CPU, (soft, hard))
+            logger.debug(f"Limite CPU : {soft}s soft / {hard}s hard")
+
     except Exception as e:
-        logger.warning(f"Impossible d'appliquer RLIMIT_AS : {e}")
+        logger.warning(f"Impossible d'appliquer les limites ressources : {e}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  FilesystemGuard
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Capture de builtins.open AVANT tout patch
 builtins_open = _builtins_module.open
 
 
@@ -80,8 +89,6 @@ class FilesystemGuard:
     ) -> None:
         self._plugin_dir = plugin_dir.resolve()
 
-        # Sécurité : on valide que chaque chemin résolu reste dans le plugin_dir.
-        # Cela empêche un manifeste malicieux de configurer un accès hors du bac à sable.
         def _resolve_safe(paths, default):
             results = []
             for p in paths or default:
@@ -91,15 +98,17 @@ class FilesystemGuard:
                         results.append(resolved)
                     else:
                         logger.warning(
-                            f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}")
+                            f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}"
+                        )
                 except Exception as e:
                     logger.warning(
-                        f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}")
+                        f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}"
+                    )
             return results
 
         self._allowed = _resolve_safe(allowed_paths, ["data/"])
         self._denied = _resolve_safe(denied_paths, ["src/"])
-        self._original_open = builtins_open  # sauvegarde avant patch
+        self._original_open = builtins_open
         self._in_guard = False
 
     def _resolve(self, path_arg) -> Path:
@@ -116,54 +125,52 @@ class FilesystemGuard:
         except Exception:
             return False
 
-        # 1. Vérifie denied en premier
         for denied in self._denied:
             with contextlib.suppress(ValueError):
                 target.relative_to(denied)
-                return False  # dans un chemin denied → bloqué
-        # 2. Vérifie allowed
+                return False
         for allowed in self._allowed:
             with contextlib.suppress(ValueError):
                 target.relative_to(allowed)
-                return True  # dans un chemin allowed → autorisé
-        # 3. Fail-closed
+                return True
         return False
 
     def install(self) -> None:
         """
-        Installe le guard de sécurité sandbox.
+        Installe le guard de sécurité sandbox (4 couches).
 
-        Couverture des vecteurs de contournement :
+        FIX : _in_guard=True pendant toute la durée de install() pour que les
+        imports internes du framework (importlib, io, inspect…) ne soient pas
+        bloqués par le _guarded_import qu'on vient de poser.
+        La méthode repasse à False à la fin — à partir de ce moment le code
+        plugin s'exécute sous le guard complet.
+        """
+        self._in_guard = True
+        try:
+            self._install_impl()
+        finally:
+            self._in_guard = False
 
-        Couche 1 — Filesystem (chemins)
-            builtins.open, io.open, io.FileIO   — ouverture fichier standard
-            os.open                             — syscall direct (FD bruts)
-            os.fdopen                           — wrapping de FD bruts pré-ouverts
-            pathlib.Path.open                   — API OO pathlib
+        logger.debug(
+            f"[sandbox] Guard installé (4 couches) — "
+            f"allowed={[str(p) for p in self._allowed]}, "
+            f"denied={[str(p) for p in self._denied]}"
+        )
 
-        Couche 2 — Exécution dynamique (code injecté à l'exécution)
-            builtins.exec                       — exec("import os; ...")
-            builtins.eval                       — eval("__import__('os')...")
-            builtins.compile                    — compile() puis exec(code)
-            builtins.__import__                 — __import__("os")
-              → remplacé par un import hook qui bloque os/sys/ctypes/subprocess/…
-
-        Couche 3 — Chargement de modules (post-init)
-            importlib.import_module             — importlib.import_module("os")
-            importlib.util.spec_from_file_location — chargement .py arbitraire
-            importlib.util.find_spec            — énumération des modules système
-
-        Couche 4 — ctypes (accès mémoire / appels libc)
-            ctypes.CDLL, ctypes.cdll            — chargement bibliothèques .so/.dll
-            ctypes.pythonapi                    — appels C Python API directs
-            ctypes.libc / ctypes.windll         — libc et Win32 API
-            ctypes.cast, ctypes.memmove         — manipulation mémoire brute
-
-        Logique : fail-closed sur chaque couche, log de chaque tentative bloquée.
+    def _install_impl(self) -> None:
+        """
+        Corps réel de install() — tous les imports sont faits ICI, avant que
+        _guarded_import ne soit posé, pour éviter l'auto-blocage.
+        Exécuté avec _in_guard=True (via install()).
         """
         import builtins
+        import ctypes as _ctypes
+        import importlib as _importlib
+        import importlib.util as _importlib_util
+        import inspect
         import io
         import traceback as _traceback
+        from pathlib import Path as _Path
 
         guard = self
 
@@ -171,25 +178,18 @@ class FilesystemGuard:
 
         def _block(label: str, *args) -> None:
             """Log + lève PermissionError avec stack trace pour audit."""
-            # Disable guard during traceback/logging to avoid recursion
             was = guard._in_guard
             guard._in_guard = True
             try:
                 stack = "".join(_traceback.format_stack()[:-1])
                 logger.warning(
-                    f"[sandbox:BLOCKED] {label}\n"
-                    f"  args={args!r}\n"
-                    f"  stack:\n{stack}"
+                    f"[sandbox:BLOCKED] {label}\n  args={args!r}\n  stack:\n{stack}"
                 )
             finally:
                 guard._in_guard = was
-            raise PermissionError(
-                f"[sandbox] {label} interdit dans le sandbox")
+            raise PermissionError(f"[sandbox] {label} interdit dans le sandbox")
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
-
-        import inspect
-        from pathlib import Path as _Path
 
         def _guarded_op(func, label):
             sig = inspect.signature(func)
@@ -264,14 +264,10 @@ class FilesystemGuard:
             "is_dir",
         ]:
             if hasattr(_Path, op):
-                setattr(_Path, op, _guarded_op(
-                    getattr(_Path, op), f"Path.{op}"))
+                setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
 
         # ── Couche 2 : Exécution dynamique ────────────────────────────────────
 
-        # Modules interdits dans un contexte sandbox — toute tentative d'import
-        # dynamique vers ces modules est bloquée même si le code contourne l'AST
-        # scan en passant le nom comme string à exec/eval/__import__.
         _FORBIDDEN_MODULES = frozenset(
             {
                 "os",
@@ -314,6 +310,9 @@ class FilesystemGuard:
         )
 
         _real_import = builtins.__import__
+        _real_exec = builtins.exec  # capture BEFORE patching
+        _real_eval = builtins.eval
+        _real_compile = builtins.compile
 
         def _guarded_import(name, *args, **kwargs):
             if guard._in_guard:
@@ -324,12 +323,18 @@ class FilesystemGuard:
             return _real_import(name, *args, **kwargs)
 
         def _blocked_exec(code, *args, **kwargs):
+            if guard._in_guard:
+                return _real_exec(code, *args, **kwargs)
             _block("exec()", type(code).__name__)
 
         def _blocked_eval(expr, *args, **kwargs):
+            if guard._in_guard:
+                return _real_eval(expr, *args, **kwargs)
             _block("eval()", type(expr).__name__)
 
         def _blocked_compile(source, *args, **kwargs):
+            if guard._in_guard:
+                return _real_compile(source, *args, **kwargs)
             _block("compile()", type(source).__name__)
 
         def _blocked_input(prompt=None):
@@ -342,9 +347,6 @@ class FilesystemGuard:
         builtins.input = _blocked_input
 
         # ── Couche 3 : importlib post-chargement ──────────────────────────────
-
-        import importlib as _importlib
-        import importlib.util as _importlib_util
 
         _real_import_module = _importlib.import_module
         _real_spec_from_file = _importlib_util.spec_from_file_location
@@ -361,10 +363,7 @@ class FilesystemGuard:
         def _guarded_spec_from_file(name, location=None, *args, **kwargs):
             if guard._in_guard:
                 return _real_spec_from_file(name, location, *args, **kwargs)
-            # Un plugin sandbox ne doit pas charger de .py arbitraire depuis le
-            # système de fichiers hors de son propre namespace déjà établi.
-            _block(
-                f"importlib.util.spec_from_file_location('{name}', '{location}')")
+            _block(f"importlib.util.spec_from_file_location('{name}', '{location}')")
 
         def _guarded_find_spec(name, *args, **kwargs):
             if guard._in_guard:
@@ -379,11 +378,8 @@ class FilesystemGuard:
         _importlib_util.find_spec = _guarded_find_spec
 
         # ── Couche 4 : ctypes — blocage complet ───────────────────────────────
-        # ctypes.CDLL/cdll déjà bloqués → on ferme les APIs restantes.
 
         with contextlib.suppress(ImportError):
-            import ctypes as _ctypes
-            import sys
 
             def _blocked_ctypes_api(label):
                 def _inner(*args, **kwargs):
@@ -391,40 +387,29 @@ class FilesystemGuard:
 
                 return _inner
 
-            # Chargement de bibliothèques natives
             _ctypes.CDLL = _blocked_ctypes_api("CDLL")
             _ctypes.cdll = _blocked_ctypes_api("cdll")
             _ctypes.PyDLL = _blocked_ctypes_api("PyDLL")
             if sys.platform == "win32":
-                _ctypes.WinDLL = _blocked_ctypes_api("WinDLL")  # Windows
-                _ctypes.OleDLL = _blocked_ctypes_api("OleDLL")  # Windows
+                _ctypes.WinDLL = _blocked_ctypes_api("WinDLL")
+                _ctypes.OleDLL = _blocked_ctypes_api("OleDLL")
 
-            # Manipulation mémoire brute
             _ctypes.cast = _blocked_ctypes_api("cast")
             _ctypes.memmove = _blocked_ctypes_api("memmove")
             _ctypes.memset = _blocked_ctypes_api("memset")
             _ctypes.string_at = _blocked_ctypes_api("string_at")
             _ctypes.wstring_at = _blocked_ctypes_api("wstring_at")
 
-            # Accès Python C-API et libc
             with contextlib.suppress(AttributeError):
                 _ctypes.pythonapi = _blocked_ctypes_api("pythonapi")
             with contextlib.suppress(AttributeError):
-                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api(
-                    "cdll.LoadLibrary")
-        logger.debug(
-            f"[sandbox] Guard installé (4 couches) — "
-            f"allowed={[str(p) for p in self._allowed]}, "
-            f"denied={[str(p) for p in self._denied]}"
-        )
+                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api("cdll.LoadLibrary")
 
     def uninstall(self) -> None:
         """Restaure les builtins originaux (utile pour les tests)."""
         import builtins
 
         builtins.open = self._original_open
-        # Note : Path.open ne peut pas être restauré facilement sans référence,
-        # mais le subprocess se termine de toute façon après usage.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -436,19 +421,6 @@ class _PluginImportHook:
     """
     Import hook (sys.meta_path) qui intercepte tous les imports d'un plugin
     et les résout EXCLUSIVEMENT depuis son propre src_dir.
-
-    Chaque plugin obtient un préfixe de namespace unique :
-        xcore_plugin_<uid>.<module_name>
-
-    Cela garantit que deux plugins ayant tous les deux un `utils.py`
-    n'entrent jamais en conflit : leurs modules vivent dans des namespaces
-    distincts et ne polluent pas sys.path global.
-
-    Cycle de vie :
-        hook = _PluginImportHook(uid, src_dir)
-        hook.install()       ← enregistre dans sys.meta_path
-        ...charger le plugin...
-        hook.uninstall()     ← retire de sys.meta_path (propre)
     """
 
     def __init__(self, uid: str, src_dir: Path) -> None:
@@ -456,22 +428,14 @@ class _PluginImportHook:
         self._src_dir = src_dir
         self._pkg_prefix = f"xcore_plugin_{uid}"
 
-    # ── sys.meta_path interface ───────────────────────────────────────────────
-
     def find_module(self, fullname: str, path=None):
-        """API legacy (Python < 3.4) — délègue à find_spec."""
         return self if self._owns(fullname) else None
 
     def find_spec(self, fullname: str, path, target=None):
-        """API moderne — appelée par importlib."""
         if not self._owns(fullname):
             return None
-        # Traduit xcore_plugin_<uid>.foo.bar → src_dir/foo/bar.py (ou package)
-        # retire le préfixe + "."
-        relative = fullname[len(self._pkg_prefix) + 1:]
+        relative = fullname[len(self._pkg_prefix) + 1 :]
         return self._spec_for(fullname, relative)
-
-    # ── Résolution ────────────────────────────────────────────────────────────
 
     def _owns(self, fullname: str) -> bool:
         return fullname == self._pkg_prefix or fullname.startswith(
@@ -479,14 +443,7 @@ class _PluginImportHook:
         )
 
     def _spec_for(self, fullname: str, relative: str):
-        """
-        Cherche `relative` comme module ou package dans src_dir.
-        relative = ""       → package racine (src_dir/__init__.py ou namespace)
-        relative = "foo"    → src_dir/foo.py  ou  src_dir/foo/__init__.py
-        relative = "foo.bar"→ src_dir/foo/bar.py
-        """
         if not relative:
-            # Package racine namespace (pas de __init__.py requis)
             if spec := importlib.util.spec_from_file_location(
                 fullname,
                 origin=None,
@@ -497,33 +454,28 @@ class _PluginImportHook:
         parts = relative.split(".")
         base = self._src_dir.joinpath(*parts)
 
-        # Cas 1 : package (dossier avec __init__.py)
         init = base / "__init__.py"
         if init.exists():
-            spec = importlib.util.spec_from_file_location(
+            return importlib.util.spec_from_file_location(
                 fullname,
                 location=str(init),
                 submodule_search_locations=[str(base)],
             )
-            return spec
 
-        # Cas 2 : module simple (.py)
         module_file = base.with_suffix(".py")
         if module_file.exists():
-            spec = importlib.util.spec_from_file_location(
+            return importlib.util.spec_from_file_location(
                 fullname,
                 location=str(module_file),
             )
-            return spec
 
         return None
 
     def load_module(self, fullname: str):
-        """API legacy — utilisée si find_module() a retourné self."""
         if fullname in sys.modules:
             return sys.modules[fullname]
         relative = (
-            fullname[len(self._pkg_prefix) + 1:]
+            fullname[len(self._pkg_prefix) + 1 :]
             if fullname != self._pkg_prefix
             else ""
         )
@@ -536,13 +488,9 @@ class _PluginImportHook:
             spec.loader.exec_module(module)
         return module
 
-    # ── Installation / désinstallation ────────────────────────────────────────
-
     def install(self) -> None:
-        """Enregistre ce hook en tête de sys.meta_path."""
         if self not in sys.meta_path:
             sys.meta_path.insert(0, self)
-        # Crée le package namespace racine dans sys.modules
         if self._pkg_prefix not in sys.modules:
             root = importlib.util.module_from_spec(
                 importlib.machinery.ModuleSpec(
@@ -554,14 +502,11 @@ class _PluginImportHook:
             root.__path__ = [str(self._src_dir)]
             root.__package__ = self._pkg_prefix
             sys.modules[self._pkg_prefix] = root
-        logger.debug(
-            f"[{self._uid}] Import hook installé (src={self._src_dir})")
+        logger.debug(f"[{self._uid}] Import hook installé (src={self._src_dir})")
 
     def uninstall(self) -> None:
-        """Retire ce hook et nettoie tous les modules du namespace."""
         if self in sys.meta_path:
             sys.meta_path.remove(self)
-        # Purge tous les modules enregistrés sous ce namespace
         to_remove = [
             k
             for k in sys.modules
@@ -575,21 +520,8 @@ class _PluginImportHook:
 
 
 def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
-    """
-    Charge la classe Plugin dans un namespace totalement isolé.
-
-    L'entry point est lu depuis le manifest (plugin.yaml) — jamais hardcodé.
-    Le src_dir est dérivé du dossier parent de l'entry point.
-
-    Garanties :
-    - sys.path global n'est JAMAIS modifié.
-    - Tous les modules du plugin vivent sous xcore_plugin_<uid>.*
-    - Deux plugins avec le même fichier (ex: utils.py) ne se conflictent pas.
-    - Les imports relatifs (from .utils import ...) fonctionnent correctement.
-    """
     import hashlib
 
-    # Résolution de l'entry point depuis le manifest
     entry = (plugin_dir / manifest.entry_point).resolve()
     if not entry.exists():
         raise FileNotFoundError(
@@ -597,22 +529,11 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
             f"(entry_point={manifest.entry_point!r} dans plugin.yaml)"
         )
 
-    # Le src_dir = dossier contenant l'entry point
-    # ex: entry="plugins/foo/src/main.py" → src_dir="plugins/foo/src"
-    # ex: entry="plugins/foo/app/core.py" → src_dir="plugins/foo/app"
     src_dir = entry.parent
-
-    # UID déterministe basé sur le chemin absolu du plugin_dir
-    # Note: Use sha256 for better security and to avoid MD5 (Bandit B324)
     uid = hashlib.sha256(str(plugin_dir.resolve()).encode()).hexdigest()[:12]
     pkg_name = f"xcore_plugin_{uid}"
-
-    # Le nom du module principal reprend le stem du fichier entry point
-    # ex: main.py → xcore_plugin_<uid>.main
-    # ex: core.py → xcore_plugin_<uid>.core
     main_module_name = f"{pkg_name}.{entry.stem}"
 
-    # Installe le hook AVANT d'exécuter quoi que ce soit
     hook = _PluginImportHook(uid, src_dir)
     hook.install()
 
@@ -625,8 +546,6 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
         if spec is None or spec.loader is None:
             raise ImportError(f"Impossible de construire le spec pour {entry}")
 
-        # __package__ correct pour que les imports relatifs (from .utils import X)
-        # soient résolus via notre hook dans le bon namespace
         module = importlib.util.module_from_spec(spec)
         module.__package__ = pkg_name
         module.__name__ = main_module_name
@@ -654,29 +573,12 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
 
 @dataclass
 class _PluginManifest:
-    """
-    Sous-ensemble du manifeste plugin.yaml nécessaire au worker.
-    Seuls les champs utilisés par le subprocess sont lus ici —
-    la validation complète reste du ressort du LifecycleManager côté core.
-    """
-
     entry_point: str = "src/main.py"
     allowed_paths: list = field(default_factory=lambda: ["data/"])
     denied_paths: list = field(default_factory=lambda: ["src/"])
 
 
 def _load_manifest(plugin_dir: Path) -> _PluginManifest:
-    """
-    Parse plugin.yaml (ou plugin.json) et retourne un _PluginManifest.
-
-    Champs lus :
-        entry_point              (str,  défaut "src/main.py")
-        filesystem.allowed_paths (list, défaut ["data/"])
-        filesystem.denied_paths  (list, défaut ["src/"])
-
-    En cas d'erreur de lecture/parsing, retourne les valeurs par défaut
-    plutôt que de crasher — le FilesystemGuard restera strict de toute façon.
-    """
     manifest = _PluginManifest()
 
     for fname in ("plugin.yaml", "plugin.json"):
@@ -688,12 +590,10 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         except Exception as e:
             logger.warning(f"Impossible de lire le manifeste ({fname}) : {e}")
 
-    logger.warning(
-        f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
+    logger.warning(f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
     return manifest
 
 
-# TODO Rename this here and in `_load_manifest`
 def _extracted_from__load_manifest_20(fname, manifest_path, manifest):
     if fname.endswith(".yaml"):
         import yaml
@@ -738,16 +638,24 @@ def _send(transport, data: dict) -> None:
 
 
 async def _run(plugin_dir: Path) -> None:
-    # 1. Lecture du manifeste (entry_point + filesystem policy)
+    # 1. Lecture du manifeste
     manifest = _load_manifest(plugin_dir)
 
-    # 2. Installation du guard filesystem (AVANT tout chargement de code plugin)
-    guard = FilesystemGuard(
-        plugin_dir, manifest.allowed_paths, manifest.denied_paths)
+    # 2. Installation du guard filesystem.
+    # install() gère _in_guard=True pendant sa propre exécution via _install_impl(),
+    # puis repasse à False — le guard est actif pour le code plugin dès la sortie.
+    guard = FilesystemGuard(plugin_dir, manifest.allowed_paths, manifest.denied_paths)
     guard.install()
 
-    # 3. Chargement du plugin dans son namespace isolé
-    plugin = _load_plugin(plugin_dir, manifest)
+    # 3. Chargement du plugin.
+    # FIX : _load_plugin() et _PluginImportHook._spec_for() appellent
+    # importlib.util.spec_from_file_location (remplacé par la Couche 3).
+    # Ce sont des appels framework → on passe en mode bypass le temps du chargement.
+    guard._in_guard = True
+    try:
+        plugin = _load_plugin(plugin_dir, manifest)
+    finally:
+        guard._in_guard = False  # à partir d'ici : code plugin, restrictions actives
 
     if hasattr(plugin, "on_load"):
         await plugin.on_load()
@@ -758,7 +666,6 @@ async def _run(plugin_dir: Path) -> None:
 
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
-    # Utilisation d'un protocole concret pour stdout
     class _StdoutProtocol(asyncio.BaseProtocol):
         def connection_made(self, transport):
             pass
@@ -804,7 +711,6 @@ async def _run(plugin_dir: Path) -> None:
                 )
 
         except PermissionError as e:
-            # Violation filesystem policy — log + réponse d'erreur sans crash
             logger.error(f"[sandbox] Violation filesystem : {e}")
             response = {
                 "status": "error",
@@ -819,8 +725,7 @@ async def _run(plugin_dir: Path) -> None:
             }
         except Exception as e:
             logger.exception(f"Erreur handle({action})")
-            response = {"status": "error", "msg": str(
-                e), "code": "handler_error"}
+            response = {"status": "error", "msg": str(e), "code": "handler_error"}
 
         _send(transport, response)
 
@@ -830,7 +735,6 @@ async def _run(plugin_dir: Path) -> None:
         except Exception:
             pass
 
-    # Nettoyage du hook d'import isolé
     if hasattr(plugin, "_import_hook"):
         plugin._import_hook.uninstall()
 
@@ -843,11 +747,10 @@ async def _run(plugin_dir: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps(
-            {"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
+        print(json.dumps({"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
         sys.exit(1)
 
-    _apply_memory_limit()
+    _apply_resource_limits()
 
     plugin_dir = Path(sys.argv[1]).resolve()
     if not plugin_dir.is_dir():
