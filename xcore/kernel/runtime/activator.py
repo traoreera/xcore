@@ -46,11 +46,12 @@ class TrustedActivator(PluginActivator):
         from ..security.validation import ASTScanner
         from .lifecycle import LifecycleManager, LoadError
 
-        if loader._config.strict_trusted or manifest.execution_mode.value == "trusted":
-            try:
-                verify_plugin(manifest, loader._config.secret_key)
-            except SignatureError as e:
-                raise LoadError(str(e)) from e
+        if loader._config.strict_trusted:
+            if manifest.execution_mode.value == "trusted":
+                try:
+                    verify_plugin(manifest, loader._config.secret_key)
+                except SignatureError as e:
+                    raise LoadError(str(e)) from e
 
         scanner = ASTScanner()
         scan = scanner.scan(
@@ -59,8 +60,7 @@ class TrustedActivator(PluginActivator):
             entry_point=manifest.entry_point,
         )
         if not scan.passed:
-            logger.warning(
-                f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
+            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
 
         lm = LifecycleManager(
             manifest,
@@ -84,9 +84,10 @@ class SandboxedActivator(PluginActivator):
             whitelist=manifest.allowed_imports,
             entry_point=manifest.entry_point,
         )
+
         if not scan.passed:
             raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
 
-        mgr = SandboxProcessManager(manifest)
+        mgr = SandboxProcessManager(manifest=manifest, ctx=loader)
         await mgr.start()
         return mgr

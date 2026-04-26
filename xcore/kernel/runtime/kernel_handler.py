@@ -60,13 +60,38 @@ class KernelHandler:
         except Exception as e:
             return {"status": "error", "msg": str(e), "code": "kernel_error"}
 
+    def __ok(self, data: dict | None = None, **kwargs) -> dict:
+        """Construit une réponse succès standardisée."""
+        return {"status": "ok", **(data or {}), **kwargs}
+
     # ── Actions ───────────────────────────────────────────────
 
     async def _plugins_list(self, payload: dict) -> dict:
-        return {
-            "status": "ok",
-            "plugins": self._supervisor.list_plugins(),
-        }
+        return self.__ok(
+            plugins=self._supervisor.list_plugins(),
+        )
+
+    async def _xfow_integration(self, payload: dict) -> dict:
+        return self.__ok(
+            data={
+                "plugin": "xform",
+                "display_name": "XForm",
+                "description": "Build forms. Launch workflows.",
+                "xflow_supported": True,
+                "ipc_actions": [
+                    {
+                        "name": "list plugins",
+                        "qualified_name": "plugin.list",
+                        "description": "Créer un nouveau formulaire",
+                        "input_schema": {},
+                        "output_schema": {
+                            "status": {"type": "string"},
+                            "data": {"type": "dict"},
+                        },
+                    },
+                ],
+            }
+        )
 
     # ── Table de dispatch ─────────────────────────────────────
 
@@ -76,4 +101,5 @@ class KernelHandler:
 # Enregistrement déclaratif (évite les répétitions de string)
 KernelHandler._ACTIONS = {
     "plugin.list": KernelHandler._plugins_list,
+    "xflow.integration": KernelHandler._xfow_integration
 }
