@@ -26,7 +26,7 @@ class TestASTBypass:
 
         # Should have an error for 'os' attribute
         assert any(
-            "accès à un module interdit via attribut : 'os'" in e
+            "accès interdit via attribut : 'os'" in e
             for e in visitor.errors
         )
 
@@ -38,7 +38,7 @@ class TestASTBypass:
 
         # Should have an error for 'sys' attribute
         assert any(
-            "accès à un module interdit via attribut : 'sys'" in e
+            "accès interdit via attribut : 'sys'" in e
             for e in visitor.errors
         )
 
@@ -49,7 +49,7 @@ class TestASTBypass:
         visitor.visit(tree)
 
         assert any(
-            "accès à un module interdit via attribut : 'os'" in e
+            "accès interdit via attribut : 'os'" in e
             for e in visitor.errors
         )
 

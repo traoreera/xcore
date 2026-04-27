@@ -119,11 +119,20 @@ class ServiceContainer:
         await container.shutdown()
     """
 
+    # Pour compatibilité avec les anciens tests
+    DEFAULT_PROVIDERS = [
+        DatabaseServiceProvider,
+        CacheServiceProvider,
+        SchedulerServiceProvider,
+        ExtensionServiceProvider,
+    ]
+
     def __init__(
         self,
         config: "ServicesConfig",
         providers: list[BaseServiceProvider] | None = None,
     ) -> None:
+
         self._config = config
         self._services: dict[str, BaseService] = {}
         self._raw: dict[str, Any] = {}

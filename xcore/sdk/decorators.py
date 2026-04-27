@@ -125,6 +125,7 @@ def validate_payload(
 
     return decorator
 
+
 def route(
     path: str,
     method: str = "GET",
@@ -240,7 +241,8 @@ class RoutedPlugin:
                     )
 
                 sig = inspect.signature(fn)
-                params = [p for name, p in sig.parameters.items() if name != "self"]
+                params = [p for name, p in sig.parameters.items()
+                          if name != "self"]
                 handler.__signature__ = sig.replace(parameters=params)
                 return handler
 

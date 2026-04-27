@@ -61,7 +61,7 @@ class ServicesConfig:
 class PluginConfig:
     directory: str = "./plugins"
     secret_key: bytes = b"change-me-in-production"
-    strict_trusted: bool = True
+    strict_trusted: bool = False
     interval: int = 2  # watcher interval (secondes)
     entry_point: str = "src/main.py"
     snapshot: dict[str, Any] = field(

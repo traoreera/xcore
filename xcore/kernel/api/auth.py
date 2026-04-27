@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from typing import List, NotRequired, Protocol, TypedDict, runtime_checkable
 
+from typing_extensions import Any
+
 
 class AuthPayload(TypedDict):
     sub: str
     roles: NotRequired[List[str]]
     permissions: NotRequired[List[str]]
+    user: NotRequired[dict[str, Any]]
 
 
 class RequestAdapter(Protocol):
@@ -18,7 +21,6 @@ class RequestAdapter(Protocol):
 
 @runtime_checkable
 class AuthBackend(Protocol):
-
     async def decode_token(self, token: str) -> AuthPayload | None: ...
 
     async def extract_token(self, request: RequestAdapter) -> str | None: ...
