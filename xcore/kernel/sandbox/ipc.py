@@ -66,7 +66,8 @@ class IPCChannel:
                 self._process.stdout.readline(), timeout=self._timeout
             )
         except asyncio.TimeoutError:
-            raise IPCTimeoutError(f"Pas de réponse dans {self._timeout}s") from None
+            raise IPCTimeoutError(
+                f"Pas de réponse dans {self._timeout}s") from None
         except Exception as exc:
             raise IPCError(f"Lecture stdout : {exc}") from exc
 
@@ -79,7 +80,8 @@ class IPCChannel:
         try:
             data = json.loads(raw_str)
         except json.JSONDecodeError as exc:
-            raise IPCError(f"JSON invalide : {exc} — reçu : {raw_str!r}") from exc
+            raise IPCError(
+                f"JSON invalide : {exc} — reçu : {raw_str!r}") from exc
 
         return IPCResponse(success=data.get("status") == "ok", data=data, raw=raw_str)
 

@@ -18,7 +18,6 @@ import ast
 import json
 import os
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from xcore.sdk.plugin_base import PluginDependency
@@ -31,6 +30,7 @@ from .section import (DEFAULT_ALLOWED, DEFAULT_FORBIDDEN, FORBIDDEN_ATTRIBUTES,
 try:
     from .scanner_core import \
         ImportClassifier as _CppClassifier  # type: ignore
+
     _CPP_AVAILABLE = True
 except ImportError:
     _CppClassifier = None
@@ -42,6 +42,10 @@ except ImportError:
 
 
 class ManifestError(Exception):
+    pass
+
+
+class FrameworkVersionVersion(Exception):
     pass
 
 
@@ -94,7 +98,7 @@ class ManifestValidator:
                 raise ManifestError(
                     f"Champ obligatoire manquant : '{field_name}'")
 
-        check_compatibility(
+        validate_version = check_compatibility(
             raw.get("framework_version", f"=={__version__}"), __version__
         )
 
@@ -122,7 +126,11 @@ class ManifestValidator:
             except ValueError as e:
                 raise ManifestError(f"Dépendance invalide: {e}") from e
 
-        return _build_manifest(raw, mode, resolved_env, requires, plugin_dir)
+        return (
+            _build_manifest(raw, mode, resolved_env, requires, plugin_dir),
+            validate_version,
+            __version__,
+        )
 
     def _read_raw(self, plugin_dir: Path) -> dict:
         for fname, loader in [("plugin.yaml", self._yaml), ("plugin.json", self._json)]:
@@ -218,6 +226,91 @@ def _parse_allowed_imports(raw_list: list[str]) -> tuple[set[str], list[str]]:
             skipped.append(entry)
 
     return exact, prefixes, skipped
+
+
+# ─────────────────────────────────────────────────────────────
+# _SecurityVisitor — Utilisé pour les tests unitaires fins
+# ─────────────────────────────────────────────────────────────
+
+
+class _SecurityVisitor(ast.NodeVisitor):
+    """
+    Visiteur AST pour la validation de sécurité.
+    Note : ASTScanner utilise maintenant une approche plus directe pour
+    les scans de répertoires complets, mais ce visiteur reste utile pour
+    les tests unitaires et les validations fines.
+    """
+
+    def __init__(
+        self,
+        forbidden: set[str],
+        allowed: set[str],
+        filename: str,
+        path: Path,
+    ):
+        self.forbidden = forbidden
+        # Normalise les allowed une seule fois
+        self.allowed_exact, self.allowed_prefixes, _ = _parse_allowed_imports(
+            list(allowed)
+        )
+        self.filename = filename
+        self.path = path
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.forbidden_builtins = FORBIDDEN_BUILTINS
+
+    def _is_allowed(self, module: str) -> bool:
+        if module in self.allowed_exact:
+            return True
+        root = module.split(".")[0]
+        if root in self.allowed_exact:
+            return True
+        for prefix in self.allowed_prefixes:
+            if module == prefix or module.startswith(prefix + "."):
+                return True
+        return False
+
+    def _check(self, module: str, lineno: int) -> None:
+        root = module.split(".")[0]
+        loc = f"{self.path}:{lineno}: "
+        if root in self.forbidden:
+            self.errors.append(loc + f"import interdit — '{module}'")
+        elif not self._is_allowed(module):
+            self.warnings.append(loc + f"import non whitelisté — '{module}'")
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self._check(alias.name, node.lineno)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level and node.level > 0:
+            return
+        if node.module:
+            self._check(node.module, node.lineno)
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id in self.forbidden_builtins:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: built-in interdit : {node.id!r}"
+            )
+        elif node.id in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès interdit : {node.id!r}"
+            )
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if node.attr in FORBIDDEN_ATTRIBUTES:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: attribut interdit : {node.attr!r}"
+            )
+        elif node.attr in self.forbidden:
+            self.errors.append(
+                f"{self.path}:{node.lineno}: accès interdit via attribut : {node.attr!r}"
+            )
+        self.generic_visit(node)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -344,6 +437,16 @@ class ASTScanner:
 
         return result
 
+    # ── Propriétés pour compatibilité tests ───────────────────
+
+    @property
+    def forbidden(self) -> set[str]:
+        return self._forbidden
+
+    @property
+    def allowed(self) -> set[str]:
+        return self._allowed_exact | {f"{p}.*" for p in self._allowed_prefixes}
+
     # ── Fallback Python ──────────────────────────────────────
 
     def _scan_imports_python(
@@ -449,14 +552,14 @@ def _check_builtins_and_attrs(
                 )
             elif node.id in forbidden:
                 result.add_error(
-                    f"{path}:{node.lineno}: nom interdit : {node.id!r}")
+                    f"{path}:{node.lineno}: accès interdit : {node.id!r}")
 
         elif isinstance(node, ast.Attribute):
             if node.attr in FORBIDDEN_ATTRIBUTES:
                 result.add_error(
-                    f"{path}:{node.lineno}: attribut sensible interdit : {node.attr!r}"
+                    f"{path}:{node.lineno}: attribut interdit : {node.attr!r}"
                 )
             elif node.attr in forbidden:
                 result.add_error(
-                    f"{path}:{node.lineno}: attribut de module interdit : {node.attr!r}"
+                    f"{path}:{node.lineno}: accès interdit via attribut : {node.attr!r}"
                 )

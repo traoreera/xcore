@@ -943,6 +943,30 @@ lint-fix: ## Correction automatique des erreurs de linting (SAFE - préserve imp
 	@poetry run autoflake --in-place --recursive --remove-unused-variables --ignore-init-module-imports --exclude=alembic,static,__pycache__ .
 	@echo "✅ Correction automatique terminée (imports préservés)!"
 
+lint-check: ## Vérifier le linting sans modifier les fichiers (pour le CI)
+	@echo "🔍 Vérification du code (mode CHECK)..."
+	@echo "📋 1. Vérification black..."
+	@poetry run black . --check --exclude="(alembic|static|__pycache__)"
+	@echo "📋 2. Vérification isort..."
+	@poetry run isort . --check-only --skip=alembic --skip=static --skip=__pycache__
+	@echo "📋 3. Vérification flake8..."
+	@poetry run flake8 .
+	@echo "✅ Vérification terminée!"
+
+pre-commit-install: ## Installer les hooks de pre-commit
+	@echo "📥 Installation des hooks pre-commit..."
+	@poetry run pre-commit install
+
+pre-commit-run: ## Lancer manuellement les hooks sur tous les fichiers
+	@echo "🚀 Lancement de pre-commit sur tous les fichiers..."
+	@poetry run pre-commit run --all-files
+
+pre-commit: pre-commit-run ## Alias pour pre-commit-run
+
+validate-plugins: ## Valider tous les plugins (structure + AST)
+	@echo "🔌 Validation des plugins..."
+	@poetry run xcore plugin health
+
 auto-fix: ## Alias pour lint-fix (correction automatique sécurisée)
 	@$(MAKE) lint-fix
 

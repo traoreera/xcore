@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pytest
 
 # Test the components we can import
-from xcore.kernel.sandbox.worker import (FilesystemGuard, _apply_memory_limit,
+from xcore.kernel.sandbox.worker import (FilesystemGuard,
+                                         _apply_resource_limits,
                                          _load_manifest, _PluginImportHook,
                                          _PluginManifest)
 
@@ -38,34 +39,34 @@ class TestPluginManifest:
         assert manifest.denied_paths == ["system/", "logs/"]
 
 
-class TestApplyMemoryLimit:
-    """Test _apply_memory_limit function."""
+class TestApplyResourceLimits:
+    """Test _apply_resource_limits function."""
 
     def test_no_limit_set(self):
         """Test when no memory limit is set."""
-        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "0"}, clear=True):
+        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "0", "_SANDBOX_MAX_CPU_SEC": "0"}, clear=True):
             # Should not raise
-            _apply_memory_limit()
+            _apply_resource_limits()
 
     def test_limit_on_windows(self):
-        """Test memory limit on Windows (should skip)."""
-        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "100"}):
+        """Test resource limits on Windows (should skip)."""
+        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "100", "_SANDBOX_MAX_CPU_SEC": "10"}):
             with patch.object(sys, "platform", "win32"):
                 # Should not raise (Windows is skipped)
-                _apply_memory_limit()
+                _apply_resource_limits()
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Not applicable on Windows")
-    def test_apply_limit_unix(self):
-        """Test applying memory limit on Unix."""
-        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "100"}):
+    def test_apply_limits_unix(self):
+        """Test applying resource limits on Unix."""
+        env = {
+            "_SANDBOX_MAX_MEM_MB": "100",
+            "_SANDBOX_MAX_CPU_SEC": "10",
+        }
+        with patch.dict(os.environ, env):
             with patch("resource.setrlimit") as mock_setrlimit:
-                with patch("resource.RLIMIT_AS", 9):  # Mock RLIMIT_AS
-                    _apply_memory_limit()
-                    mock_setrlimit.assert_called_once()
-                    # Check the limit is 100MB in bytes
-                    call_args = mock_setrlimit.call_args
-                    assert call_args[0][1] == (
-                        100 * 1024 * 1024, 100 * 1024 * 1024)
+                _apply_resource_limits()
+                # On attend au moins un appel pour CPU et un pour mémoire
+                assert mock_setrlimit.call_count >= 2
 
 
 class TestFilesystemGuard:

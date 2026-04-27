@@ -40,7 +40,7 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run lint with makefile
-        run: make lint-fix
+        run: make lint-check
 
   # ── Type checking ──────────────────────────────────────────────────────────
   typecheck:
@@ -157,42 +157,8 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      - name: Validate all plugins structure
-        run: |
-          poetry run python -c "
-          import os, sys, importlib.util
-          plugins_dir = 'plugins'
-          errors = []
-          for name in os.listdir(plugins_dir):
-              path = os.path.join(plugins_dir, name)
-              if not os.path.isdir(path): continue
-              run_py = os.path.join(path, 'run.py')
-              init_py = os.path.join(path, '__init__.py')
-              if not os.path.exists(run_py):
-                  errors.append(f'{name}: missing run.py')
-                  continue
-              if not os.path.exists(init_py):
-                  errors.append(f'{name}: missing __init__.py')
-                  continue
-              spec = importlib.util.spec_from_file_location(name, run_py)
-              mod  = importlib.util.module_from_spec(spec)
-              try:
-                  spec.loader.exec_module(mod)
-              except Exception as e:
-                  errors.append(f'{name}: import error – {e}')
-                  continue
-              if not hasattr(mod, 'PLUGIN_INFO'):
-                  errors.append(f'{name}: missing PLUGIN_INFO')
-              if not hasattr(mod, 'Plugin'):
-                  errors.append(f'{name}: missing Plugin class')
-              if not hasattr(mod, 'router'):
-                  errors.append(f'{name}: missing router')
-          if errors:
-              print('Plugin validation FAILED:')
-              for e in errors: print(' ✗', e)
-              sys.exit(1)
-          print(f'All plugins valid ✓')
-          "
+      - name: Validate all plugins
+        run: make validate-plugins
 
   # ── Résumé du CI ───────────────────────────────────────────────────────────
   ci-success:

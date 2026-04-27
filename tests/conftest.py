@@ -95,43 +95,45 @@ def plugins_dir() -> Generator:
 def fake_plugin_dir(plugins_dir: Path) -> Path:
     """
     Crée un plugin factice valide dans le dossier temporaire.
-    Structure minimale respectant le contrat xcore.
+    Structure v2 respectant le contrat xcore.
     """
-    plugin = plugins_dir / "fake_plugin"
+    plugin = plugins_dir / "test_plugin"
     plugin.mkdir()
 
-    (plugin / "__init__.py").write_text(
-        "from .run import Plugin, router\n__all__ = ['Plugin', 'router']\n"
-    )
+    src = plugin / "src"
+    src.mkdir()
 
-    (plugin / "run.py").write_text(
-        "from fastapi import APIRouter, Request\n\n"
-        "PLUGIN_INFO = {\n"
-        "    'version': '1.0.0',\n"
-        "    'author': 'test',\n"
-        "    'description': 'Plugin de test',\n"
-        "    'Api_prefix': '/app/fake',\n"
-        "    'tag_for_identified': ['fake'],\n"
-        "}\n\n"
-        "router = APIRouter(prefix='/fake', tags=['fake'])\n\n"
-        "class Plugin:\n"
-        "    def __init__(self):\n"
-        "        super(Plugin, self).__init__()\n\n"
+    (src / "__init__.py").write_text("")
+
+    (src / "main.py").write_text(
+        "from fastapi import APIRouter, Request\n"
+        "from xcore import TrustedBase\n\n"
+        "router = APIRouter()\n\n"
+        "class Plugin(TrustedBase):\n"
+        "    def __init__(self, ctx, caller):\n"
+        "        super().__init__(ctx, caller)\n\n"
         "    @router.get('/')\n"
-        "    @staticmethod\n"
-        "    def index(request: Request):\n"
-        "        return {'status': 'ok', 'plugin': 'fake'}\n"
+        "    async def index(self, request: Request):\n"
+        "        return {'status': 'ok', 'plugin': 'test'}\n"
     )
 
-    (plugin / "config.yaml").write_text(
-        "name: fake_plugin\n"
+    (plugin / "plugin.yaml").write_text(
+        "name: test_plugin\n"
         "version: '1.0.0'\n"
         "author: test\n"
-        "enabled: true\n"
-        "api_prefix: /app/fake\n"
+        "execution_mode: trusted\n"
+        "entry_point: src/main.py\n"
     )
 
     return plugin
+
+
+@pytest.fixture
+def temp_dir() -> Generator[Path, None, None]:
+    """Fixture utilitaire pour un dossier temporaire propre."""
+    tmp = tempfile.mkdtemp()
+    yield Path(tmp)
+    shutil.rmtree(tmp, ignore_errors=True)
 
 
 @pytest.fixture

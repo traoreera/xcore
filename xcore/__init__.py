@@ -18,6 +18,9 @@ Quickstart:
 """
 
 from .__version__ import __version__
+from .kernel.api import (AuthBackend, AuthPayload, get_auth_backend,
+                         get_current_user, register_auth_backend,
+                         unregister_auth_backend)
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
@@ -45,6 +48,12 @@ __all__ = [
     "ServiceContainer",
     "PluginRegistry",
     "get_logger",
+    "AuthBackend",
+    "AuthPayload",
+    "get_auth_backend",
+    "get_current_user",
+    "register_auth_backend",
+    "unregister_auth_backend",
 ]
 
 
@@ -86,11 +95,13 @@ class Xcore:
         self._config = ConfigLoader.load(config_path)
         self._booted = False
 
-        # Sous-systèmes — instanciés lazily à boot()
+        # Sous-systèmes — instanciés dans __init__ pour les décorateurs
+        self.events = EventBus()
+        self.hooks = HookManager()
+
+        # Sous-systèmes instanciés lazily à boot()
         self.services: ServiceContainer | None = None
         self.plugins: PluginSupervisor | None = None
-        self.events: EventBus | None = None
-        self.hooks: HookManager | None = None
         self.registry: PluginRegistry | None = None
 
         self._logger = get_logger("xcore")
@@ -121,11 +132,7 @@ class Xcore:
         self.services.load_default_providers()
         await self.services.init()
 
-        # 2. Event bus + hooks
-        self.events = EventBus()
-        self.hooks = HookManager()
-
-        # 3. Registry des plugins
+        # 2. Registry des plugins
         self.registry = PluginRegistry(self._config)
 
         # 4. Kernel Context & Plugin supervisor (runtime + sandbox)
