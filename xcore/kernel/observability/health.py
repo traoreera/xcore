@@ -76,8 +76,7 @@ class HealthChecker:
 
             duration = (time.monotonic() - start) * 1000
             results.append(
-                CheckResult(name=name, status=status,
-                            message=msg, duration_ms=duration)
+                CheckResult(name=name, status=status, message=msg, duration_ms=duration)
             )
 
         overall = HealthStatus.HEALTHY

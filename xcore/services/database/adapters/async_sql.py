@@ -32,8 +32,7 @@ class AsyncSQLAdapter:
 
     async def connect(self) -> None:
         try:
-            from sqlalchemy.ext.asyncio import (AsyncSession,
-                                                create_async_engine)
+            from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
             from sqlalchemy.orm import sessionmaker
         except ImportError as e:
             raise ImportError(

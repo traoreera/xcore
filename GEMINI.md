@@ -1,35 +1,32 @@
 # GEMINI.md - XCore Framework Context
 
-This file provides a comprehensive overview of the XCore project to guide development and maintenance.
-
 ## Project Overview
-
 **XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
 ### Core Architecture
-- **Xcore Kernel**: The central orchestrator managing sub-systems.
+- **Xcore Kernel**: The central orchestrator managing the runtime, sandbox, and communication.
 - **Service Container**: Manages shared services like Databases (SQLAlchemy), Caching (Redis/Memory), and Schedulers (APScheduler).
-- **Plugin Supervisor**: Handles the lifecycle (load, boot, shutdown, reload) of plugins.
-- **Event Bus & Hooks**: Facilitates communication between the core and plugins via events and hooks.
-- **Observability**: Integrated logging, metrics (Prometheus/Memory), and tracing (OpenTelemetry).
-- **Security**: Supports plugin signing, verification, and sandboxed execution to restrict resource access.
+- **Plugin Supervisor**: Handles the lifecycle (load, boot, shutdown, reload) and security of plugins.
+- **Event Bus & Hooks**: Facilitates communication between the core and plugins.
+- **Observability**: Integrated logging, metrics, and tracing.
+- **Security**: Supports plugin signing, manifest validation, and import/resource restriction.
 
 ### Main Technologies
 - **Language**: Python 3.11+
 - **Framework**: FastAPI
-- **Dependency Management**: Poetry
+- **Dependency Management**: Poetry / UV
 - **Data Validation**: Pydantic v2
-- **ORM/Database**: SQLAlchemy 2.0, Alembic
+- **ORM**: SQLAlchemy 2.0
 - **Task Scheduling**: APScheduler
-- **CLI**: Custom CLI built with Rich
+- **CLI**: Rich-based custom CLI (`xcore`)
+
+---
 
 ## Building and Running
 
-The project uses a `Makefile` to simplify common development tasks.
-
 ### Prerequisites
 - Python 3.11 or higher
-- [Poetry](https://python-poetry.org/docs/#installation)
+- [Poetry](https://python-poetry.org/)
 
 ### Key Commands
 | Task | Command | Description |
@@ -39,45 +36,49 @@ The project uses a `Makefile` to simplify common development tasks.
 | **Run (Dev)** | `make dev` | Run FastAPI server with auto-reload (port 8000) |
 | **Run (Prod)** | `make st` | Run FastAPI server in production mode |
 | **Test** | `make test` | Run the full test suite with coverage |
-| **Lint & Format** | `make lint-fix` | Auto-format (Black, Isort) and fix linting (Autopep8, Autoflake) |
+| **Lint & Format** | `make lint-fix` | Auto-format (Black, Isort) and fix linting |
 | **Security Audit** | `make auto-security` | Run Bandit security scans |
 | **Clean** | `make clean` | Remove Python cache and temporary files |
 | **CLI Help** | `poetry run xcore --help` | Access the framework's CLI tools |
 
+---
+
 ## Development Conventions
 
 ### Coding Standards
-- **Formatting**: Strictly follow `black` and `isort`. Run `make lint-fix` before committing.
-- **Typing**: Use Python type hints extensively.
+- **Formatting**: Strictly follow `black`, `isort`, and `autopep8`. Run `make lint-fix` before committing.
+- **Typing**: Extensive use of Python type hints is mandatory.
 - **Naming**: Follow PEP 8 (snake_case for functions/variables, PascalCase for classes).
 
 ### Plugin Structure
-Plugins should reside in the `plugins/` directory (created during development).
+Plugins reside in the `plugins/` directory.
 ```text
 plugins/my_plugin/
-├── plugin.yaml      # Manifest (metadata & entry point)
+├── plugin.yaml      # Manifest (metadata, permissions, entry point)
 ├── src/
-│   └── main.py      # Entry point (inherits from BasePlugin or TrustedBase)
+│   └── main.py      # Plugin logic
 └── tests/           # Plugin-specific tests
 ```
 
 ### Configuration
-Configuration is managed via `xcore.yaml` and loaded through `xcore/configurations/loader.py`.
-- **App**: Environment, debug mode, secret keys.
-- **Plugins**: Directory path, execution mode settings.
-- **Services**: Database URLs, cache backend, scheduler settings.
-- **Observability**: Logging levels, metrics/tracing backends.
+Managed via `xcore.yaml` (or `integation.yaml`) and loaded via `xcore/configurations/loader.py`.
+- **Environment Overrides**: Supports `XCORE__SECTION__KEY` environment variables.
+- **Substitution**: Supports `${VAR}` in configuration files.
+- **Sections**: `app`, `plugins`, `services` (databases, cache, scheduler), `observability`, `security`, `marketplace`.
 
 ### Logging & Monitoring
-- Logs are written to `log/app.log` by default.
-- Use the numerous `make logs-*` targets (e.g., `make logs-live`, `make logs-error`, `make logs-stats`) for analysis.
-- **XCore Dashboard**: Access a real-time web dashboard at `/plugin/ipc/dashboard` (default prefix) to monitor plugins, event flows, live logs, and system health.
+- Logs are written to `log/app.log`.
+- Use `make logs-live` for real-time analysis.
+- Detailed log categories: `make logs-auth`, `make logs-db`, `make logs-plugins`, etc.
+
+---
 
 ## Key Directories
 - `xcore/kernel/`: Core logic (runtime, sandbox, events, permissions).
-- `xcore/services/`: Built-in service providers (DB, Cache, etc.).
-- `xcore/sdk/`: Tools and decorators for plugin developers.
+- `xcore/services/`: Built-in service providers (DB, Cache, Scheduler).
+- `xcore/sdk/`: Tools and base classes for plugin developers.
 - `xcore/cli/`: Command-line interface implementation.
 - `xcore/registry/`: Plugin discovery and versioning.
 - `tests/`: Integration and unit tests.
-- `doc/`: Project documentation (MkDocs/Sphinx).
+- `doc/` & `docs-tech/`: Comprehensive project documentation.
+- `docgen/`: Documentation generation pipeline.

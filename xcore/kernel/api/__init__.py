@@ -1,6 +1,10 @@
-from .auth import (AuthBackend, AuthPayload, get_auth_backend,
-                   has_auth_backend, register_auth_backend,
-                   unregister_auth_backend)
+from .auth import (
+    AuthBackend,
+    AuthPayload,
+    has_auth_backend,
+    register_auth_backend,
+    unregister_auth_backend,
+)
 from .context import PluginContext
 from .contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
 from .rbac import get_auth_backend, get_current_user, get_user_session_id
@@ -15,7 +19,6 @@ __all__ = [
     "PluginContext",
     "APIVersion",
     "check_compatibility",
-    "get_auth_backend",
     "get_current_user",
     "get_user_session_id",
     "AuthBackend",

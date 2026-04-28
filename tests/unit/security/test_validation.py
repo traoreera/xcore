@@ -8,8 +8,12 @@ from pathlib import Path
 import pytest
 
 from xcore.kernel.api.contract import ExecutionMode
-from xcore.kernel.security.validation import (ASTScanner, ManifestError,
-                                              ManifestValidator, ScanResult)
+from xcore.kernel.security.validation import (
+    ASTScanner,
+    ManifestError,
+    ManifestValidator,
+    ScanResult,
+)
 
 
 class TestManifestValidator:
@@ -36,7 +40,7 @@ execution_mode: trusted
 """
         (temp_plugin_dir / "plugin.yaml").write_text(manifest_content)
 
-        manifest = validator.load_and_validate(temp_plugin_dir)
+        manifest, _, _ = validator.load_and_validate(temp_plugin_dir)
 
         assert manifest.name == "test_plugin"
         assert manifest.version == "1.0.0"
@@ -52,7 +56,7 @@ execution_mode: trusted
         }"""
         (temp_plugin_dir / "plugin.json").write_text(manifest_content)
 
-        manifest = validator.load_and_validate(temp_plugin_dir)
+        manifest, _, _ = validator.load_and_validate(temp_plugin_dir)
 
         assert manifest.name == "json_plugin"
         assert manifest.version == "2.0.0"

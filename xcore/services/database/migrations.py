@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import create_async_engine  # type:ignore
+from sqlalchemy.ext.asyncio import create_async_engine  # type: ignore
 
 logger = logging.getLogger("xcore.services.database.migrations")
 
@@ -35,10 +35,9 @@ class MigrationRunner:
 
     def _get_config(self):
         try:
-            from alembic.config import Config  # type:ignore
+            from alembic.config import Config  # type: ignore
         except ImportError as e:
-            raise ImportError(
-                "alembic non installé — pip install alembic") from e
+            raise ImportError("alembic non installé — pip install alembic") from e
 
         cfg = Config()
         cfg.set_main_option("sqlalchemy.url", self.db_url)
@@ -69,7 +68,7 @@ class MigrationRunner:
             command.upgrade(self._get_config(), revision)
 
     async def downgrade(self, revision: str = "-1") -> None:
-        from alembic import command  # type:ignore
+        from alembic import command  # type: ignore
 
         if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
             engine = create_async_engine(self.db_url)
@@ -89,7 +88,7 @@ class MigrationRunner:
         command.downgrade(self._get_config(), revision)
 
     async def revison(self, **kwargs):
-        from alembic import command  # type:ignore
+        from alembic import command  # type: ignore
 
         if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
             engine = create_async_engine(self.db_url)
@@ -108,7 +107,7 @@ class MigrationRunner:
         command.revision(config=self._get_config(), **kwargs)
 
     async def status(self, **kwargs):
-        from alembic import command  # type:ignore
+        from alembic import command  # type: ignore
 
         if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
             engine = create_async_engine(self.db_url)

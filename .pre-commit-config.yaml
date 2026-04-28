@@ -5,17 +5,34 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args: ["--unsafe"]
       - id: check-added-large-files
 
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  - repo: local
     hooks:
-      - id: black
+      - id: autoflake
+        name: autoflake
+        entry: poetry run autoflake
+        language: system
+        types: [python]
+        args: ["--in-place", "--recursive", "--remove-unused-variables", "--ignore-init-module-imports"]
+
+      - id: autopep8
+        name: autopep8
+        entry: poetry run autopep8
+        language: system
+        types: [python]
+        args: ["--in-place", "--recursive"]
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.1
@@ -28,3 +45,12 @@ repos:
     hooks:
       - id: bandit
         args: ["-r", "xcore"]
+
+  - repo: local
+    hooks:
+      - id: make-test
+        name: Run project tests
+        entry: poetry run make test
+        language: system
+        always_run: true
+        pass_filenames: false

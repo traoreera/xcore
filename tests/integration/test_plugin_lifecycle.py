@@ -19,7 +19,8 @@ class TestPluginLifecycle:
         with tempfile.TemporaryDirectory() as tmp:
             # Create minimal config
             config_path = Path(tmp) / "test.yaml"
-            config_path.write_text("""
+            config_path.write_text(
+                """
 app:
   name: test-app
   secret_key: test-secret-key-for-testing-min32chars
@@ -34,7 +35,8 @@ services:
   cache:
     backend: memory
     ttl: 300
-""")
+"""
+            )
 
             app = Xcore(config_path=str(config_path))
             await app.boot()
@@ -83,7 +85,8 @@ services:
         status = xcore_app.plugins.status()
 
         assert "plugins" in status
-        assert status["count"] == 0
+        # xcore itself is registered as a handler
+        assert status["count"] == 1
 
     @pytest.mark.asyncio
     async def test_health_check(self, xcore_app):

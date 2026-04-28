@@ -35,8 +35,9 @@ REPORT_DIR ?= $(CURDIR)/reports
 STRICT ?= 0
 AUTOMATE_CMD ?= all
 
-auto-env: ## Afficher l'environnement Python détecté pour l'automatisation
+autobuild-ast: ## Afficher l'environnement Python détecté pour l'automatisation
 	@echo "[INFO] Mode automation: poetry run"
+	cd xcore/kernel/security/ && poetry run python setup.py build_ext --inplace
 
 auto-setup: ## Installer les dépendances (poetry --with dev,docs)
 	@echo "[INFO] Installation dépendances (dev + docs)"
@@ -989,6 +990,10 @@ test: ## Exécution des tests
 		echo "⚠️  Dossier tests/ non trouvé"; \
 		echo "💡 Créez des tests pour améliorer la qualité"; \
 		fi
+
+benchmark: ## Exécuter les tests de benchmark avec pytest-benchmark
+	@echo "⏱️  Exécution des benchmarks..."
+	@poetry run pytest tests/benchmarks/test_kernel_benchmarks.py --benchmark-only --benchmark-group-by=group --benchmark-warmup=on
 
 security-check: ## Vérification de sécurité basique
 	@echo "🔒 Vérification de sécurité..."

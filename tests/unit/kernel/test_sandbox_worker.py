@@ -11,10 +11,13 @@ from unittest.mock import patch
 import pytest
 
 # Test the components we can import
-from xcore.kernel.sandbox.worker import (FilesystemGuard,
-                                         _apply_resource_limits,
-                                         _load_manifest, _PluginImportHook,
-                                         _PluginManifest)
+from xcore.kernel.sandbox.worker import (
+    FilesystemGuard,
+    _apply_resource_limits,
+    _load_manifest,
+    _PluginImportHook,
+    _PluginManifest,
+)
 
 
 class TestPluginManifest:
@@ -44,13 +47,19 @@ class TestApplyResourceLimits:
 
     def test_no_limit_set(self):
         """Test when no memory limit is set."""
-        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "0", "_SANDBOX_MAX_CPU_SEC": "0"}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"_SANDBOX_MAX_MEM_MB": "0", "_SANDBOX_MAX_CPU_SEC": "0"},
+            clear=True,
+        ):
             # Should not raise
             _apply_resource_limits()
 
     def test_limit_on_windows(self):
         """Test resource limits on Windows (should skip)."""
-        with patch.dict(os.environ, {"_SANDBOX_MAX_MEM_MB": "100", "_SANDBOX_MAX_CPU_SEC": "10"}):
+        with patch.dict(
+            os.environ, {"_SANDBOX_MAX_MEM_MB": "100", "_SANDBOX_MAX_CPU_SEC": "10"}
+        ):
             with patch.object(sys, "platform", "win32"):
                 # Should not raise (Windows is skipped)
                 _apply_resource_limits()
@@ -289,8 +298,7 @@ class TestFilesystemGuardEdgeCases:
 
     def test_empty_allowed_paths(self, tmp_path):
         """Test guard with empty allowed paths."""
-        guard = FilesystemGuard(plugin_dir=tmp_path,
-                                allowed_paths=[], denied_paths=[])
+        guard = FilesystemGuard(plugin_dir=tmp_path, allowed_paths=[], denied_paths=[])
         # With no allowed paths, everything should be denied (fail-closed)
         assert guard.is_allowed(tmp_path / "any/file.txt") is False
 

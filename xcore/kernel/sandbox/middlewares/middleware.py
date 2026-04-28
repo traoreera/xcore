@@ -38,8 +38,7 @@ class MiddlewarePipeline:
         self._middlewares = list(middlewares)
         self._final_handler = final_handler
         # Compilation de la chaîne au démarrage pour minimiser l'overhead.
-        self._compiled_chain = self._compile_pipeline(
-            middlewares, final_handler)
+        self._compiled_chain = self._compile_pipeline(middlewares, final_handler)
 
     def _compile_pipeline(
         self, middlewares: List[Middleware], final_handler: Callable

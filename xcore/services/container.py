@@ -212,7 +212,7 @@ class ServiceContainer:
             return self._raw[name]
 
         # Recherche dans les providers (Lazy loading)
-        for provider_name, provider in self._lazy_providers.items():
+        for _, provider in self._lazy_providers.items():
             if hasattr(provider, "provide"):
                 svc = provider.provide(name)
                 if svc is not None:

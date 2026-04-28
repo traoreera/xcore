@@ -51,10 +51,11 @@ redis = {extras = ["hiredis"], version = "^7.0.0"}
 pyyaml = "^6.0.3"
 pybind11 = "^3.0.3"
 setuptools = "^82.0.1"
+pytest-cov = "^7.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
-pre-commit = "^4.3.0"
+pre-commit = "^4.6.0"
 isort = "^8.0.1"
 black = "^26.3.1"
 flake8 = "^7.3.0"
@@ -62,6 +63,7 @@ autoflake = "^2.3.1"
 autopep8 = "^2.3.2"
 pytest = "^8.4.2"
 pytest-asyncio = "^1.2.0"
+
 httpx = "^0.28.1"
 faker = "^37.8.0"
 pytest-cov = "^7.0.0"
@@ -86,13 +88,15 @@ dev = [
     "isort (>=8.0.1,<9.0.0)",
     "flake8 (>=7.3.0,<8.0.0)",
     "black (>=26.3.1,<27.0.0)",
+    "pytest-benchmark (>=5.2.3,<6.0.0)",
+    "tabulate (>=0.10.0,<0.11.0)",
 ]
 docs = [
     "mkdocs (==1.6.1)",
     "mkdocs-material (==9.7.3)",
     "mkdocs-minify-plugin (==0.8.0)",
     "mkdocstrings (==1.0.3)",
-    "mkdocstrings-python (>=2.0.3,<3.0.0)"
+    "mkdocstrings-python (>=2.0.3,<3.0.0)",
 ]
 [tool.flake8]
 max-line-length = 88

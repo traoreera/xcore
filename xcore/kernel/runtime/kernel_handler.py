@@ -102,5 +102,5 @@ class KernelHandler:
 # Enregistrement déclaratif (évite les répétitions de string)
 KernelHandler._ACTIONS = {
     "plugin.list": KernelHandler._plugins_list,
-    "xflow.integration": KernelHandler._xfow_integration
+    "xflow.integration": KernelHandler._xfow_integration,
 }

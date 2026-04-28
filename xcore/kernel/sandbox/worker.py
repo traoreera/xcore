@@ -187,8 +187,7 @@ class FilesystemGuard:
                 )
             finally:
                 guard._in_guard = was
-            raise PermissionError(
-                f"[sandbox] {label} interdit dans le sandbox")
+            raise PermissionError(f"[sandbox] {label} interdit dans le sandbox")
 
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
@@ -265,8 +264,7 @@ class FilesystemGuard:
             "is_dir",
         ]:
             if hasattr(_Path, op):
-                setattr(_Path, op, _guarded_op(
-                    getattr(_Path, op), f"Path.{op}"))
+                setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
 
         # ── Couche 2 : Exécution dynamique ────────────────────────────────────
 
@@ -365,8 +363,7 @@ class FilesystemGuard:
         def _guarded_spec_from_file(name, location=None, *args, **kwargs):
             if guard._in_guard:
                 return _real_spec_from_file(name, location, *args, **kwargs)
-            _block(
-                f"importlib.util.spec_from_file_location('{name}', '{location}')")
+            _block(f"importlib.util.spec_from_file_location('{name}', '{location}')")
 
         def _guarded_find_spec(name, *args, **kwargs):
             if guard._in_guard:
@@ -406,8 +403,7 @@ class FilesystemGuard:
             with contextlib.suppress(AttributeError):
                 _ctypes.pythonapi = _blocked_ctypes_api("pythonapi")
             with contextlib.suppress(AttributeError):
-                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api(
-                    "cdll.LoadLibrary")
+                _ctypes.cdll.LoadLibrary = _blocked_ctypes_api("cdll.LoadLibrary")
 
     def uninstall(self) -> None:
         """Restaure les builtins originaux (utile pour les tests)."""
@@ -438,7 +434,7 @@ class _PluginImportHook:
     def find_spec(self, fullname: str, path, target=None):
         if not self._owns(fullname):
             return None
-        relative = fullname[len(self._pkg_prefix) + 1:]
+        relative = fullname[len(self._pkg_prefix) + 1 :]
         return self._spec_for(fullname, relative)
 
     def _owns(self, fullname: str) -> bool:
@@ -479,7 +475,7 @@ class _PluginImportHook:
         if fullname in sys.modules:
             return sys.modules[fullname]
         relative = (
-            fullname[len(self._pkg_prefix) + 1:]
+            fullname[len(self._pkg_prefix) + 1 :]
             if fullname != self._pkg_prefix
             else ""
         )
@@ -506,8 +502,7 @@ class _PluginImportHook:
             root.__path__ = [str(self._src_dir)]
             root.__package__ = self._pkg_prefix
             sys.modules[self._pkg_prefix] = root
-        logger.debug(
-            f"[{self._uid}] Import hook installé (src={self._src_dir})")
+        logger.debug(f"[{self._uid}] Import hook installé (src={self._src_dir})")
 
     def uninstall(self) -> None:
         if self in sys.meta_path:
@@ -595,8 +590,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         except Exception as e:
             logger.warning(f"Impossible de lire le manifeste ({fname}) : {e}")
 
-    logger.warning(
-        f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
+    logger.warning(f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
     return manifest
 
 
@@ -650,8 +644,7 @@ async def _run(plugin_dir: Path) -> None:
     # 2. Installation du guard filesystem.
     # install() gère _in_guard=True pendant sa propre exécution via _install_impl(),
     # puis repasse à False — le guard est actif pour le code plugin dès la sortie.
-    guard = FilesystemGuard(
-        plugin_dir, manifest.allowed_paths, manifest.denied_paths)
+    guard = FilesystemGuard(plugin_dir, manifest.allowed_paths, manifest.denied_paths)
     guard.install()
 
     # 3. Chargement du plugin.
@@ -732,8 +725,7 @@ async def _run(plugin_dir: Path) -> None:
             }
         except Exception as e:
             logger.exception(f"Erreur handle({action})")
-            response = {"status": "error", "msg": str(
-                e), "code": "handler_error"}
+            response = {"status": "error", "msg": str(e), "code": "handler_error"}
 
         _send(transport, response)
 
@@ -755,8 +747,7 @@ async def _run(plugin_dir: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps(
-            {"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
+        print(json.dumps({"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
         sys.exit(1)
 
     _apply_resource_limits()

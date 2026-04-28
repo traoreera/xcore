@@ -8,13 +8,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
@@ -107,8 +106,7 @@ class SandboxProcessManager:
 
         self._ctx._events.emit_sync(
             f"plugin.{self.manifest.name}.services_registered",
-            data={"plugin": self.manifest.name,
-                  "is_reload": False, "services": []},
+            data={"plugin": self.manifest.name, "is_reload": False, "services": []},
         )
 
     async def _spawn(self) -> None:
@@ -159,8 +157,7 @@ class SandboxProcessManager:
                 raise RuntimeError(f"Ping échoué : {resp.data}")
         except asyncio.TimeoutError as e:
             await self._kill()
-            raise RuntimeError(
-                f"Pas de réponse au ping dans {timeout}s") from e
+            raise RuntimeError(f"Pas de réponse au ping dans {timeout}s") from e
 
     async def call(self, action: str, payload: dict) -> dict:
         if not self.is_available:
@@ -183,8 +180,7 @@ class SandboxProcessManager:
         code = await self._process.wait()
         if self._state == ProcessState.STOPPED:
             return
-        logger.warning(
-            f"[{self.manifest.name}] Subprocess terminé (code={code})")
+        logger.warning(f"[{self.manifest.name}] Subprocess terminé (code={code})")
         if self._process.stderr:
             with contextlib.suppress(Exception):
                 err = await asyncio.wait_for(
@@ -228,8 +224,7 @@ class SandboxProcessManager:
 
         while self._restarts < self.config.max_restarts:
             self._restarts += 1
-            delay = min(self.config.restart_delay *
-                        (2 ** (self._restarts - 1)), 60.0)
+            delay = min(self.config.restart_delay * (2 ** (self._restarts - 1)), 60.0)
             logger.info(
                 f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts} dans {delay:.1f}s"
             )

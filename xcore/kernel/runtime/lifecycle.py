@@ -38,8 +38,7 @@ class LifecycleManager:
     Manages the complete lifecycle of a Trusted plugin in memory.
     """
 
-    PROTECTED_SERVICES = {"db", "cache",
-                          "scheduler", "events", "hooks", "database"}
+    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
 
     def __init__(
         self,
@@ -85,8 +84,7 @@ class LifecycleManager:
         return None if self._loaded_at is None else time.monotonic() - self._loaded_at
 
     def _on_state_change(self, old: PluginState, new: PluginState) -> None:
-        logger.debug(
-            f"[{self.manifest.name}] état : {old.value} → {new.value}")
+        logger.debug(f"[{self.manifest.name}] état : {old.value} → {new.value}")
         if self._events:
             self._events.emit_sync(
                 f"plugin.{self.manifest.name}.state_changed",
@@ -118,8 +116,7 @@ class LifecycleManager:
             )
         except Exception as e:
             self._sm.transition("error")
-            raise LoadError(
-                f"[{self.manifest.name}] Échec chargement : {e}") from e
+            raise LoadError(f"[{self.manifest.name}] Échec chargement : {e}") from e
 
     async def _do_load(self) -> None:
         entry = self.manifest.plugin_dir / self.manifest.entry_point
@@ -187,8 +184,7 @@ class LifecycleManager:
                     else:
                         hook()
                 except Exception as e:
-                    logger.error(
-                        f"[{self.manifest.name}] Erreur hook {name} : {e}")
+                    logger.error(f"[{self.manifest.name}] Erreur hook {name} : {e}")
                     raise
 
     def _instantiate(self, cls) -> BasePlugin:
@@ -245,8 +241,7 @@ class LifecycleManager:
             raise
 
         return (
-            result if isinstance(result, dict) else {
-                "status": "ok", "result": result}
+            result if isinstance(result, dict) else {"status": "ok", "result": result}
         )
 
     # ── Reload ────────────────────────────────────────────────
@@ -264,8 +259,7 @@ class LifecycleManager:
             logger.info(f"[{self.manifest.name}] reloaded")
         except Exception as e:
             self._sm.transition("error")
-            raise LoadError(
-                f"[{self.manifest.name}] failed reload : {e}") from e
+            raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
 
     # ── Unload ────────────────────────────────────────────────
 
@@ -336,8 +330,7 @@ class LifecycleManager:
                     f"({len(self.plugin_middlewares)} middleware(s))"
                 )
         except Exception as e:
-            logger.error(
-                f"[{self.manifest.name}] get_middlewares() erreur : {e}")
+            logger.error(f"[{self.manifest.name}] get_middlewares() erreur : {e}")
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
@@ -389,8 +382,7 @@ class LifecycleManager:
         else:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger
-            protected = {"db", "cache", "scheduler",
-                         "events", "hooks", "database"}
+            protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
             collisions = set(instance_services.keys()) & protected
             if collisions:
                 raise PermissionError(
@@ -417,8 +409,7 @@ class LifecycleManager:
                 f"{sorted(instance_services.keys())}"
             )
         else:
-            new_keys = set(instance_services.keys()) - \
-                set(self._services.keys())
+            new_keys = set(instance_services.keys()) - set(self._services.keys())
             for k in new_keys:
                 self._services[k] = instance_services[k]
             if new_keys:

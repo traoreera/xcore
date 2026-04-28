@@ -18,14 +18,24 @@ Quickstart:
 """
 
 from .__version__ import __version__
-from .kernel.api import (AuthBackend, AuthPayload, get_auth_backend,
-                         get_current_user, register_auth_backend,
-                         unregister_auth_backend)
+from .kernel.api import (
+    AuthBackend,
+    AuthPayload,
+    get_auth_backend,
+    get_current_user,
+    register_auth_backend,
+    unregister_auth_backend,
+)
 from .kernel.api.contract import BasePlugin, TrustedBase
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
-from .kernel.observability import (HealthChecker, MetricsRegistry, Tracer,
-                                   configure_logging, get_logger)
+from .kernel.observability import (
+    HealthChecker,
+    MetricsRegistry,
+    Tracer,
+    configure_logging,
+    get_logger,
+)
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor

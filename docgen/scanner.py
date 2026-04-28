@@ -9,7 +9,7 @@ def load_config():
 
 
 def split_content(content, max_chars):
-    return [content[i: i + max_chars] for i in range(0, len(content), max_chars)]
+    return [content[i : i + max_chars] for i in range(0, len(content), max_chars)]
 
 
 def is_excluded(root, exclude_dirs):

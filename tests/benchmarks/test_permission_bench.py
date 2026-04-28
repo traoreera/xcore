@@ -40,8 +40,7 @@ class PermissionEngine:
 
     def load_from_manifest(self, plugin_name, raw_permissions):
         policies = [
-            Policy(p["resource"], p["actions"],
-                   PolicyEffect(p.get("effect", "allow")))
+            Policy(p["resource"], p["actions"], PolicyEffect(p.get("effect", "allow")))
             for p in raw_permissions
         ]
         self._policies[plugin_name] = PolicySet(plugin_name, policies)
@@ -98,8 +97,7 @@ def benchmark_permissions():
     permissions = [
         {"resource": "db.users.*", "actions": ["read"], "effect": "allow"},
         {"resource": "db.admin.*", "actions": ["*"], "effect": "deny"},
-        {"resource": "cache.*",
-            "actions": ["read", "write"], "effect": "allow"},
+        {"resource": "cache.*", "actions": ["read", "write"], "effect": "allow"},
         {"resource": "fs.tmp.*", "actions": ["write"], "effect": "allow"},
         {"resource": "api.v1.*", "actions": ["call"], "effect": "allow"},
     ]
@@ -124,8 +122,7 @@ def benchmark_permissions():
     t1 = timeit.Timer(lambda: run_benchmark(engine)).timeit(number=iterations)
     print(f"Original - Time for {iterations} iterations: {t1:.4f}s")
 
-    t2 = timeit.Timer(lambda: run_benchmark(
-        engine_opt)).timeit(number=iterations)
+    t2 = timeit.Timer(lambda: run_benchmark(engine_opt)).timeit(number=iterations)
     print(f"Optimized (Cached) - Time for {iterations} iterations: {t2:.4f}s")
 
     improvement = (t1 - t2) / t1 * 100

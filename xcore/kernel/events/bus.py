@@ -14,7 +14,7 @@ import fnmatch
 import inspect
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Callable, Optional, Pattern
+from typing import TYPE_CHECKING, Any, Callable, Pattern
 
 from .section import Event, _HandlerEntry
 

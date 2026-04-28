@@ -6,14 +6,20 @@ Import recommandé dans un plugin :
     from xcore.sdk import PluginManifest
 """
 
-from ..kernel.api.contract import (BasePlugin, ExecutionMode, TrustedBase,
-                                   error, ok)
+from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
 from ..kernel.api.rbac import RBACChecker, require_permission, require_role
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
-from .decorators import (AutoDispatchMixin, RoutedPlugin, action,
-                         require_service, route, sandboxed, trusted,
-                         validate_payload)
+from .decorators import (
+    AutoDispatchMixin,
+    RoutedPlugin,
+    action,
+    require_service,
+    route,
+    sandboxed,
+    trusted,
+    validate_payload,
+)
 from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
 from .routers import RouterRegistry
 

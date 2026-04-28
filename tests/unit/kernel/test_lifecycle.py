@@ -100,6 +100,7 @@ def shared_services():
 def lifecycle_manager(mock_manifest, shared_services):
     """Create a LifecycleManager instance."""
     from xcore.kernel.context import KernelContext
+
     ctx = KernelContext(
         config=MagicMock(),
         services=MagicMock(),
@@ -154,11 +155,13 @@ class TestLifecycleManager:
         """Test load raises error when plugin doesn't implement BasePlugin."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 class Plugin:
     def __init__(self):
         pass
-""")
+"""
+        )
 
         with pytest.raises(LoadError) as exc_info:
             await lifecycle_manager.load()
@@ -170,7 +173,8 @@ class Plugin:
         """Test successful plugin load."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
@@ -179,7 +183,8 @@ class Plugin(BasePlugin):
 
     async def on_load(self):
         self.loaded = True
-""")
+"""
+        )
 
         await lifecycle_manager.load()
 
@@ -193,7 +198,8 @@ class Plugin(BasePlugin):
         """Test that on_load hook is called."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
@@ -205,7 +211,8 @@ class Plugin(BasePlugin):
 
     async def on_load(self):
         self.on_load_called = True
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         assert lifecycle_manager._instance.on_load_called is True
@@ -215,13 +222,15 @@ class Plugin(BasePlugin):
         """Test calling an action on the plugin."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
     async def handle(self, action, payload):
         return {"status": "ok", "action": action}
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         result = await lifecycle_manager.call("test_action", {"key": "value"})
@@ -242,7 +251,8 @@ class Plugin(BasePlugin):
         """Test call handles timeout."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 import asyncio
 from xcore.kernel.api.contract import BasePlugin
 
@@ -250,7 +260,8 @@ class Plugin(BasePlugin):
     async def handle(self, action, payload):
         await asyncio.sleep(10)  # Longer than timeout
         return {"status": "ok"}
-""")
+"""
+        )
 
         lifecycle_manager.manifest.resources.timeout_seconds = 0.1
         await lifecycle_manager.load()
@@ -264,7 +275,8 @@ class Plugin(BasePlugin):
         """Test that multiple calls can be made concurrently."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 import asyncio
 from xcore.kernel.api.contract import BasePlugin
 
@@ -272,14 +284,14 @@ class Plugin(BasePlugin):
     async def handle(self, action, payload):
         await asyncio.sleep(0.1)
         return {"status": "ok", "action": action}
-""")
+"""
+        )
 
         lifecycle_manager.manifest.resources.timeout_seconds = 1
         await lifecycle_manager.load()
 
         results = await asyncio.gather(
-            lifecycle_manager.call(
-                "ping1", {}), lifecycle_manager.call("ping2", {})
+            lifecycle_manager.call("ping1", {}), lifecycle_manager.call("ping2", {})
         )
 
         assert len(results) == 2
@@ -291,7 +303,8 @@ class Plugin(BasePlugin):
         """Test plugin reload."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
@@ -300,7 +313,8 @@ class Plugin(BasePlugin):
 
     async def on_reload(self):
         self.reloaded = True
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         first_instance = lifecycle_manager._instance
@@ -315,7 +329,8 @@ class Plugin(BasePlugin):
         """Test plugin unload."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
@@ -324,7 +339,8 @@ class Plugin(BasePlugin):
 
     async def on_unload(self):
         self.unloaded = True
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         await lifecycle_manager.unload()
@@ -337,7 +353,8 @@ class Plugin(BasePlugin):
         """Test router collection."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 from unittest.mock import MagicMock
 
@@ -349,7 +366,8 @@ class Plugin(BasePlugin):
         router = MagicMock()
         router.routes = [1, 2, 3]
         return router
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         assert lifecycle_manager.plugin_router is not None
@@ -369,13 +387,15 @@ class Plugin(BasePlugin):
         """Test status when plugin is loaded."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
     async def handle(self, action, payload):
         return {"status": "ok"}
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         status = lifecycle_manager.status()
@@ -400,7 +420,7 @@ from xcore.kernel.api.contract import BasePlugin
 class Plugin(BasePlugin):
     def __init__(self):
         super().__init__()
-    
+
     async def on_load(self,):
         self._services = {"new_service": "value"}
     async def handle(self, action, payload):
@@ -466,15 +486,13 @@ class Plugin(BasePlugin):
         test_file = tmp_path / "test_module.py"
         test_file.write_text("test_var = 'hello'")
 
-        module = lifecycle_manager._import_module(
-            "test_module_import", test_file)
+        module = lifecycle_manager._import_module("test_module_import", test_file)
         assert module.test_var == "hello"
 
     def test_on_state_change(self, lifecycle_manager):
         """Test state change callback."""
         lifecycle_manager._events = MagicMock()
-        lifecycle_manager._on_state_change(
-            PluginState.UNLOADED, PluginState.LOADING)
+        lifecycle_manager._on_state_change(PluginState.UNLOADED, PluginState.LOADING)
 
         lifecycle_manager._events.emit_sync.assert_called_once()
         call_args = lifecycle_manager._events.emit_sync.call_args
@@ -489,13 +507,15 @@ class TestLifecycleManagerEdgeCases:
         """Test call handles non-dict result."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
     async def handle(self, action, payload):
         return "string_result"  # Not a dict
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         result = await lifecycle_manager.call("action", {})
@@ -528,13 +548,15 @@ class Plugin(BasePlugin):
         """Test unload cleans sys.modules."""
         src_dir = tmp_path / "src"
         src_dir.mkdir()
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.kernel.api.contract import BasePlugin
 
 class Plugin(BasePlugin):
     async def handle(self, action, payload):
         return {"status": "ok"}
-""")
+"""
+        )
 
         await lifecycle_manager.load()
         module_name = f"xcore_plugin_{lifecycle_manager.manifest.name}"

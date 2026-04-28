@@ -95,10 +95,11 @@ class PluginRegistry:
             f"[registry] service '{service_name}' enregistré par '{plugin_name}' (scope: {scope})"
         )
 
-    def register_core_service(self, name: str, obj: Any, metadata: dict | None = None) -> None:
+    def register_core_service(
+        self, name: str, obj: Any, metadata: dict | None = None
+    ) -> None:
         """Enregistre un service noyau (protégé par défaut)."""
-        self.register_service("kernel", name, obj,
-                              metadata=metadata, scope="protected")
+        self.register_service("kernel", name, obj, metadata=metadata, scope="protected")
 
     def get_service(self, service_name: str, requester: str | None = None) -> Any:
         """
