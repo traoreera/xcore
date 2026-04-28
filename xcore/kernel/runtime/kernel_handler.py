@@ -28,7 +28,8 @@ class KernelHandler:
 
     def __init__(self, ctx: "KernelContext", supervisor: "PluginSupervisor") -> None:
         self._ctx = ctx
-        self._supervisor = supervisor  # ref circulaire volontaire (weak si besoin)
+        # ref circulaire volontaire (weak si besoin)
+        self._supervisor = supervisor
 
     @property
     def is_available(self) -> bool:
@@ -101,5 +102,5 @@ class KernelHandler:
 # Enregistrement déclaratif (évite les répétitions de string)
 KernelHandler._ACTIONS = {
     "plugin.list": KernelHandler._plugins_list,
-    "xflow.integration": KernelHandler._xfow_integration
+    "xflow.integration": KernelHandler._xfow_integration,
 }

@@ -138,7 +138,7 @@ class VersionConstraint:
         for part in parts:
             for op in (">=", "<=", ">", "<", "==", "!=", "^", "~"):
                 if part.startswith(op):
-                    version_str = part[len(op):].strip()
+                    version_str = part[len(op) :].strip()
                     version = self._to_tuple(version_str)
                     specs.append((op, version))
                     break

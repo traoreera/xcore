@@ -14,9 +14,13 @@ import fnmatch
 import inspect
 import logging
 import re
-from typing import Any, Callable, Pattern
+from typing import TYPE_CHECKING, Any, Callable, Pattern
 
 from .section import Event, _HandlerEntry
+
+if TYPE_CHECKING:
+    from ...services.cache import CacheService
+
 
 logger = logging.getLogger("xcore.events.bus")
 
@@ -40,7 +44,7 @@ class EventBus:
     ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cache: "CacheService" = None) -> None:
         self._handlers: dict[str, list[_HandlerEntry]] = {}
         self._wildcard_patterns: dict[str, Pattern] = {}
 
@@ -78,9 +82,13 @@ class EventBus:
             self._handlers[event_name] = []
 
         # If it's a wildcard, pre-compile and store it
-        if any(c in event_name for c in "*?[]") and event_name not in self._wildcard_patterns:
+        if (
+            any(c in event_name for c in "*?[]")
+            and event_name not in self._wildcard_patterns
+        ):
             self._wildcard_patterns[event_name] = re.compile(
-                fnmatch.translate(event_name))
+                fnmatch.translate(event_name)
+            )
 
         entry = _HandlerEntry(
             handler=handler,

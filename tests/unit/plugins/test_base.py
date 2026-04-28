@@ -5,8 +5,12 @@ Tests for plugin base classes and SDK.
 import pytest
 
 from xcore.kernel.api.contract import ExecutionMode
-from xcore.sdk.plugin_base import (PluginManifest, RateLimitConfig,
-                                   ResourceConfig, RuntimeConfig)
+from xcore.sdk.plugin_base import (
+    PluginManifest,
+    RateLimitConfig,
+    ResourceConfig,
+    RuntimeConfig,
+)
 
 
 class TestRateLimitConfig:

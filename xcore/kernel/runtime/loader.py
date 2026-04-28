@@ -96,8 +96,16 @@ class PluginLoader:
             if not d.is_dir() or d.name.startswith("_"):
                 continue
             try:
-                manifest = self._validator.load_and_validate(d)
-                manifests.append(manifest)
+                manifest, validate_version, frameversion = (
+                    self._validator.load_and_validate(d)
+                )
+                if validate_version:
+                    manifests.append(manifest)
+                else:
+                    logger.warning(
+                        f"version du framework incompatible: {manifest.name} version requise"
+                        f": {manifest.framework_version} version actuelle: {frameversion}"
+                    )
             except Exception as e:
                 logger.warning(f"[{d.name}] Manifeste invalide : {e}")
                 skipped.append(d.name)

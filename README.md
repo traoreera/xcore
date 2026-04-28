@@ -1,6 +1,6 @@
 # ⚡ XCore Framework
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/traoreera/xcore)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](https://github.com/traoreera/xcore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.118+-green.svg)](https://fastapi.tiangolo.com/)
@@ -18,10 +18,10 @@ flowchart TB
         X --> EB[Event Bus]
         X --> SC[Service Container]
     end
-    
+
     PS --> Trusted[Trusted Plugins]
     PS --> Sandbox[Sandboxed Plugins]
-    
+
     SC --> DB[(Database)]
     SC --> RD[(Redis)]
     SC --> SCH[Scheduler]
@@ -46,17 +46,18 @@ flowchart TB
 
 2. **Install dependencies**:
    ```bash
-   poetry install
+   make install
    ```
 
 3. **Run the development server**:
    ```bash
-   make run-dev
+   make dev
    ```
-### or use pip to install and use it
-    ```bash
-        uv add https://github.com/traoreera/xcore
-    ```
+
+### Quick Install (uv)
+```bash
+uv add https://github.com/traoreera/xcore
+```
 
 ---
 
@@ -88,11 +89,11 @@ from xcore import Xcore
 async def main():
     app = Xcore()
     await app.boot()
-    
+
     # Call a plugin action
     result = await app.plugins.call("users_plugin", "get_user", {"id": 1})
     print(result)
-    
+
     await app.shutdown()
 ```
 
@@ -108,28 +109,6 @@ plugins/my_plugin/
 ├── plugin.sig       # Security signature (for trusted plugins)
 └── src/
     └── main.py      # Core logic
-```
-
-### Example `plugin.yaml`
-```yaml
-name: my_plugin
-version: "2.0.0"
-author: Your Name
-description: "A sample plugin"
-execution_mode: trusted  # or "sandboxed"
-framework_version: ">=2.0"
-entry_point: src/main.py
-
-permissions:
-  - resource: "cache.*"
-    actions: ["read", "write"]
-    effect: allow
-
-resources:
-  timeout_seconds: 30
-  rate_limit:
-    calls: 100
-    period_seconds: 60
 ```
 
 ---
@@ -150,13 +129,24 @@ XCore comes with a powerful CLI for management and security.
 
 ---
 
+## 🧪 Quality & Performance
+
+XCore is built with reliability and speed in mind:
+- **Test Suite**: 370+ automated tests passing (Unit, Integration, Security).
+- **Security**: Built-in AST scanning for forbidden imports and attribute access.
+- **Benchmarks**: Integrated performance monitoring for core components.
+
+---
+
 ## 📜 Makefile Commands
 
 | Command | Description |
 | :--- | :--- |
 | `make init` | Initialize project (install + run) |
-| `make test` | Run the test suite |
-| `make lint-fix` | Auto-format code (Black, Isort) |
+| `make test` | Run the full test suite (executed automatically on pre-commit) |
+| `make benchmark` | Run performance benchmarks with pytest-benchmark |
+| `make lint-fix` | Auto-format code (Black, Isort, Autopep8) |
+| `make dev` | Run development server with auto-reload |
 | `make docker-dev` | Spin up development environment with Docker |
 | `make logs-live` | View real-time structured logs |
 
@@ -171,6 +161,3 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 <p align="center">
   Built with ❤️ by <b>Xcore team's</b>
 </p>
-
-
-<!-- Automated minor fix for issue #46 -->

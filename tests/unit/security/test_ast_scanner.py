@@ -8,11 +8,16 @@ from unittest.mock import patch
 
 import pytest
 
-from xcore.kernel.security.validation import (DEFAULT_ALLOWED,
-                                              DEFAULT_FORBIDDEN, ASTScanner,
-                                              ManifestError, ManifestValidator,
-                                              ScanResult, _resolve_env,
-                                              _SecurityVisitor)
+from xcore.kernel.security.validation import (
+    DEFAULT_ALLOWED,
+    DEFAULT_FORBIDDEN,
+    ASTScanner,
+    ManifestError,
+    ManifestValidator,
+    ScanResult,
+    _resolve_env,
+    _SecurityVisitor,
+)
 
 
 class TestScanResult:
@@ -49,8 +54,7 @@ class TestScanResult:
 
     def test_str_failed(self):
         """Test __str__ when failed."""
-        result = ScanResult(passed=False, errors=[
-                            "Error 1"], warnings=["Warning 1"])
+        result = ScanResult(passed=False, errors=["Error 1"], warnings=["Warning 1"])
         result_str = str(result)
         assert "❌" in result_str
         assert "Error 1" in result_str
@@ -372,16 +376,14 @@ description: Test description
     def test_inject_dotenv_missing_file(self, validator, tmp_path):
         """Test _inject_dotenv with missing file."""
         with pytest.raises(ManifestError) as exc_info:
-            validator._inject_dotenv(
-                {"inject": True, "env_file": ".env"}, tmp_path)
+            validator._inject_dotenv({"inject": True, "env_file": ".env"}, tmp_path)
 
         assert "introuvable" in str(exc_info.value)
 
     def test_inject_dotenv_path_traversal(self, validator, tmp_path):
         """Test _inject_dotenv blocks path traversal."""
         with pytest.raises(ManifestError) as exc_info:
-            validator._inject_dotenv(
-                {"inject": True, "env_file": "../.env"}, tmp_path)
+            validator._inject_dotenv({"inject": True, "env_file": "../.env"}, tmp_path)
 
         assert "traversal" in str(exc_info.value)
 

@@ -8,13 +8,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
@@ -88,7 +87,7 @@ class SandboxProcessManager:
             return
         self._state = ProcessState.STARTING
         await self._spawn()
-        # await self._ping_check()
+        await self._ping_check()
         self._state = ProcessState.RUNNING
         self._started_at = time.monotonic()
         self._restarts = 0

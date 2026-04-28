@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 
 from xcore.kernel.events.bus import EventBus

@@ -48,8 +48,7 @@ class CacheService(BaseService):
 
         if backend_type == "redis":
             if not self._config.url:
-                raise ValueError(
-                    "CacheConfig.url obligatoire pour le backend Redis")
+                raise ValueError("CacheConfig.url obligatoire pour le backend Redis")
             from .backends.redis import RedisCacheBackend
 
             self._backend = RedisCacheBackend(

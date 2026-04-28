@@ -23,6 +23,7 @@ def mock_config():
 @pytest.fixture
 def supervisor(mock_config):
     from xcore.kernel.context import KernelContext
+
     services = MagicMock()
     services.as_dict.return_value = {}
     ctx = KernelContext(

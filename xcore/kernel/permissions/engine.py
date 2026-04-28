@@ -51,13 +51,11 @@ class PermissionEngine:
         self._cache.clear()  # Invalidate cache on policy change
         if not raw_permissions:
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
-            logger.debug(
-                f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
+            logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
         else:
             ps = PolicySet.from_list(plugin_name, raw_permissions)
             self._policies[plugin_name] = ps
-            logger.debug(
-                f"[{plugin_name}] {len(ps.policies)} règle(s) chargée(s)")
+            logger.debug(f"[{plugin_name}] {len(ps.policies)} règle(s) chargée(s)")
 
     def grant_all(self, plugin_name: str) -> None:
         """Grant all permissions to a plugin."""

@@ -25,7 +25,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from typing import Any, Callable, Literal, Optional, Type
+from typing import Callable, Literal, Type
 
 from pydantic import BaseModel, ValidationError, create_model
 
@@ -124,6 +124,7 @@ def validate_payload(
         return wrapper
 
     return decorator
+
 
 def route(
     path: str,

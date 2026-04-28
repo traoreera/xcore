@@ -51,8 +51,7 @@ class MemoryBackend:
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         effective_ttl = ttl if ttl is not None else self._ttl
-        expires_at = (time.monotonic() +
-                      effective_ttl) if effective_ttl > 0 else None
+        expires_at = (time.monotonic() + effective_ttl) if effective_ttl > 0 else None
 
         if key in self._store:
             self._store.move_to_end(key)
@@ -95,8 +94,7 @@ class MemoryBackend:
     async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
         """Définit plusieurs clés d'un coup."""
         effective_ttl = ttl if ttl is not None else self._ttl
-        expires_at = (time.monotonic() +
-                      effective_ttl) if effective_ttl > 0 else None
+        expires_at = (time.monotonic() + effective_ttl) if effective_ttl > 0 else None
 
         for k, v in mapping.items():
             if k in self._store:

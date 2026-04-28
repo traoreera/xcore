@@ -61,8 +61,7 @@ def validate_full(
 
     # 3. Signature (Trusted seulement)
     if manifest.execution_mode == ExecutionMode.TRUSTED and secret_key:
-        from xcore.kernel.security.signature import (SignatureError,
-                                                     verify_plugin)
+        from xcore.kernel.security.signature import SignatureError, verify_plugin
 
         try:
             verify_plugin(manifest, secret_key)

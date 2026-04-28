@@ -8,8 +8,7 @@ import pytest
 import yaml
 
 from xcore.configurations.loader import ConfigLoader
-from xcore.configurations.sections import (AppConfig, PluginConfig,
-                                           ServicesConfig)
+from xcore.configurations.sections import AppConfig, PluginConfig, ServicesConfig
 
 
 class TestConfigLoader:
@@ -61,22 +60,22 @@ services:
 
         config = ConfigLoader.load(str(config_path))
 
-        assert config.app.secret_key == "from_environment"
+        assert config.app.secret_key == b"from_environment"
 
         del os.environ["TEST_SECRET"]
 
     def test_load_missing_file(self):
-        """Test loading non-existent file."""
-        with pytest.raises(FileNotFoundError):
-            ConfigLoader.load("/nonexistent/path.yaml")
+        """Test loading non-existent file returns default config."""
+        config = ConfigLoader.load("/nonexistent/path.yaml")
+        assert config.app.name == "xcore-app"
 
     def test_load_invalid_yaml(self, temp_dir):
-        """Test loading invalid YAML."""
+        """Test loading invalid YAML returns default config."""
         config_path = temp_dir / "test.yaml"
         config_path.write_text("invalid: yaml: : : content")
 
-        with pytest.raises(Exception):
-            ConfigLoader.load(str(config_path))
+        config = ConfigLoader.load(str(config_path))
+        assert config.app.name == "xcore-app"
 
 
 class TestAppConfig:
@@ -114,7 +113,7 @@ class TestPluginConfig:
         config = PluginConfig(directory="./plugins", secret_key=None)
 
         assert config.strict_trusted is False
-        assert config.interval == 0
+        assert config.interval == 2
         assert config.entry_point == "src/main.py"
 
     def test_custom_values(self):

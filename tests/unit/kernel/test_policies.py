@@ -66,8 +66,7 @@ class TestPolicy:
 
     def test_from_dict_basic(self):
         """Test from_dict with basic data."""
-        data = {"resource": "db.*",
-                "actions": ["read", "write"], "effect": "allow"}
+        data = {"resource": "db.*", "actions": ["read", "write"], "effect": "allow"}
         policy = Policy.from_dict(data)
         assert policy.resource == "db.*"
         assert policy.actions == ["read", "write"]
@@ -101,12 +100,9 @@ class TestPolicySet:
     def sample_policies(self):
         """Create sample policies."""
         return [
-            Policy(resource="db.*",
-                   actions=["read"], effect=PolicyEffect.ALLOW),
-            Policy(resource="db.*",
-                   actions=["write"], effect=PolicyEffect.DENY),
-            Policy(resource="cache.*",
-                   actions=["*"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.*", actions=["read"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.*", actions=["write"], effect=PolicyEffect.DENY),
+            Policy(resource="cache.*", actions=["*"], effect=PolicyEffect.ALLOW),
         ]
 
     def test_creation(self, sample_policies):
@@ -178,8 +174,7 @@ class TestPolicySet:
     def test_to_list(self):
         """Test to_list serialization."""
         policies = [
-            Policy(resource="db.*",
-                   actions=["read"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.*", actions=["read"], effect=PolicyEffect.ALLOW),
         ]
         ps = PolicySet(plugin_name="test", policies=policies)
         result = ps.to_list()
@@ -210,8 +205,7 @@ class TestPolicySetEdgeCases:
         """Test that policy order affects evaluation."""
         # More specific policy first
         policies_ordered = [
-            Policy(resource="db.users", actions=[
-                   "read"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.users", actions=["read"], effect=PolicyEffect.ALLOW),
             Policy(resource="db.*", actions=["*"], effect=PolicyEffect.DENY),
         ]
         ps = PolicySet(plugin_name="test", policies=policies_ordered)
@@ -221,8 +215,7 @@ class TestPolicySetEdgeCases:
     def test_partial_wildcard_match(self):
         """Test partial wildcard in resource."""
         policies = [
-            Policy(resource="db.*.read",
-                   actions=["*"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.*.read", actions=["*"], effect=PolicyEffect.ALLOW),
         ]
         ps = PolicySet(plugin_name="test", policies=policies)
         assert ps.allows("db.users.read", "anything") is True
@@ -231,8 +224,7 @@ class TestPolicySetEdgeCases:
     def test_complex_wildcard_pattern(self):
         """Test complex wildcard patterns."""
         policies = [
-            Policy(resource="db.user*.*",
-                   actions=["read"], effect=PolicyEffect.ALLOW),
+            Policy(resource="db.user*.*", actions=["read"], effect=PolicyEffect.ALLOW),
         ]
         ps = PolicySet(plugin_name="test", policies=policies)
         assert ps.allows("db.user1.profile", "read") is True

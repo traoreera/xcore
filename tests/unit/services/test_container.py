@@ -10,11 +10,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from xcore.services.base import BaseService, BaseServiceProvider, ServiceStatus
-from xcore.services.container import (CacheServiceProvider,
-                                      DatabaseServiceProvider,
-                                      ExtensionServiceProvider,
-                                      SchedulerServiceProvider,
-                                      ServiceContainer)
+from xcore.services.container import (
+    CacheServiceProvider,
+    DatabaseServiceProvider,
+    ExtensionServiceProvider,
+    SchedulerServiceProvider,
+    ServiceContainer,
+)
 
 
 # Mock service classes for testing
@@ -75,22 +77,10 @@ class TestServiceContainer:
     def test_default_providers_present(self):
         """Test default providers are present."""
         assert len(ServiceContainer.DEFAULT_PROVIDERS) == 4
-        assert any(
-            isinstance(p, DatabaseServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
-        )
-        assert any(
-            isinstance(p, CacheServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
-        )
-        assert any(
-            isinstance(p, SchedulerServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
-        )
-        assert any(
-            isinstance(p, ExtensionServiceProvider)
-            for p in ServiceContainer.DEFAULT_PROVIDERS
-        )
+        assert DatabaseServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
+        assert CacheServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
+        assert SchedulerServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
+        assert ExtensionServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
 
     def test_get_nonexistent_service(self, container):
         """Test getting nonexistent service raises KeyError."""
@@ -223,8 +213,7 @@ class TestServiceContainer:
     async def test_health_with_failing_service(self, container):
         """Test health check with failing service."""
         service = MockService()
-        service.health_check = AsyncMock(
-            return_value=(False, "Connection failed"))
+        service.health_check = AsyncMock(return_value=(False, "Connection failed"))
         container._services["test"] = service
 
         result = await container.health()
@@ -236,8 +225,7 @@ class TestServiceContainer:
     async def test_health_exception(self, container):
         """Test health check when service raises exception."""
         service = MockService()
-        service.health_check = AsyncMock(
-            side_effect=Exception("Health check failed"))
+        service.health_check = AsyncMock(side_effect=Exception("Health check failed"))
         container._services["test"] = service
 
         result = await container.health()

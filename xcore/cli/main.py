@@ -40,8 +40,7 @@ def main() -> None:
         prog="xcore",
         description="xcore v2 — gestion du framework plugin-first",
     )
-    parser.add_argument("--config", default=None,
-                        help="Chemin vers xcore.yaml")
+    parser.add_argument("--config", default=None, help="Chemin vers xcore.yaml")
     parser.add_argument("--version", action="store_true")
 
     subparsers = parser.add_subparsers(dest="command")
@@ -99,22 +98,19 @@ def main() -> None:
         default="marketplace",
         help="Source d'installation (défaut: marketplace)",
     )
-    install_p.add_argument("--url", default=None,
-                           help="URL directe (zip ou git)")
+    install_p.add_argument("--url", default=None, help="URL directe (zip ou git)")
 
     remove_p = plugin_sub.add_parser("remove", help="Supprime un plugin")
     remove_p.add_argument("name")
 
-    info_p = plugin_sub.add_parser(
-        "info", help="Affiche les métadonnées d'un plugin")
+    info_p = plugin_sub.add_parser("info", help="Affiche les métadonnées d'un plugin")
     info_p.add_argument("name")
 
     sign_p = plugin_sub.add_parser("sign", help="Signe un plugin Trusted")
     sign_p.add_argument("path")
     sign_p.add_argument("--key", default=None)
 
-    verify_p = plugin_sub.add_parser(
-        "verify", help="Vérifie la signature d'un plugin")
+    verify_p = plugin_sub.add_parser("verify", help="Vérifie la signature d'un plugin")
     verify_p.add_argument("path")
     verify_p.add_argument("--key", default=None)
 
@@ -124,12 +120,10 @@ def main() -> None:
     validate_p.add_argument("path")
 
     # ── sandbox ───────────────────────────────────────────────
-    sandbox_p = subparsers.add_parser(
-        "sandbox", help="Gestion du sandbox runtime")
+    sandbox_p = subparsers.add_parser("sandbox", help="Gestion du sandbox runtime")
     sandbox_sub = sandbox_p.add_subparsers(dest="subcommand")
 
-    sb_run = sandbox_sub.add_parser(
-        "run", help="Lance un plugin en mode sandbox isolé")
+    sb_run = sandbox_sub.add_parser("run", help="Lance un plugin en mode sandbox isolé")
     sb_run.add_argument("name", help="Nom du plugin")
 
     sb_limits = sandbox_sub.add_parser(
@@ -162,15 +156,13 @@ def main() -> None:
 
     mkt_rate = mkt_sub.add_parser("rate", help="Note un plugin")
     mkt_rate.add_argument("name")
-    mkt_rate.add_argument("--score", type=int,
-                          choices=range(1, 6), required=True)
+    mkt_rate.add_argument("--score", type=int, choices=range(1, 6), required=True)
 
     # ── services ──────────────────────────────────────────────
     svc_p = subparsers.add_parser("services", help="État des services")
     svc_sub = svc_p.add_subparsers(dest="subcommand")
     svc_status_p = svc_sub.add_parser("status")
-    svc_status_p.add_argument(
-        "--json", action="store_true", help="Output as JSON")
+    svc_status_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     health_p = subparsers.add_parser("health", help="Health check global")
     health_p.add_argument("--json", action="store_true", help="Output as JSON")

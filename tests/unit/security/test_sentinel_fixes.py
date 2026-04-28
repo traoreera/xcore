@@ -1,6 +1,3 @@
-import ast
-from pathlib import Path
-
 import pytest
 
 from xcore.kernel.security.validation import ASTScanner

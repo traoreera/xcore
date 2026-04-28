@@ -7,9 +7,16 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from xcore.sdk.decorators import (AutoDispatchMixin, RoutedPlugin, action,
-                                  require_service, route, sandboxed, trusted,
-                                  validate_payload)
+from xcore.sdk.decorators import (
+    AutoDispatchMixin,
+    RoutedPlugin,
+    action,
+    require_service,
+    route,
+    sandboxed,
+    trusted,
+    validate_payload,
+)
 
 
 class TestActionDecorator:
@@ -169,8 +176,7 @@ class TestRequireServiceDecorator:
         plugin = Plugin()
 
         assert hasattr(plugin.my_action, "_requires_services")
-        assert plugin.my_action._requires_services == [
-            "db", "cache", "scheduler"]
+        assert plugin.my_action._requires_services == ["db", "cache", "scheduler"]
 
 
 class TestValidatePayloadDecorator:
