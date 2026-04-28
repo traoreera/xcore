@@ -1,7 +1,7 @@
 # GEMINI.md - XCore Framework Context
 
 ## Project Overview
-**XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
+**XCore v2.1.2** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
 ### Core Architecture
 - **Xcore Kernel**: The central orchestrator managing the runtime, sandbox, and communication.
