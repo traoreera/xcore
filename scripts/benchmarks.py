@@ -274,25 +274,141 @@ def _make_xcore_config(plugins_dir: Path) -> str:
     cfg_file.write_text(
         textwrap.dedent(
             f"""
-        app:
-          name: xcore-bench
-          secret_key: bench-secret-key-minimum-32-chars!!
-          server_key: bench-server-key-minimum-32-chars!!
-          env: development
+            app:
+              name: my-app
+              env: development
+              debug: true
+              secret_key: "vjherbvjhe"
+              #dotenv: "./extensions/.env"
+              plugin_prefix: "/app"
+              server_key: "rhverujierf"
+              server_key_iterations: 100000
+              plugin_tags:
+                - "test"
 
-        plugins:
-          directory: {plugins_dir}
-          strict_trusted: false
-          interval: 0
+            # ── Plugins ───────────────────────────────────────────────────
+            plugins:
+              directory: {plugins_dir}
 
-        services:
-          databases: {{}}
-          cache:
-            backend: memory
-            ttl: 300
-            max_size: 100000
-          scheduler:
-            enabled: false
+              # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
+              secret_key: "12345"
+
+              # true = refuse tout plugin Trusted non signé
+              strict_trusted: false
+
+              # Intervalle du watcher de rechargement à chaud (secondes)
+              # Mettre à 0 pour désactiver en prod si tu gères les reloads via API
+              interval: 10
+
+              entry_point: src/main.py
+
+              # Fichiers/extensions exclus du snapshot de détection de changements
+              snapshot:
+                extensions: [".log", ".pyc", ".html", ".map", ".min.js"]
+                filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
+                hidden: true
+
+            # ── Services ──────────────────────────────────────────────────
+            services:
+              # ── Bases de données ────────────────────────────────────────
+              databases:
+                db:
+                  type: sqlasync
+                  url: sqlite+aiosqlite:///db.sqlite3
+                  echo: false
+                redis_db:
+                  type: redis
+                  url: redis://localhost:6379/0
+                  max_connections: 50
+
+              # ── Cache ────────────────────────────────────────────────────
+              cache:
+                backend: redisrhverujierf
+                url: redis://localhost:6379/0
+                ttl: 300 # TTL par défaut en secondes
+                max_size: 10000 # ignoré en mode redis, actif en mode memory
+
+              # ── Scheduler ────────────────────────────────────────────────
+              scheduler:
+                enabled: true
+                backend: redis # redis = tâches persistantes, survivent au redémarrage
+                timezone: Europe/Paris
+
+                # Jobs déclarés statiquement (optionnel)
+                #jobs:
+                #  # Nettoyage des sessions expirées chaque nuit à 2h
+                #  - id: cleanup_sessions
+                #    func: myapp.tasks.maintenance:cleanup_sessions
+                #    trigger: cron
+                #    hour: 2
+                #    minute: 0
+                #
+                #  # Snapshot des métriques toutes les 5 minutes
+                #  - id: metrics_snapshot
+                #    func: myapp.tasks.monitoring:snapshot_metrics
+                #    trigger: interval
+                #    minutes: 5
+
+              # ── Observabilité ─────────────────────────────────────────────
+
+            observability:
+              logging:
+                enabled: true
+                level: DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
+                format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+                file: log/app.log
+                max_bytes: 52428800 # 50 MB par fichier
+                backup_count: 10 # 10 fichiers de rotation = 500 MB max
+
+              metrics:
+                enabled: true
+                backend: prometheus # memory | prometheus | statsd
+                prefix: myapp # préfixe des métriques exposées sur /metrics
+
+              tracing:
+                enabled: false # true si tu utilises OpenTelemetry / Jaeger
+                backend: noop # noop | opentelemetry | jaeger
+                service_name: my-app
+                endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
+
+            # ── Sécurité ──────────────────────────────────────────────────
+            security:
+              # Imports Python autorisés dans les plugins Sandboxed (whitelist AST)
+              # Les plugins Trusted ne sont pas limités par cette liste
+              allowed_imports:
+                - argparse
+                - fastapi
+                - json
+                - re
+                - math
+                - random
+                - datetime
+                - time
+                - pathlib
+                - typing
+                - dataclasses
+                - enum
+                - functools
+                - itertools
+                - collections
+                - string
+                - hashlib
+                - base64
+                - asyncio
+                - logging
+                - uuid
+                - decimal
+                - copy
+
+              # Imports explicitement interdits (surcharge les allowed_imports)
+              forbidden_imports:
+                - os
+
+              # Rate limit appliqué par défaut à chaque plugin non configuré
+              rate_limit_default:
+                calls: 200
+                period_seconds: 60
+
     """
         ).strip()
     )
@@ -314,7 +430,6 @@ class PluginLifecycleBench:
         results = []
         tmp = Path(tempfile.mkdtemp(prefix="xcore_bench_"))
         try:
-            from xcore.kernel.context import KernelContext
             from xcore.kernel.runtime.lifecycle import LifecycleManager
             from xcore.kernel.security.validation import ManifestValidator
 
@@ -431,7 +546,6 @@ class PluginLifecycleBench:
         samples: list[float] = []
         errors = 0
         try:
-            from xcore.kernel.context import KernelContext
             from xcore.kernel.runtime.lifecycle import LifecycleManager
             from xcore.kernel.security.validation import ManifestValidator
 
@@ -1103,9 +1217,8 @@ async def run_suite(args) -> BenchReport:
         bench = PluginCallBench()
         for r in await bench.bench_sequential_calls(n_calls=args.calls):
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.3f}ms, {r.throughput_ops_sec:.0f} ops/s"
-            )
+            ops = r.throughput_ops_sec
+            print(f"  ✓ {r.name}: mean={r.mean_ms:.3f}ms, {ops:.0f} ops/s")
         for r in await bench.bench_concurrent_calls([10, 50, 100]):
             report.add(r)
             print(f"  ✓ {r.name}: {r.throughput_ops_sec:.0f} ops/s")
@@ -1119,9 +1232,8 @@ async def run_suite(args) -> BenchReport:
         bench = MiddlewareBench()
         for r in await bench.bench_pipeline_overhead(n=2000):
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {r.throughput_ops_sec:.0f} ops/s"
-            )
+            ops = r.throughput_ops_sec
+            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
 
     # ── 4. Events ─────────────────────────────────────────────
     if "events" in suites_to_run:
@@ -1129,9 +1241,8 @@ async def run_suite(args) -> BenchReport:
         bench = EventsBench()
         for r in await bench.bench_eventbus(n=2000):
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {r.throughput_ops_sec:.0f} ops/s"
-            )
+            ops = r.throughput_ops_sec
+            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
         for r in await bench.bench_hookmanager(n=1000):
             report.add(r)
             print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms")
@@ -1142,9 +1253,8 @@ async def run_suite(args) -> BenchReport:
         bench = PermissionsBench()
         for r in bench.bench_engine(n=30000):
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s"
-            )
+            ops = r.throughput_ops_sec
+            print(f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {ops:.0f} ops/s")
 
     # ── 6. Cache ──────────────────────────────────────────────
     if "cache" in suites_to_run:
@@ -1152,9 +1262,8 @@ async def run_suite(args) -> BenchReport:
         bench = CacheBench()
         for r in await bench.bench_memory_backend(n=3000):
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {r.throughput_ops_sec:.0f} ops/s"
-            )
+            ops = r.throughput_ops_sec
+            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
 
     # ── 7. Capacity ───────────────────────────────────────────
     if "capacity" in suites_to_run or args.capacity:
@@ -1262,7 +1371,7 @@ def print_report(report: BenchReport) -> None:
             if _HAS_PSUTIL:
                 avail_mb = psutil.virtual_memory().available / 1024**2
                 theoretical_max = int(avail_mb / avg_mb)
-                print(f"\n  Extrapolation:")
+                print("\n  Extrapolation:")
                 print(
                     f"    Average {avg_mb:.3f}MB/plugin — "
                     f"{avail_mb:.0f}MB available → "
@@ -1282,7 +1391,7 @@ def print_report(report: BenchReport) -> None:
         print(
             f"  • Plugin call latency (ping): {r.mean_ms:.3f}ms mean, "
             f"{r.p99_ms:.3f}ms P99 — "
-            f"{'✅ excellent' if r.mean_ms < 1 else '⚠ acceptable' if r.mean_ms < 5 else '❌ slow'}"
+            f"{'✅ excellent' if r.mean_ms < 1 else '⚠ ok' if r.mean_ms < 5 else '❌'}"
         )
 
     if (

@@ -1,111 +1,106 @@
-[tool.poetry]
+[project]
 name = "xcore"
 version = "2.1.2"
-description = "for base html core app"
-authors = ["Eliezer Traore <68350805+traoreera@users.noreply.github.com>"]
+description = "Plugin-first orchestration framework built on FastAPI"
+authors = [
+    { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
+]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.11,<4.0"
 
-[tool.poetry.dependencies]
+dependencies = [
+    # Web
+    "fastapi[standard]>=0.135.1,<1.0.0",
+    "uvicorn>=0.38.0,<1.0.0",
+    "user-agents>=2.2.0,<3.0.0",
 
-# environment
-python-dotenv = ">=1.1.0,<2.0.0"
+    # Data validation
+    "pydantic[email]>=2.11.7,<3.0.0",
+    "pydantic-settings>=2.12.0,<3.0.0",
 
-# database migration
-alembic = ">=1.16.1,<2.0.0"
+    # Database & ORM
+    "sqlalchemy>=2.0.41,<3.0.0",
+    "alembic>=1.16.1,<2.0.0",
+    "psycopg2>=2.9.11,<3.0.0",
+    "aiosqlite>=0.22.1,<1.0.0",
+    "mysql-connector-python>=9.4.0,<10.0.0",
 
-# tools
-apscheduler = ">=3.11.0,<4.0.0"
-rich = ">=14.0.0,<15.0.0"
-watchdog = ">=6.0.0,<7.0.0"
-markdown = ">=3.8.2,<4.0.0"
-pillow = ">=11.2.1,<13.0.0"
-psutil = ">=7.0.0,<8.0.0"
-toml = "^0.10.2"
-uvicorn = "^0.38.0"
+    # Cache
+    "redis[hiredis]>=7.0.0,<8.0.0",
+    "aiocache>=0.12.3,<1.0.0",
 
-# security
-python-jose = ">=3.4.0,<4.0.0"
+    # Scheduling
+    "apscheduler>=3.11.0,<4.0.0",
 
+    # Security
+    "python-jose>=3.4.0,<4.0.0",
 
-# python
-pip = "==26.0.1"
-python = ">=3.11,<4.0"
+    # Configuration & environment
+    "python-dotenv>=1.1.0,<2.0.0",
+    "pyyaml>=6.0.3,<7.0.0",
+    "toml>=0.10.2,<1.0.0",
 
-# http
-user-agents = "^2.2.0"
+    # Observability & utilities
+    "rich>=14.0.0,<15.0.0",
+    "psutil>=7.0.0,<8.0.0",
+    "watchdog>=6.0.0,<7.0.0",
+    "markdown>=3.8.2,<4.0.0",
+    "pillow>=11.2.1,<13.0.0",
+]
 
+[project.scripts]
+xcore = "xcore.cli.main:main"
 
-# data validation
-pydantic = { extras = ["email"], version = ">=2.11.7,<3.0.0" }
-pydantic-settings = "^2.12.0"
+# ── Build system ──────────────────────────────────────────────────────────────
 
-# database
-psycopg2 = "^2.9.11"
-aiosqlite = "^0.22.1"
-mysql-connector-python = "^9.4.0"
-sqlalchemy = ">=2.0.41,<3.0.0"
-fastapi = {extras = ["standard"], version = "^0.135.1"}
-aiocache = "^0.12.3"
-redis = {extras = ["hiredis"], version = "^7.0.0"}
-pyyaml = "^6.0.3"
-pybind11 = "^3.0.3"
-setuptools = "^82.0.1"
-pytest-cov = "^7.1.0"
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
+# ── Development dependencies ──────────────────────────────────────────────────
 
 [tool.poetry.group.dev.dependencies]
-pre-commit = "^4.6.0"
-isort = "^8.0.1"
+# Testing
+pytest = "^8.4.2"
+pytest-asyncio = "^1.2.0"
+pytest-cov = "^7.1.0"
+pytest-benchmark = "^5.2.3"
+httpx = "^0.28.1"
+aiohttp = "^3.13.3"
+faker = "^37.8.0"
+
+# Linting & formatting
 black = "^26.3.1"
+isort = "^8.0.1"
 flake8 = "^7.3.0"
 autoflake = "^2.3.1"
 autopep8 = "^2.3.2"
-pytest = "^8.4.2"
-pytest-asyncio = "^1.2.0"
 
-httpx = "^0.28.1"
-faker = "^37.8.0"
-pytest-cov = "^7.0.0"
+# Security audit
 bandit = "^1.8.6"
-aiohttp = "^3.13.3"
 
+# Hooks
+pre-commit = "^4.6.0"
+
+# ── Docs dependencies ─────────────────────────────────────────────────────────
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.7.3"
 mkdocs-minify-plugin = "^0.8.0"
 mkdocstrings = "^1.0.3"
+mkdocstrings-python = ">=2.0.3,<3.0.0"
 
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+# ── Tool configuration ────────────────────────────────────────────────────────
 
-[dependency-groups]
-dev = [
-    "autopep8>=2.3.2",
-    "opshero (>=0.1.2,<0.2.0)",
-    "isort (>=8.0.1,<9.0.0)",
-    "flake8 (>=7.3.0,<8.0.0)",
-    "black (>=26.3.1,<27.0.0)",
-    "pytest-benchmark (>=5.2.3,<6.0.0)",
-    "tabulate (>=0.10.0,<0.11.0)",
-]
-docs = [
-    "mkdocs (==1.6.1)",
-    "mkdocs-material (==9.7.3)",
-    "mkdocs-minify-plugin (==0.8.0)",
-    "mkdocstrings (==1.0.3)",
-    "mkdocstrings-python (>=2.0.3,<3.0.0)",
-]
 [tool.flake8]
 max-line-length = 88
 
+[tool.black]
+line-length = 88
+target-version = ["py311"]
 
-
-[tool.poetry.scripts]
-xcore = "xcore.cli.main:main"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["xcore*"]
+[tool.isort]
+profile = "black"
+line_length = 88
