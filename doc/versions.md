@@ -1,6 +1,12 @@
 # Versions de XCore
 
-## v2.0.0 (Version Actuelle)
+## v2.1.2 (Version Actuelle)
+- **Stabilité** : Correction de 13 échecs de tests critiques.
+- **Sécurité** : Scanner AST amélioré pour détecter les contournements via alias d'imports.
+- **Performance** : Intégration de `pytest-benchmark` pour le suivi des performances noyau.
+- **Qualité** : Hooks `pre-commit` synchronisés avec `make lint-fix` et tests automatiques.
+
+## v2.0.0
 - **Architecture Plugin-First** : Nouveau noyau modulaire.
 - **Sandboxing Avancé** : Isolation par sous-processus et FilesystemGuard.
 - **Service Container** : Injection de dépendances pour DB, Cache et Scheduler.
