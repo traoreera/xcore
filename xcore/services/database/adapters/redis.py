@@ -33,8 +33,7 @@ class RedisAdapter:
         try:
             import redis.asyncio as aioredis
         except ImportError as e:
-            raise ImportError(
-                "redis non installé — pip install redis[asyncio]") from e
+            raise ImportError("redis non installé — pip install redis[asyncio]") from e
 
         pool = aioredis.ConnectionPool.from_url(
             self.url,

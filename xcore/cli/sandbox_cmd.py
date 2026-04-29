@@ -62,8 +62,7 @@ async def _sandbox_run(args) -> None:
     plugin_dir = Path(cfg.plugins.directory) / name
 
     if not plugin_dir.is_dir():
-        print(
-            f"❌  Plugin '{name}' introuvable : {plugin_dir}", file=sys.stderr)
+        print(f"❌  Plugin '{name}' introuvable : {plugin_dir}", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -72,16 +71,17 @@ async def _sandbox_run(args) -> None:
         print(f"❌  Manifeste invalide : {e}", file=sys.stderr)
         sys.exit(1)
 
-    from xcore.kernel.sandbox.process_manager import (SandboxConfig,
-                                                      SandboxProcessManager)
+    from xcore.kernel.sandbox.process_manager import (
+        SandboxConfig,
+        SandboxProcessManager,
+    )
 
     info = [
         f"[bold cyan]Mémoire max :[/][magenta] {manifest.resources.max_memory_mb}MB[/]",
         f"[bold cyan]Timeout     :[/][magenta] {manifest.resources.timeout_seconds}s[/]",
     ]
     title = f"[bold green]🚀 Lancement sandbox : {escape(name)}[/]"
-    console.print(Panel(Group(*info), title=title,
-                  expand=False, border_style="cyan"))
+    console.print(Panel(Group(*info), title=title, expand=False, border_style="cyan"))
 
     config = SandboxConfig(
         timeout=manifest.resources.timeout_seconds,
@@ -146,8 +146,7 @@ async def _sandbox_limits(args) -> None:
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        error_console.print(
-            f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
     r = manifest.resources
@@ -163,17 +162,14 @@ async def _sandbox_limits(args) -> None:
     ]
 
     if rt.health_check.enabled:
-        info.append(
-            f"    [dim]intervalle     : {rt.health_check.interval_seconds}s[/]")
-        info.append(
-            f"    [dim]timeout        : {rt.health_check.timeout_seconds}s[/]")
+        info.append(f"    [dim]intervalle     : {rt.health_check.interval_seconds}s[/]")
+        info.append(f"    [dim]timeout        : {rt.health_check.timeout_seconds}s[/]")
 
     info.append(
         f"  [cyan]Retry            :[/][yellow] {rt.retry.max_attempts} tentative(s)[/]"
     )
     if rt.retry.max_attempts > 1:
-        info.append(
-            f"    [dim]backoff        : {rt.retry.backoff_seconds}s[/]")
+        info.append(f"    [dim]backoff        : {rt.retry.backoff_seconds}s[/]")
 
     # Vérifie le disque actuel si le plugin est installé
     data_dir = plugin_dir / "data"
@@ -190,8 +186,7 @@ async def _sandbox_limits(args) -> None:
 
     content = Group(*info)
     title = f"[bold green]🛡️  Limites ressources : {escape(name)}[/]"
-    console.print(Panel(content, title=title,
-                  expand=False, border_style="cyan"))
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── network ───────────────────────────────────────────────────
@@ -217,8 +212,7 @@ async def _sandbox_network(args) -> None:
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        error_console.print(
-            f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
     info = []
@@ -243,8 +237,7 @@ async def _sandbox_network(args) -> None:
     )
 
     # Vérifie si des imports réseau sont dans la whitelist du plugin
-    allowed_network = [
-        i for i in manifest.allowed_imports if i in NETWORK_IMPORTS]
+    allowed_network = [i for i in manifest.allowed_imports if i in NETWORK_IMPORTS]
     blocked_by_ast = [
         e for e in result.errors if any(net in e for net in NETWORK_IMPORTS)
     ]
@@ -265,15 +258,12 @@ async def _sandbox_network(args) -> None:
     else:
         info.append("✅ [green]Aucun import réseau détecté dans le code[/]")
 
-    info.append(
-        "\n[dim]Note : isolation réseau OS (namespaces) — Linux uniquement.[/]")
-    info.append(
-        "[dim]Pour une isolation complète, utilisez un conteneur Docker.[/]")
+    info.append("\n[dim]Note : isolation réseau OS (namespaces) — Linux uniquement.[/]")
+    info.append("[dim]Pour une isolation complète, utilisez un conteneur Docker.[/]")
 
     content = Group(*info)
     title = f"[bold green]🌐 Politique réseau : {escape(name)}[/]"
-    console.print(Panel(content, title=title,
-                  expand=False, border_style="cyan"))
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 
 # ── fs ────────────────────────────────────────────────────────
@@ -294,8 +284,7 @@ async def _sandbox_fs(args) -> None:
     try:
         manifest = _load_manifest(plugin_dir)
     except Exception as e:
-        error_console.print(
-            f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
+        error_console.print(f"[bold red]❌ Manifeste invalide :[/] {escape(str(e))}")
         sys.exit(1)
 
     fs = manifest.filesystem
@@ -312,9 +301,7 @@ async def _sandbox_fs(args) -> None:
         for p in fs.allowed_paths:
             abs_path = plugin_dir / p
             status = (
-                "[green]✅ existe[/]"
-                if abs_path.exists()
-                else "[yellow]⚠️  manquant[/]"
+                "[green]✅ existe[/]" if abs_path.exists() else "[yellow]⚠️  manquant[/]"
             )
             table.add_row(escape(str(p)), status)
         info.append(table)
@@ -331,8 +318,7 @@ async def _sandbox_fs(args) -> None:
 
     content = Group(*info)
     title = f"[bold green]📁 Politique filesystem : {escape(name)}[/]"
-    console.print(Panel(content, title=title,
-                  expand=False, border_style="cyan"))
+    console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
     # Vérifie si le dossier data/ existe, le créer si nécessaire
     data_dir = plugin_dir / "data"

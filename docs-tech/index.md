@@ -44,7 +44,7 @@ flowchart LR
         direction LR
         M[Monolithe<br/>Rigide] <--> MM[**Monolithe Modulaire**<br/>XCore] <--> MS[Microservices<br/>Complexes]
     end
-    
+
     style MM fill:#4CAF50,color:#fff,stroke:#2E7D32
     style M fill:#FFC107,color:#000
     style MS fill:#FFC107,color:#000
@@ -96,15 +96,15 @@ flowchart TB
     X --> PS
     X --> EB
     X --> PE
-    
+
     SC --> Services
     PS --> TP
     PS --> SP
-    
+
     EB -.->|Événements| TP
     EB -.->|Événements| SP
     PE -.->|Permissions| PS
-    
+
     style Kernel fill:#E3F2FD,stroke:#1976D2
     style Plugins fill:#FFF3E0,stroke:#F57C00
     style Services fill:#E8F5E9,stroke:#388E3C
@@ -127,24 +127,24 @@ sequenceDiagram
 
     Dev->>App: Lance l'application
     App->>Kernel: boot(app)
-    
+
     Note over Kernel: 1. Configuration
     Kernel->>Kernel: Charge xcore.yaml + .env
-    
+
     Note over Kernel: 2. Services
     Kernel->>Services: Initialise DB, Cache, Scheduler
     Services-->>Kernel: Services prêts
-    
+
     Note over Kernel: 3. Plugins
     Kernel->>Loader: Découvre les plugins
     Loader->>Loader: Build DAG de dépendances
     Loader->>Loader: Tri topologique
-    
+
     loop Chargement par vagues
         Loader->>P: Load (Trusted/Sandboxed)
         P-->>Loader: Ready
     end
-    
+
     Kernel->>App: Monte les routes plugins
     App-->>Dev: Serveur prêt !
 ```
@@ -154,25 +154,25 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> UNLOADED: Plugin découvert
-    
+
     UNLOADED --> LOADING: supervisor.load()
     LOADING --> READY: on_load() ✅
     LOADING --> FAILED: Erreur ❌
-    
+
     READY --> RELOADING: supervisor.reload()
     RELOADING --> READY: Mise à jour ✅
     RELOADING --> FAILED: Échec ❌
-    
+
     READY --> UNLOADED: supervisor.unload()
     FAILED --> UNLOADED: Cleanup
     FAILED --> RELOADING: Retry
-    
+
     note right of READY
         Plugin opérationnel
         Routes montées
         Événements abonnés
     end note
-    
+
     note right of FAILED
         Erreur de syntaxe
         Dépendance manquante
@@ -208,7 +208,7 @@ flowchart LR
     M3 --> M4
     M4 -- "exécute" --> B
     B -- "résultat" --> A
-    
+
     style Supervisor fill:#FFEBEE,stroke:#C62828
     style M3 fill:#C62828,color:#fff
 ```
@@ -240,7 +240,7 @@ services:
   db:
     backend: "sqlite"
     url: "sqlite+aiosqlite:///./app.db"
-  
+
   cache:
     backend: "memory"
     ttl: 300
@@ -286,7 +286,7 @@ entry_point: src/main.py
 from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    
+
     @action("greet")
     async def greet(self, payload: dict):
         name = payload.get("name", "Monde")

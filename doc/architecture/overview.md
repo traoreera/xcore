@@ -18,39 +18,39 @@ flowchart TB
         EB[📡 Event Bus<br/>Messagerie async]
         PE[🛡️ Permission Engine<br/>Contrôle d'accès]
     end
-    
+
     subgraph Infra["🏗️ Infrastructure Partagée"]
         DB[(🗄️ Database<br/>SQL/NoSQL)]
         CACHE[(⚡ Cache<br/>Redis/Memory)]
         SCHED[⏰ Scheduler<br/>APScheduler]
         LOG[📝 Logger<br/>Structuré]
     end
-    
+
     subgraph Plugins["🧩 Écosystème Plugins"]
         direction LR
         TP[🔐 Trusted Plugins<br/>Processus principal]
         SP[📦 Sandboxed Plugins<br/>Processus isolé]
     end
-    
+
     subgraph App["🌐 Application"]
         FA[FastAPI<br/>Routes HTTP]
         WS[WebSocket<br/>Real-time]
     end
-    
+
     App --> X
     X --> PS
     X --> SC
     X --> EB
     X --> PE
-    
+
     SC --> Infra
     PS --> TP
     PS --> SP
-    
+
     EB -.->|Pub/Sub| TP
     EB -.->|Pub/Sub| SP
     PE -.->|Audit| PS
-    
+
     style Core fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
     style Infra fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
     style Plugins fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
@@ -87,37 +87,37 @@ sequenceDiagram
 
     Dev->>Main: uvicorn app:app
     Main->>X: boot(app)
-    
+
     Note over X: 📋 Phase 1: Configuration
     X->>Cfg: Charger xcore.yaml
     X->>Cfg: Charger .env
     Cfg-->>X: Config validée
-    
+
     Note over X: 🔧 Phase 2: Services
     X->>S: Initialiser DB
     X->>S: Initialiser Cache
     X->>S: Initialiser Scheduler
     S-->>X: ✅ Services Ready
-    
+
     Note over X: 🧩 Phase 3: Plugins
     X->>L: Découvrir plugins/
     L->>L: Parser plugin.yaml
     L->>DAG: Build dependency graph
     DAG->>DAG: Topological sort
     DAG-->>L: Ordre de chargement
-    
+
     loop Chaque vague de plugins
         L->>P: Load plugin (trusted/sandboxed)
         P->>P: on_load()
         P-->>L: ✅ Ready
     end
-    
+
     Note over X: 🌐 Phase 4: Routage
     X->>R: Monter routes FastAPI
     R->>R: Plugin routes
     R->>R: API routes
     R-->>X: ✅ Routes montées
-    
+
     X-->>Main: Application prête
     Main-->>Dev: 🚀 Running on :8000
 ```
@@ -129,23 +129,23 @@ gantt
     title Boot Sequence Timeline
     dateFormat X
     axisFormat %L
-    
+
     section Configuration
     Charger YAML      :a1, 0, 10
     Charger ENV       :a2, after a1, 5
     Validation        :a3, after a2, 5
-    
+
     section Services
     Database          :b1, after a3, 20
     Cache             :b2, after a3, 15
     Scheduler         :b3, after a3, 10
-    
+
     section Plugins
     Discovery         :c1, after b1, 10
     DAG Build         :c2, after c1, 15
     Load Wave 1       :c3, after c2, 30
     Load Wave 2       :c4, after c3, 30
-    
+
     section Routing
     Mount Routes      :d1, after c4, 10
 ```
@@ -159,9 +159,9 @@ Chaque plugin est géré par une **Finite State Machine (FSM)** pour assurer des
 ```mermaid
 stateDiagram-v2
     [*] --> UNLOADED: Découverte
-    
+
     UNLOADED --> LOADING: supervisor.load()
-    
+
     state LOADING {
         [*] --> SCANNING: AST Scan
         SCANNING --> VALIDATING: Scan OK
@@ -169,40 +169,40 @@ stateDiagram-v2
         INSTANTIATING --> INITIALIZING: Entry point OK
         INITIALIZING --> READY: on_load() OK
     end
-    
+
     LOADING --> FAILED: Erreur AST
     LOADING --> FAILED: Erreur Manifest
     LOADING --> FAILED: Erreur on_load()
-    
+
     READY --> RELOADING: supervisor.reload()
-    
+
     state RELOADING {
         [*] --> UNLOADING: on_unload()
         UNLOADING --> RELOADING_CODE: Recharger code
         RELOADING_CODE --> RE_INITIALIZING: Nouveau on_load()
         RE_INITIALIZING --> READY: Succès
     end
-    
+
     RELOADING --> FAILED: Échec reload
-    
+
     READY --> UNLOADED: supervisor.unload()
     FAILED --> UNLOADED: Cleanup
     FAILED --> RELOADING: Retry (max 3)
-    
+
     note right of READY
         🟢 État stable
         - Routes actives
         - Événements abonnés
         - Services connectés
     end note
-    
+
     note right of FAILED
         🔴 État terminal
         - Erreur enregistrée
         - Cleanup requis
         - Notification envoyée
     end note
-    
+
     note right of UNLOADED
         ⚪ État initial/final
         - Code non chargé
@@ -252,7 +252,7 @@ flowchart LR
     M3 --> M4
     M4 -- "execute" --> B
     B -- "result" --> A
-    
+
     style Kernel fill:#FFEBEE,stroke:#C62828,stroke-width:2px
     style M3 fill:#C62828,color:#fff
 ```
@@ -269,20 +269,20 @@ sequenceDiagram
     participant B as Plugin B
 
     A->>T: call("plugin_b", "action", payload)
-    
+
     Note over T: 1. Tracing
     T->>T: Créer span ID
     T->>T: Injecter context
-    
+
     Note over R: 2. Rate Limiting
     R->>R: Vérifier quota A
     R-->>T: ✅ Dans la limite
-    
+
     Note over P: 3. Permission Audit
     P->>P: Charger policies
     P->>P: Vérifier A → B.action
     P-->>T: ✅ Autorisé
-    
+
     Note over L: 4. Retry Logic
     L->>B: Exécuter action
     alt Succès
@@ -321,24 +321,24 @@ flowchart TB
         PS[PluginSupervisor]
         WR[Worker Manager]
     end
-    
+
     subgraph IPC["📡 JSON-RPC 2.0 Channel"]
         direction LR
         PIPE1[Pipe stdout]
         PIPE2[Pipe stdin]
     end
-    
+
     subgraph Sandbox["📦 Sandbox Process"]
         SW[Sandbox Worker]
         AST[🛡️ AST Scanner]
         EX[Code Exécuté]
     end
-    
+
     K --> PS
     PS --> WR
     WR --> IPC
     IPC --> Sandbox
-    
+
     style Sandbox fill:#FFEBEE,stroke:#C62828
     style AST fill:#C62828,color:#fff
 ```
@@ -351,19 +351,19 @@ flowchart LR
         A1[Parser AST] --> A2[Forbidden Names]
         A2 --> A3[Import Whitelist]
     end
-    
+
     subgraph L2["Couche 2: Process Isolation"]
         B1[Processus dédié] --> B2[JSON-RPC sur pipes]
         B2 --> B3[Pas de pickle]
     end
-    
+
     subgraph L3["Couche 3: Resource Limits"]
         C1[Memory Monitor] --> C2[Timeout Monitor]
         C2 --> C3[Kill si dépassement]
     end
-    
+
     L1 --> L2 --> L3
-    
+
     style L1 fill:#FFE0B2,stroke:#F57C00
     style L2 fill:#C8E6C9,stroke:#388E3C
     style L3 fill:#BBDEFB,stroke:#1976D2
@@ -422,23 +422,23 @@ flowchart TB
         PRI[🔴 Private Services<br/>Kernel interne]
         SCO[🟡 Scoped Services<br/>Plugins autorisés]
     end
-    
+
     subgraph Access["Accès"]
         K[🎯 Kernel]
         T[🔐 Trusted Plugins]
         S[📦 Sandboxed Plugins]
     end
-    
+
     PUB --> K
     PUB --> T
     PUB --> S
-    
+
     PRI --> K
-    
+
     SCO --> K
     SCO --> T
     SCO -.->|Si autorisé| S
-    
+
     style PUB fill:#C8E6C9,stroke:#388E3C
     style PRI fill:#FFCDD2,stroke:#C62828
     style SCO fill:#FFF9C4,stroke:#F57F17
@@ -462,7 +462,7 @@ services:
     scope: public
     backend: postgresql
     url: ${DATABASE_URL}
-  
+
   # Service scoped - accessible uniquement par authorized plugins
   payment_db:
     scope: scoped
@@ -471,7 +471,7 @@ services:
       - billing_plugin
     backend: postgresql
     url: ${PAYMENT_DATABASE_URL}
-  
+
   # Service private - kernel uniquement
   audit_log:
     scope: private
@@ -496,23 +496,23 @@ sequenceDiagram
 
     Client->>API: POST /plugins/call
     API->>X: plugins.call(plugin, action, payload)
-    
+
     Note over X,P: 1. Permission Check
     X->>P: verify(plugin, action)
     P-->>X: ✅ Autorisé
-    
+
     Note over X,S: 2. Resolve Plugin
     X->>S: get_handler(plugin, action)
     S-->>X: Handler trouvé
-    
+
     Note over S,PL: 3. Execute Action
     S->>PL: @action(payload)
-    
+
     alt Besoin DB
         PL->>DB: Query
         DB-->>PL: Résultats
     end
-    
+
     PL-->>S: Résultat
     S-->>X: Response
     X-->>API: JSON

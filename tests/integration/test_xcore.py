@@ -109,20 +109,27 @@ class TestPluginLoading:
         src_dir.mkdir()
 
         # plugin.yaml
-        (test_plugin / "plugin.yaml").write_text("""
+        (test_plugin / "plugin.yaml").write_text(
+            """
 name: test_plugin
 version: 1.0.0
 execution_mode: trusted
-""")
+permissions:
+  - resource: "*"
+    actions: ["*"]
+"""
+        )
 
         # main.py
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.sdk import TrustedBase, ok
 
 class Plugin(TrustedBase):
     async def handle(self, action, payload):
         return ok(message="pong")
-""")
+"""
+        )
 
         config_content = f"""
 app:
@@ -131,6 +138,7 @@ app:
 
 plugins:
   directory: {plugins_dir}
+  strict_trusted: false
 
 services:
   databases: {{}}

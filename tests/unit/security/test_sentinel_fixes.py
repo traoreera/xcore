@@ -1,6 +1,3 @@
-import ast
-from pathlib import Path
-
 import pytest
 
 from xcore.kernel.security.validation import ASTScanner
@@ -24,10 +21,10 @@ def leak_info():
 
     assert not result.passed
     error_msgs = "\n".join(result.errors)
-    assert "utilisation de built-in interdit : 'dir'" in error_msgs
-    assert "utilisation de built-in interdit : 'vars'" in error_msgs
-    assert "utilisation de built-in interdit : 'input'" in error_msgs
-    assert "utilisation de built-in interdit : 'help'" in error_msgs
+    assert "built-in interdit : 'dir'" in error_msgs
+    assert "built-in interdit : 'vars'" in error_msgs
+    assert "built-in interdit : 'input'" in error_msgs
+    assert "built-in interdit : 'help'" in error_msgs
 
 
 def test_ast_scanner_blocks_new_forbidden_modules(tmp_path):
@@ -50,10 +47,10 @@ import fcntl
 
     assert not result.passed
     error_msgs = "\n".join(result.errors)
-    assert "import interdit : 'multiprocessing'" in error_msgs
-    assert "import interdit : 'threading'" in error_msgs
-    assert "import interdit : 'concurrent.futures'" in error_msgs
-    assert "import interdit : 'pty'" in error_msgs
-    assert "import interdit : 'termios'" in error_msgs
-    assert "import interdit : 'tty'" in error_msgs
-    assert "import interdit : 'fcntl'" in error_msgs
+    assert "import interdit — 'multiprocessing'" in error_msgs
+    assert "import interdit — 'threading'" in error_msgs
+    assert "import interdit — 'concurrent.futures'" in error_msgs
+    assert "import interdit — 'pty'" in error_msgs
+    assert "import interdit — 'termios'" in error_msgs
+    assert "import interdit — 'tty'" in error_msgs
+    assert "import interdit — 'fcntl'" in error_msgs

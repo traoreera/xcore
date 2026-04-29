@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -12,7 +11,9 @@ class DummyMiddleware(Middleware):
         self.name = name
         self.calls = calls
 
-    async def __call__(self, plugin_name, action, payload, next_call, handler=None, **kwargs):
+    async def __call__(
+        self, plugin_name, action, payload, next_call, handler=None, **kwargs
+    ):
         self.calls.append(f"before:{self.name}")
         res = await next_call(plugin_name, action, payload, handler, **kwargs)
         self.calls.append(f"after:{self.name}")
@@ -22,6 +23,7 @@ class DummyMiddleware(Middleware):
 @pytest.mark.asyncio
 async def test_dynamic_middleware_registration():
     from xcore.kernel.context import KernelContext
+
     config = MagicMock()
     config.plugins.directory = "plugins"
     services = MagicMock()
@@ -47,6 +49,7 @@ async def test_dynamic_middleware_registration():
     supervisor._loader.get.return_value = handler
 
     from xcore.kernel.runtime.middlewares import MiddlewarePipeline
+
     supervisor._pipeline = MiddlewarePipeline([], supervisor._dispatch)
 
     calls = []

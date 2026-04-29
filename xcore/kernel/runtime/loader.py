@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ..context import KernelContext
 
 from ...kernel.security.validation import ManifestValidator
+
 # from ...sdk.plugin_base import PluginDependency
 from ..api.contract import PluginHandler
 from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
@@ -69,8 +70,7 @@ class PluginLoader:
         # Activator registry (Strategy Pattern)
         self._activators = ActivatorRegistry()
         self._activators.register(ExecutionMode.TRUSTED, TrustedActivator())
-        self._activators.register(
-            ExecutionMode.SANDBOXED, SandboxedActivator())
+        self._activators.register(ExecutionMode.SANDBOXED, SandboxedActivator())
         self._activators.register(ExecutionMode.LEGACY, TrustedActivator())
 
         self._validator = ManifestValidator()
@@ -96,8 +96,16 @@ class PluginLoader:
             if not d.is_dir() or d.name.startswith("_"):
                 continue
             try:
-                manifest = self._validator.load_and_validate(d)
-                manifests.append(manifest)
+                manifest, validate_version, frameversion = (
+                    self._validator.load_and_validate(d)
+                )
+                if validate_version:
+                    manifests.append(manifest)
+                else:
+                    logger.warning(
+                        f"version du framework incompatible: {manifest.name} version requise"
+                        f": {manifest.framework_version} version actuelle: {frameversion}"
+                    )
             except Exception as e:
                 logger.warning(f"[{d.name}] Manifeste invalide : {e}")
                 skipped.append(d.name)
@@ -202,7 +210,6 @@ class PluginLoader:
 
         if not activator:
             raise ValueError(f"Aucun activateur trouvé pour le mode {mode}")
-
         handler = await activator.activate(manifest, self)
         self._handlers[manifest.name] = handler
         logger.info(f"[{manifest.name}] ✅ {mode.value.upper()}")
@@ -212,16 +219,13 @@ class PluginLoader:
     async def load(self, plugin_name: str) -> None:
         plugin_dir = Path(self._config.directory) / plugin_name
         if not plugin_dir.is_dir():
-            raise FileNotFoundError(
-                f"Dossier plugin introuvable : {plugin_dir}")
+            raise FileNotFoundError(f"Dossier plugin introuvable : {plugin_dir}")
 
         manifest = self._validator.load_and_validate(plugin_dir)
-
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
-                logger.info(
-                    f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
+                logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
                 await self.load(dep_name)
 
         await self._activate(manifest)
@@ -256,8 +260,7 @@ class PluginLoader:
         if name in self._handlers:
             return self._handlers[name]
         available = sorted(list(self._handlers.keys()))
-        raise KeyError(
-            f"Plugin '{name}' non trouvé. Disponibles : {available}")
+        raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
 
     def has(self, name: str) -> bool:
         return name in self._handlers
@@ -292,8 +295,7 @@ class PluginLoader:
                 # dep est un PluginDependency object
                 dep_name = dep.name if hasattr(dep, "name") else str(dep)
                 if dep_name not in graph:
-                    raise ValueError(
-                        f"[{m.name}] Missing dependency '{dep_name}'")
+                    raise ValueError(f"[{m.name}] Missing dependency '{dep_name}'")
                 graph.add_dependency(m.name, dep_name)
 
         return graph.get_ordered()

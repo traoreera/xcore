@@ -6,14 +6,20 @@ from xcore.kernel.observability import MetricsRegistry, Tracer
 
 
 class EventBus(Protocol):
-    def on(self, event_name: str, priority: int = 50,
-           name: str | None = None) -> Callable: ...
-    async def emit(self, event_name: str,
-                   data: dict[str, Any] | None = None) -> list[Any]: ...
+    def on(
+        self, event_name: str, priority: int = 50, name: str | None = None
+    ) -> Callable: ...
+
+    async def emit(
+        self, event_name: str, data: dict[str, Any] | None = None
+    ) -> list[Any]: ...
+
     # Note : on ne met PAS 'clear' ici.
     def once(self, event_name: str, priority: int = 50) -> Callable: ...
-    def emit_sync(self, event_name: str,
-                  data: dict[str, Any] | None = None) -> None: ...
+
+    def emit_sync(
+        self, event_name: str, data: dict[str, Any] | None = None
+    ) -> None: ...
 
 
 class HookManager(Protocol):
@@ -57,8 +63,7 @@ class HealthChecker(Protocol):
         ...
 
 
-class PluginRegistry(Protocol):
-    ...
+class PluginRegistry(Protocol): ...
 
 
 @dataclass

@@ -95,8 +95,7 @@ def main():
     all_modules = set(modules_files.keys()) | set(modules_children.keys())
 
     # Trier du plus profond (plus de "/" dans le chemin) au plus haut
-    sorted_modules = sorted(
-        all_modules, key=lambda m: m.count("/"), reverse=True)
+    sorted_modules = sorted(all_modules, key=lambda m: m.count("/"), reverse=True)
 
     # Stocker une description courte par module (pour les index parents)
     module_descriptions = {}

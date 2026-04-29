@@ -8,12 +8,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..runtime.loader import PluginLoader
 
 from .ipc import IPCChannel, IPCProcessDead, IPCResponse
 from .isolation import DiskQuotaExceeded, DiskWatcher
@@ -45,7 +48,12 @@ class SandboxProcessManager:
     et ne s'appelle plus jamais via start() → plus de RecursionError.
     """
 
-    def __init__(self, manifest, config: SandboxConfig | None = None) -> None:
+    def __init__(
+        self,
+        manifest,
+        ctx: "PluginLoader",
+        config: SandboxConfig | None = None,
+    ) -> None:
         self.manifest = manifest
         self.config = config or SandboxConfig()
         self._process: asyncio.subprocess.Process | None = None
@@ -56,6 +64,8 @@ class SandboxProcessManager:
         self._watch_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
         data_dir = manifest.plugin_dir / "data"
+        self._ctx = ctx
+
         self._disk = DiskWatcher(data_dir, manifest.resources.max_disk_mb)
 
     @property
@@ -94,21 +104,29 @@ class SandboxProcessManager:
             f"[{self.manifest.name}] ✅ Subprocess démarré (PID={self._process.pid})"
         )
 
+        self._ctx._events.emit_sync(
+            f"plugin.{self.manifest.name}.services_registered",
+            data={"plugin": self.manifest.name, "is_reload": False, "services": []},
+        )
+
     async def _spawn(self) -> None:
+
         worker_path = Path(__file__).parent / "worker.py"
+
         venv_py = self.manifest.plugin_dir / "venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else sys.executable
-        sandbox_home = (self.manifest.plugin_dir / ".sandbox_home").resolve()
+        sandbox_home = (self.manifest.plugin_dir / "sandbox").resolve()
         sandbox_home.mkdir(parents=True, exist_ok=True)
 
         env = {
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "PATH": "/usr/sandbox:/bin",
             "HOME": str(sandbox_home),
-            "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+            "LANG": "en_US.UTF-8",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
             "_SANDBOX_MAX_MEM_MB": str(self.manifest.resources.max_memory_mb),
+            "_SANDBOX_MAX_CPU_SEC": "10",
         }
         env |= self.manifest.env
 
@@ -121,6 +139,8 @@ class SandboxProcessManager:
             stderr=asyncio.subprocess.PIPE,
             cwd=str(self.manifest.plugin_dir),
             env=env,
+            # user='xcore',
+            # group='sandbox'
         )
         self._channel = IPCChannel(
             self._process, timeout=self.manifest.resources.timeout_seconds
@@ -137,8 +157,7 @@ class SandboxProcessManager:
                 raise RuntimeError(f"Ping échoué : {resp.data}")
         except asyncio.TimeoutError as e:
             await self._kill()
-            raise RuntimeError(
-                f"Pas de réponse au ping dans {timeout}s") from e
+            raise RuntimeError(f"Pas de réponse au ping dans {timeout}s") from e
 
     async def call(self, action: str, payload: dict) -> dict:
         if not self.is_available:
@@ -161,8 +180,7 @@ class SandboxProcessManager:
         code = await self._process.wait()
         if self._state == ProcessState.STOPPED:
             return
-        logger.warning(
-            f"[{self.manifest.name}] Subprocess terminé (code={code})")
+        logger.warning(f"[{self.manifest.name}] Subprocess terminé (code={code})")
         if self._process.stderr:
             with contextlib.suppress(Exception):
                 err = await asyncio.wait_for(
@@ -206,8 +224,7 @@ class SandboxProcessManager:
 
         while self._restarts < self.config.max_restarts:
             self._restarts += 1
-            delay = min(self.config.restart_delay *
-                        (2 ** (self._restarts - 1)), 60.0)
+            delay = min(self.config.restart_delay * (2 ** (self._restarts - 1)), 60.0)
             logger.info(
                 f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts} dans {delay:.1f}s"
             )
@@ -223,7 +240,7 @@ class SandboxProcessManager:
 
             try:
                 await self._spawn()
-                await self._ping_check()
+                # await self._ping_check()
             except Exception as e:
                 logger.error(f"[{self.manifest.name}] Spawn/ping échoué : {e}")
                 continue

@@ -19,26 +19,30 @@ def sample_plugin_dir():
         plugin_dir.mkdir()
 
         # Create plugin.yaml
-        (plugin_dir / "plugin.yaml").write_text("""
+        (plugin_dir / "plugin.yaml").write_text(
+            """
 name: sample_plugin
 version: 1.0.0
 author: Test
 execution_mode: trusted
 entry_point: src/main.py
-""")
+"""
+        )
 
         # Create src directory
         src_dir = plugin_dir / "src"
         src_dir.mkdir()
 
         # Create main.py
-        (src_dir / "main.py").write_text("""
+        (src_dir / "main.py").write_text(
+            """
 from xcore.sdk import TrustedBase, ok
 
 class Plugin(TrustedBase):
     async def handle(self, action, payload):
         return ok(message="Hello from sample plugin")
-""")
+"""
+        )
 
         yield plugin_dir
 

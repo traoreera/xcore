@@ -28,6 +28,7 @@ def mock_manifest():
 async def test_lifecycle_propagate_services_protection():
     from xcore.kernel.context import KernelContext
     from xcore.registry.index import PluginRegistry
+
     shared_services = {"db": "core_db", "cache": "core_cache"}
     registry = PluginRegistry()
     # Register "db" as a core service in the registry to protect it
@@ -55,7 +56,7 @@ async def test_lifecycle_propagate_services_protection():
     with pytest.raises((PermissionError, ValueError)) as exc:
         lm.propagate_services()
 
-    assert "écrasement de services protégés" in str(exc.value)
+    assert "Impossible d'écraser le service protégé" in str(exc.value)
     # Vérifier que le service original n'a pas été écrasé dans shared_services
     # (LifecycleManager ne doit pas atteindre la phase d'update s'il y a collision)
     assert shared_services["db"] == "core_db"
@@ -64,6 +65,7 @@ async def test_lifecycle_propagate_services_protection():
 @pytest.mark.asyncio
 async def test_lifecycle_propagate_services_allowed():
     from xcore.kernel.context import KernelContext
+
     shared_services = {"db": "core_db"}
 
     # Instance du plugin qui enregistre un nouveau service non protégé

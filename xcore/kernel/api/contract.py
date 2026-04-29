@@ -16,7 +16,7 @@ from .proto import PluginContext
 
 # Literal dispo Python 3.8+
 try:
-    from typing import Awaitable, Callable, Literal
+    from typing import Literal
 except ImportError:
     from typing_extensions import Literal  # type: ignore[assignment]
 
@@ -125,8 +125,7 @@ class TrustedBase(ABC):
         payload: dict | None = None,
     ) -> dict:
         if self.ctx is None:
-            raise RuntimeError(
-                "call_plugin appelé avant injection du contexte.")
+            raise RuntimeError("call_plugin appelé avant injection du contexte.")
         if self.ctx.caller is None:
             raise RuntimeError(
                 f"[{self.ctx.name}] call_plugin() non disponible "
@@ -149,14 +148,15 @@ class TrustedBase(ABC):
     def get_service(self, name: "Literal['mongodb']") -> "MongoDBAdapter": ...
 
     @overload
-    def get_service(
-        self, name: "Literal['redisAdapter']") -> "RedisAdapter": ...
+    def get_service(self, name: "Literal['redisAdapter']") -> "RedisAdapter": ...
 
     @overload
     def get_service(self, name: "Literal['syncdb']") -> "SQLAdapter": ...
 
     @overload
-    def get_service(self, name: "Literal['scheduler']") -> "SchedulerService": ...  # noqa: F811
+    def get_service(
+        self, name: "Literal['scheduler']"
+    ) -> "SchedulerService": ...  # noqa: F811
 
     @overload
     def get_service(self, name: str) -> Any: ...  # noqa: F811
@@ -179,7 +179,7 @@ class TrustedBase(ABC):
         if self.ctx is None:
             raise RuntimeError(
                 "Context not injected — plugin not yet loaded. "
-                "Appeler get_service() depuis on_load() ou handle()."
+                "called get_service() from on_load() or handle()."
             )
         # Utilise le contexte pour la résolution (inclut scoping via registry)
         return self.ctx.get_service(name)
@@ -234,7 +234,7 @@ class TrustedBase(ABC):
 
     def add_state(self) -> dict:
         """
-        Ajoute un middleware à l'exécution.
+        Ajoute un etat pour l'application
         :return: {
             "name": str,
             "state": app_state

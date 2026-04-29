@@ -63,8 +63,7 @@ class DependencyResolver:
                 reverse[dep].append(name)
                 in_degree[name] += 1
 
-        queue: deque[str] = deque(
-            sorted(n for n, d in in_degree.items() if d == 0))
+        queue: deque[str] = deque(sorted(n for n, d in in_degree.items() if d == 0))
         result: list[str] = []
 
         while queue:

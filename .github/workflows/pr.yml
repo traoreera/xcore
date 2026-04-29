@@ -83,22 +83,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check modified plugins have config.yaml
+      - name: Check modified plugins have plugin.yaml
         run: |
           MODIFIED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep '^plugins/' | cut -d'/' -f1,2 | sort -u)
+            | grep '^app/' | cut -d'/' -f1,2 | sort -u)
+
+          if [ -z "$MODIFIED" ]; then
+            echo "Aucun plugin modifié."
+            exit 0
+          fi
 
           for plugin_dir in $MODIFIED; do
             if [ -d "$plugin_dir" ]; then
-              if [ ! -f "$plugin_dir/config.yaml" ]; then
-                echo "⚠️ Warning: $plugin_dir is missing config.yaml"
-              fi
-              if [ ! -f "$plugin_dir/__init__.py" ]; then
-                echo "❌ Error: $plugin_dir is missing __init__.py"
+              if [ ! -f "$plugin_dir/plugin.yaml" ]; then
+                echo "❌ Error: $plugin_dir is missing plugin.yaml"
                 exit 1
               fi
-              if [ ! -f "$plugin_dir/run.py" ]; then
-                echo "❌ Error: $plugin_dir is missing run.py"
+              if [ ! -d "$plugin_dir/src" ]; then
+                echo "❌ Error: $plugin_dir is missing src/ directory"
                 exit 1
               fi
               echo "✓ $plugin_dir structure OK"

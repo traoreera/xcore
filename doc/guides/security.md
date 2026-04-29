@@ -16,7 +16,7 @@ flowchart TB
         L4[🛡️ Couche 4: Permissions<br/>Policy Engine]
         L5[🛡️ Couche 5: Signature<br/>HMAC Verification]
     end
-    
+
     subgraph Attaques["Attaques Bloquées"]
         A1[Code Injection]
         A2[Sandbox Escape]
@@ -24,13 +24,13 @@ flowchart TB
         A4[Accès Non Autorisé]
         A5[Tampering]
     end
-    
+
     L1 -.->|Bloque| A1
     L2 -.->|Bloque| A2
     L3 -.->|Bloque| A3
     L4 -.->|Bloque| A4
     L5 -.->|Bloque| A5
-    
+
     style Defense fill:#E8F5E9,stroke:#388E3C
     style L1 fill:#C8E6C9
     style L2 fill:#C8E6C9
@@ -55,19 +55,19 @@ flowchart LR
         C -->|Non| D[❌ Rejeté]
         C -->|Oui| E[📦 Spawn Worker]
     end
-    
+
     subgraph Exec["Exécution"]
         E --> F[📡 JSON-RPC IPC]
         F --> G[⏱️ Timeout Monitor]
         G --> H[🧠 Memory Monitor]
     end
-    
+
     subgraph PostExec["Post-Exécution"]
         H --> I{Limites OK ?}
         I -->|Non| J[❌ Kill Worker]
         I -->|Oui| K[✅ Résultat]
     end
-    
+
     style PreExec fill:#FFF3E0,stroke:#F57C00
     style Exec fill:#E3F2FD,stroke:#1976D2
     style PostExec fill:#E8F5E9,stroke:#388E3C
@@ -84,23 +84,23 @@ flowchart TB
     subgraph AST["🔍 AST Scanner"]
         S[Code Source] --> P[Parser AST]
         P --> N[NodeVisitor]
-        
+
         N --> F1[Forbidden Names]
         N --> F2[Forbidden Attributes]
         N --> F3[Import Whitelist]
-        
+
         F1 --> B1[❌ eval, exec]
         F1 --> B2[❌ globals, locals]
         F1 --> B3[❌ __import__]
-        
+
         F2 --> B4[❌ __class__]
         F2 --> B5[❌ __globals__]
         F2 --> B6[❌ __subclasses__]
-        
+
         F3 --> B7[❌ os, subprocess]
         F3 --> B8[❌ socket, requests]
     end
-    
+
     style AST fill:#FFEBEE,stroke:#C62828
     style B1 fill:#FFCDD2
     style B2 fill:#FFCDD2
@@ -165,21 +165,21 @@ sequenceDiagram
     participant K as 🎯 Kernel Process
     participant M as 📡 Multiprocessing Manager
     participant W as 📦 Sandbox Worker
-    
+
     Note over K: Boot du kernel
     K->>M: spawn_worker(plugin_path)
-    
+
     Note over M: Création processus
     M->>W: fork()/spawn()
     W->>W: Charger code plugin
-    
+
     Note over K,W: Communication via pipes
     K->>W: {"jsonrpc":"2.0","method":"call",...}
     Note over K,W: JSON uniquement<br/>⚠️ Pas de pickle !
-    
+
     W->>W: Exécuter handler
     W->>K: {"jsonrpc":"2.0","result":...}
-    
+
     Note over K: Désérialiser résultat
 ```
 
@@ -237,23 +237,23 @@ flowchart LR
         TM[⏱️ Timeout Monitor<br/>Execution Timer]
         CM[📈 CPU Monitor<br/>CPU Time Tracker]
     end
-    
+
     subgraph Limits["⚠️ Limites"]
         ML[Max: max_memory_mb]
         TL[Max: timeout_seconds]
         CL[Max: cpu_seconds]
     end
-    
+
     subgraph Actions["🔥 Actions"]
         MA[⚠️ Warning]
         KA[❌ Kill Process]
         RA[📝 Log Violation]
     end
-    
+
     MM --> ML --> MA --> KA
     TM --> TL --> KA
     CM --> CL --> KA
-    
+
     style Monitors fill:#E3F2FD,stroke:#1976D2
     style Limits fill:#FFF3E0,stroke:#F57C00
     style Actions fill:#FFEBEE,stroke:#C62828
@@ -266,10 +266,10 @@ flowchart LR
 resources:
   # Mémoire maximale (Mo)
   max_memory_mb: 256
-  
+
   # Timeout d'exécution (secondes)
   timeout_seconds: 30
-  
+
   # Rate limiting
   rate_limit:
     calls: 1000
@@ -302,13 +302,13 @@ flowchart TB
         Allow[✅ ALLOW]
         Deny[❌ DENY]
     end
-    
+
     Start --> CheckDeny
     CheckDeny -->|Oui| Deny
     CheckDeny -->|Non| CheckAllow
     CheckAllow -->|Oui| Allow
     CheckAllow -->|Non| DefaultDeny
-    
+
     style Deny fill:#FFCDD2,stroke:#C62828
     style Allow fill:#C8E6C9,stroke:#388E3C
     style DefaultDeny fill:#FFCDD2,stroke:#C62828
@@ -334,17 +334,17 @@ permissions:
   - resource: "db.users.*"
     actions: ["read"]
     effect: allow
-  
+
   # ✅ Autorise lecture/écriture sur cache global
   - resource: "cache.global"
     actions: ["read", "write"]
     effect: allow
-  
+
   # ✅ Autorise TOUS les actions sur une resource
   - resource: "logs.*"
     actions: ["*"]
     effect: allow
-  
+
   # ❌ DENY explicite (priorité haute)
   - resource: "db.admin.*"
     actions: ["*"]
@@ -360,26 +360,26 @@ permissions:
   - resource: "db.main.users"
     actions: ["read"]
     effect: allow
-  
+
   - resource: "db.main.posts"
     actions: ["read"]
     effect: allow
-  
+
   # Écriture sur cache
   - resource: "cache.global"
     actions: ["read", "write"]
     effect: allow
-  
+
   # Accès scheduler
   - resource: "scheduler.jobs"
     actions: ["create", "delete"]
     effect: allow
-  
+
   # Interdiction explicite (sécurité défense)
   - resource: "db.admin.*"
     actions: ["*"]
     effect: deny
-  
+
   - resource: "kernel.*"
     actions: ["*"]
     effect: deny
@@ -396,16 +396,16 @@ sequenceDiagram
 
     A->>S: call("plugin_b", "get_user")
     S->>P: evaluate("plugin_a", "plugin_b.get_user")
-    
+
     P->>L: Charger policies de plugin_a
     L-->>P: Retourner rules
-    
+
     P->>P: Vérifier DENY explicite
     Note over P: ❌ Aucun DENY trouvé
-    
+
     P->>P: Vérifier ALLOW explicite
     Note over P: ✅ Rule trouvée !
-    
+
     P-->>S: ✅ Autorisé
     S->>A: Procéder à l'appel
 ```
@@ -424,16 +424,16 @@ flowchart TB
         D1[Fichiers Plugin] --> D2[Calcul HMAC-SHA256]
         D2 --> D3[Générer plugin.sig]
     end
-    
+
     subgraph Verify["🔍 Vérification (Production)"]
         V1[Charger plugin.sig] --> V2[Re-calculer hashes]
         V2 --> V3{Match ?}
         V3 -->|Oui| V4[✅ Charger]
         V3 -->|Non| V5[❌ Rejeté]
     end
-    
+
     Sign --> Verify
-    
+
     style Sign fill:#E8F5E9,stroke:#388E3C
     style Verify fill:#FFEBEE,stroke:#C62828
 ```
@@ -473,11 +473,11 @@ sequenceDiagram
     participant Sig as plugin.sig
 
     K->>S: verify_trusted("my_plugin")
-    
+
     S->>Sig: Charger signature
     S->>F: Lire fichiers actuels
     S->>S: Calculer hashes actuels
-    
+
     S->>S: Comparer avec plugin.sig
     alt Hashes correspondent
         S-->>K: ✅ Vérifié
@@ -503,7 +503,7 @@ flowchart LR
         D4[Pas d'état local]
         D5[Signer en prod]
     end
-    
+
     subgraph Dont["❌ À Éviter"]
         A1[Trusted sans besoin]
         A2[Permissions larges]
@@ -511,9 +511,9 @@ flowchart LR
         A4[État dans le plugin]
         A5[Code non signé]
     end
-    
+
     Do -.->|Au lieu de| Dont
-    
+
     style Do fill:#E8F5E9,stroke:#388E3C
     style Dont fill:#FFEBEE,stroke:#C62828
 ```
@@ -560,7 +560,7 @@ class GreetInput(BaseModel):
     language: str = Field(default="fr")
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    
+
     @action("greet")
     async def greet(self, payload: dict):
         # Valider l'input
@@ -568,7 +568,7 @@ class Plugin(AutoDispatchMixin, TrustedBase):
             validated = GreetInput(**payload)
         except ValidationError as e:
             return error(msg=str(e), code="invalid_input")
-        
+
         return ok(message=f"Bonjour, {validated.name} !")
 ```
 
@@ -584,7 +584,7 @@ class Plugin(TrustedBase):
 class Plugin(TrustedBase):
     async def on_load(self):
         self.cache = self.get_service("cache")  # ✅ Persistant
-    
+
     async def store(self, key, value):
         await self.cache.set(key, value)  # ✅ Sauvegardé
 ```

@@ -34,8 +34,7 @@ class RedisCacheBackend:
         try:
             import redis.asyncio as aioredis
         except ImportError as e:
-            raise ImportError(
-                "redis non installé — pip install redis[asyncio]") from e
+            raise ImportError("redis non installé — pip install redis[asyncio]") from e
         self._client = aioredis.from_url(self._url, decode_responses=True)
         await self._client.ping()
 
@@ -54,8 +53,7 @@ class RedisCacheBackend:
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         ex = ttl if ttl is not None else self._ttl
-        raw = json.dumps(value) if not isinstance(
-            value, (str, bytes)) else value
+        raw = json.dumps(value) if not isinstance(value, (str, bytes)) else value
         await self._client.set(key, raw, ex=ex if ex > 0 else None)
 
     async def mget(self, keys: list[str]) -> dict[str, Any]:
@@ -82,8 +80,7 @@ class RedisCacheBackend:
         async with self._client.pipeline() as pipe:
             for key, value in mapping.items():
                 raw = (
-                    json.dumps(value) if not isinstance(
-                        value, (str, bytes)) else value
+                    json.dumps(value) if not isinstance(value, (str, bytes)) else value
                 )
                 pipe.set(key, raw, ex=ex if ex > 0 else None)
             await pipe.execute()

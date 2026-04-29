@@ -11,7 +11,7 @@ flowchart LR
     A[1. Initialiser<br/>l'Application] --> B[2. Créer<br/>le Plugin]
     B --> C[3. Démarrer<br/>le Serveur]
     C --> D[4. Tester<br/>l'Action]
-    
+
     style A fill:#4CAF50,color:#fff
     style B fill:#2196F3,color:#fff
     style C fill:#FF9800,color:#fff
@@ -60,14 +60,14 @@ sequenceDiagram
 
     You->>App: uvicorn app:app
     App->>Kernel: boot()
-    
+
     Note over Kernel: Initialisation...
     Kernel->>Services: DB, Cache, Scheduler
     Kernel->>Plugins: Chargement
-    
+
     Services-->>Kernel: ✅ Prêts
     Plugins-->>Kernel: ✅ Chargés
-    
+
     Kernel-->>App: ✅ Prêt
     App-->>You: 🚀 Serveur sur :8000
 ```
@@ -130,30 +130,30 @@ class Plugin(AutoDispatchMixin, TrustedBase):
     """
     Plugin de démonstration qui salue les utilisateurs.
     """
-    
+
     async def on_load(self):
         """🎯 Appelé quand le plugin est chargé."""
         self.logger.info("✨ Hello plugin est prêt !")
-    
+
     async def on_unload(self):
         """🧹 Appelé quand le plugin est déchargé."""
         self.logger.info("👋 Hello plugin est déchargé")
-    
+
     @action("greet")
     async def greet_user(self, payload: dict):
         """
         🎯 Action: greet
-        
+
         Args:
             payload: {"name": "Votre nom"}
-        
+
         Returns:
             {"status": "ok", "message": "Hello, X !"}
         """
         name = payload.get("name", "World")
         self.logger.info(f"Salutation de: {name}")
         return ok(message=f"Hello, {name} !")
-    
+
     @action("ping")
     async def ping(self, payload: dict):
         """Test de connectivité."""
@@ -216,14 +216,14 @@ sequenceDiagram
 
     CLI->>API: POST /plugins/call
     API->>Kernel: plugins.call("hello_plugin", "greet")
-    
+
     Kernel->>Perm: Vérifier permissions
     Perm-->>Kernel: ✅ Autorisé
-    
+
     Kernel->>Plugin: @action("greet")
     Plugin->>Plugin: greet_user(payload)
     Plugin-->>Kernel: {"status": "ok", ...}
-    
+
     Kernel-->>API: Résultat
     API-->>CLI: Response JSON
 ```
@@ -238,12 +238,12 @@ sequenceDiagram
 from xcore.sdk import TrustedBase, RoutedPlugin, route
 
 class Plugin(RoutedPlugin, TrustedBase):
-    
+
     @route("/hello/{name}", methods=["GET"])
     async def hello_api(self, name: str):
         """Route HTTP accessible directement."""
         return {"message": f"Hello, {name} !"}
-    
+
     @route("/status", methods=["GET"])
     async def status(self):
         """Endpoint de santé du plugin."""
@@ -264,24 +264,24 @@ class Plugin(RoutedPlugin, TrustedBase):
 from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    
+
     async def on_load(self):
         self.cache = self.get_service("cache")
-    
+
     @action("greet_cached")
     async def greet_cached(self, payload: dict):
         name = payload.get("name", "World")
         cache_key = f"greeting:{name}"
-        
+
         # Vérifier le cache
         cached = await self.cache.get(cache_key)
         if cached:
             return ok(message=cached, source="cache")
-        
+
         # Générer et caster
         message = f"Hello, {name} !"
         await self.cache.set(cache_key, message, ttl=60)
-        
+
         return ok(message=message, source="generated")
 ```
 
@@ -291,17 +291,17 @@ class Plugin(AutoDispatchMixin, TrustedBase):
 from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    
+
     @action("create_user")
     async def create_user(self, payload: dict):
         # ... logique de création ...
-        
+
         # 📡 Émettre un événement
         await self.ctx.events.emit("user.created", {
             "id": user_id,
             "email": payload.get("email")
         })
-        
+
         return ok(user_id=user_id)
 ```
 

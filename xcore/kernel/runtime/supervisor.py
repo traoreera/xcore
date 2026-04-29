@@ -79,9 +79,9 @@ class PluginSupervisor:
         )
         self._middleware_registry.register("retry", lambda _: RetryMiddleware())
 
+    # supervisor.py — boot()
+
     async def boot(self) -> None:
-        """Instancie le loader et charge tous les plugins."""
-        # Souscription réactive aux événements de plugin
         if self._events:
             self._events.subscribe(
                 "plugin.*.services_registered", self._on_plugin_services_registered
@@ -91,36 +91,8 @@ class PluginSupervisor:
             ctx=self._ctx,
             caller=lambda name, action, payload: self.call(name, action, payload),
         )
-        report = await self._loader.load_all()
-        logger.info(
-            f"Boot plugins — chargés: {len(report['loaded'])}, "
-            f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
-        )
 
-        # kernel virtual handler
-        from .kernel_handler import KernelHandler
-
-        self._loader._handlers["kernel"] = KernelHandler(self._ctx, self)
-        self._permissions.grant_all("kernel")
-        from ..sandbox.limits import RateLimitConfig
-
-        self._rate.register("kernel", RateLimitConfig(calls=10_000, period_seconds=60))
-
-        # Enregistrement des services noyau comme "protégés" dans le registre
-        if self._registry:
-            for name, svc in self._services.as_dict().items():
-                try:
-                    self._registry.register_core_service(name, svc)
-                except Exception as e:
-                    logger.warning(
-                        f"Erreur lors de l'enregistrement du service noyau '{name}': {e}"
-                    )
-
-        # Note: L'enregistrement des permissions, rate limits et registry
-        # est maintenant géré de manière réactive via _on_plugin_services_registered
-
-        # Initialisation du pipeline de middlewares via le registry
-        # L'ordre compte : Tracing → RateLimit → Permissions → Retry → Final
+        # ── 1. Pipeline initialisée AVANT load_all ─────────────
         mw_context = {
             "tracer": self._tracer,
             "metrics": self._metrics,
@@ -133,9 +105,34 @@ class PluginSupervisor:
             final_handler=self._dispatch,
         )
 
+        # ── 2. KernelHandler enregistré AVANT load_all ─────────
+        from ..sandbox.limits import RateLimitConfig
+        from .kernel_handler import KernelHandler
+
+        self._loader._handlers["xcore"] = KernelHandler(self._ctx, self)
+        self._permissions.grant_all("xcore")
+        self._rate.register("xcore", RateLimitConfig(calls=10_000, period_seconds=60))
+
+        # ── 3. Chargement des plugins (peuvent appeler xcore.*) ─
+        report = await self._loader.load_all()
+
+        # ── 4. Enregistrement services noyau (inchangé) ─────────
+        if self._registry:
+            for name, svc in self._services.as_dict().items():
+                try:
+                    self._registry.register_core_service(name, svc)
+                except Exception as e:
+                    logger.warning(f"Service noyau '{name}': {e}")
+
+        logger.info(
+            f"Boot plugins — chargés: {len(report['loaded'])}, "
+            f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
+        )
+
         if self._events:
             await self._events.emit("xcore.plugins.booted", {"report": report})
-        return report
+
+        return self
 
     def _register_rate_limits(self, plugin_names: list[str]) -> None:
         """Enregistre les rate limits de chaque plugin dans le RateLimiterRegistry."""

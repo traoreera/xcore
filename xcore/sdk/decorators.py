@@ -27,7 +27,7 @@ import inspect
 import logging
 from typing import Callable, Literal, Type
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, create_model
 
 from ..kernel.api.contract import error
 
@@ -81,42 +81,47 @@ def require_service(*service_names: str):
 
 
 def validate_payload(
-    schema: Type[BaseModel],
-    type_response: Literal["dict", "BaseModel"] = "BaseModel",
+    schema: Type[BaseModel] | dict,
+    type_response: Literal["dict", "model"] = "dict",
     unset: bool = True,
 ):
     """
-    Valide un payload via un modèle Pydantic.
-    Retourne {"status": "error"} si la validation échoue.
-
-    Usage:
-        ```python
-        class CreateUserModel(BaseModel):
-            name: str
-            age: int
-
-        @validate_payload(CreateUserModel)
-        async def create_user(self, payload: dict) -> dict:
-            ...
-        ```
+    schema:
+      - classe Pydantic
+      - dict dynamique
     """
 
-    def decorator(fn: Callable) -> Callable:
-        @functools.wraps(fn)
-        async def warpper(self, payload: dict, *args, **kwargs):
+    if isinstance(schema, dict):
+        Model = create_model("DynamicSchema", **schema)
+
+    elif isinstance(schema, type) and issubclass(schema, BaseModel):
+        Model = schema
+
+    else:
+        raise TypeError("schema must be dict or BaseModel class")
+
+    def decorator(f: Callable):
+        @functools.wraps(f)
+        async def wrapper(self, payload: dict, *args, **kwargs):
             try:
-                validate = schema(**payload)
+                validated = Model(**payload)
+
             except ValidationError as e:
-                return error(e.errors(), "validation_error")
-            return (
-                await fn(self, validate, *args, **kwargs)
-                if type_response == "pydantic"
-                else await fn(
-                    self, validate.model_dump(exclude_unset=unset), *args, **kwargs
+                return error(
+                    "Validation error",
+                    "validation_error",
+                    errors=e.errors(),
                 )
+
+            data = (
+                validated
+                if type_response == "model"
+                else validated.model_dump(exclude_unset=unset)
             )
 
-        return warpper
+            return await f(self, data, *args, **kwargs)
+
+        return wrapper
 
     return decorator
 
@@ -236,8 +241,7 @@ class RoutedPlugin:
                     )
 
                 sig = inspect.signature(fn)
-                params = [p for name, p in sig.parameters.items()
-                          if name != "self"]
+                params = [p for name, p in sig.parameters.items() if name != "self"]
                 handler.__signature__ = sig.replace(parameters=params)
                 return handler
 
