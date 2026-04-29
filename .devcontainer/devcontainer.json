@@ -30,14 +30,6 @@
             }
         }
     },
-    "features": {
-        "ghcr.io/devcontainers/features/postgres:1": {
-            "version": "15"
-        },
-        "ghcr.io/devcontainers/features/redis:1": {
-            "version": "latest"
-        }
-    },
     "forwardPorts": [
         8000
     ],

@@ -1,6 +1,6 @@
 project:
   name: XCore
-  repo_path: /home/eliezer/devs/xcore/xcore
+  repo_path: ./xcore
   docs_dir: IAdocs # remplace output_file — la doc est maintenant un dossier
 
 cache:
