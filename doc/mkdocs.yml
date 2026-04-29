@@ -1,8 +1,5 @@
-# mkdocs.yml
-# Configuration for MkDocs documentation
-
 site_name: XCore Framework
-site_description: Production-grade plugin-first Python framework
+site_description: Plugin-first orchestration framework built on FastAPI
 site_author: XCore Team
 site_url: https://xcore.readthedocs.io
 
@@ -12,7 +9,6 @@ site_dir: ../docs
 theme:
   name: material
   palette:
-    # Light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: indigo
@@ -20,7 +16,6 @@ theme:
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    # Dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
@@ -60,7 +55,11 @@ plugins:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -76,36 +75,37 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
+  - Accueil: index.md
   - Getting Started:
-    - getting-started/installation.md
-    - getting-started/quickstart.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
   - Guides:
-    - guides/creating-plugins.md
-    - guides/creating-services.md
-    - guides/services.md
-    - guides/events.md
-    - guides/security.md
-    - guides/monitoring.md
-    - guides/scaling.md
-    - guides/troubleshooting.md
+    - Créer un Plugin: guides/creating-plugins.md
+    - Services (DB, Cache, Scheduler): guides/services.md
+    - Événements & Hooks: guides/events.md
+    - Sécurité: guides/security.md
+    - Monitoring: guides/monitoring.md
+    - Scalabilité: guides/scaling.md
+    - Troubleshooting: guides/troubleshooting.md
   - Reference:
-    - reference/sdk.md
-    - reference/configuration.md
-    - reference/api.md
+    - SDK: reference/sdk.md
+    - Configuration: reference/configuration.md
+    - CLI: reference/cli.md
+    - API: reference/api.md
+    - Benchmarks: reference/benchmarks.md
   - Architecture:
-    - architecture/overview.md
+    - Vue d'ensemble: architecture/overview.md
+    - Décisions: architecture/decisions.md
   - Deployment:
-    - deployment/guide.md
+    - Guide: deployment/guide.md
   - Development:
-    - development/testing.md
-    - development/contributing.md
-  - Examples:
-    - examples/basic-plugin.md
-    - examples/complete-plugin.md
-    - examples/trusted-plugin.md
-    - examples/sandboxed-plugin.md
-  - About:
-    - versions.md
+    - Tests: development/testing.md
+    - Contribuer: development/contributing.md
+  - Exemples:
+    - Plugin basique: examples/basic-plugin.md
+    - Plugin complet: examples/complete-plugin.md
+    - Plugin Trusted: examples/trusted-plugin.md
+    - Plugin Sandboxed: examples/sandboxed-plugin.md
+  - Changelog: versions.md
 
-copyright: Copyright &copy; 2023 XCore Team
+copyright: Copyright &copy; 2026 XCore Team
