@@ -1,167 +1,225 @@
-# Utilisation des Services XCore
+# Services
 
-Les services XCore fournissent une infrastructure technique partagée (Base de données, Cache, Planificateur de tâches) disponible pour tous les plugins.
+XCore expose trois services partagés via le `ServiceContainer` : **Base de données**, **Cache** et **Scheduler**. Tous sont accessibles depuis `self.get_service(name)` dans un plugin `TrustedBase`.
 
-## 1. Accès aux Services
+---
 
-Chaque plugin accède aux services via l'objet `ServiceContainer`. Le SDK offre deux méthodes principales :
+## Service Container
 
 ```python
-from xcore.sdk import TrustedBase
+# Accès typé depuis un plugin
+self.db        = self.get_service("db")        # → AsyncSQLAdapter
+self.cache     = self.get_service("cache")     # → CacheService
+self.scheduler = self.get_service("scheduler") # → SchedulerService
 
-class Plugin(TrustedBase):
-    async def on_load(self):
-        # 1. Récupération directe (typage automatique par IDE)
-        self.db = self.get_service("db")
-        self.cache = self.get_service("cache")
-
-        # 2. Récupération typée (pour connexions nommées ou extensions)
-        # from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
-        # self.analytics = self.get_service_as("analytics", AsyncSQLAdapter)
+# Connexion nommée avec type explicite
+from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
+self.analytics = self.get_service_as("analytics", AsyncSQLAdapter)
 ```
 
 ---
 
-## 2. Service de Base de Données (`db`)
+## Base de données
 
-XCore utilise **SQLAlchemy** (ou des adaptateurs spécifiques) pour gérer les connexions SQL (PostgreSQL, MySQL, SQLite).
+### Configuration `xcore.yaml`
 
-### Repository SQL : `BaseSyncRepository` / `BaseAsyncRepository`
+```yaml
+services:
+  databases:
+    # Connexion principale (accessible via self.get_service("db"))
+    db:
+      type: sqlasync          # sqlasync | sql | redis | mongodb
+      url: postgresql+asyncpg://user:pass@localhost/mydb
+      pool_size: 5
+      max_overflow: 10
+      echo: false
 
-Le SDK simplifie l'accès aux données avec le pattern Repository.
+    # Connexion secondaire (accessible via self.get_service("analytics"))
+    analytics:
+      type: sqlasync
+      url: postgresql+asyncpg://user:pass@analytics-host/metrics
+
+    # Redis comme base de données (clé/valeur)
+    redis_db:
+      type: redis
+      url: redis://localhost:6379/0
+      max_connections: 50
+```
+
+Types supportés :
+
+| `type` | Adaptateur | Usage |
+|:-------|:-----------|:------|
+| `sqlasync` | `AsyncSQLAdapter` | PostgreSQL, MySQL, SQLite (async) |
+| `sql` | `SQLAdapter` | SQLAlchemy synchrone |
+| `redis` | `RedisAdapter` | Redis key/value |
+| `mongodb` | `MongoDBAdapter` | MongoDB |
+
+### Utilisation (SQLAlchemy async)
 
 ```python
-from xcore.sdk import BaseAsyncRepository
-from sqlalchemy import Column, String, Integer
-from sqlalchemy.orm import declarative_base
+async def on_load(self):
+    self.db = self.get_service("db")
 
-Base = declarative_base()
+@action("get_users")
+async def get_users(self, payload: dict) -> dict:
+    async with self.db.session() as session:
+        from sqlalchemy import select
+        result = await session.execute(select(User))
+        users = result.scalars().all()
+    return ok(users=[u.to_dict() for u in users])
+```
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
+### Migrations Alembic
 
-class UserRepository(BaseAsyncRepository[User]):
-    """Repository personnalisé pour les utilisateurs."""
+XCore intègre Alembic pour les migrations. Configurer `alembic.ini` normalement, le `DATABASE_URL` peut être surchargé via `XCORE__SERVICES__DATABASES__DB__URL`.
+
+---
+
+## Cache
+
+### Configuration
+
+```yaml
+services:
+  cache:
+    backend: memory       # memory | redis
+    ttl: 300              # TTL par défaut en secondes
+    max_size: 1000        # Taille max (memory uniquement)
+    url: redis://localhost:6379/0   # Requis si backend=redis
+```
+
+### API
+
+```python
+async def on_load(self):
+    self.cache = self.get_service("cache")
+
+@action("get_profile")
+async def get_profile(self, payload: dict) -> dict:
+    key = f"profile:{payload['user_id']}"
+
+    # Lecture
+    cached = await self.cache.get(key)
+    if cached:
+        return ok(profile=cached, from_cache=True)
+
+    # Écriture avec TTL custom
+    profile = await self._fetch_profile(payload["user_id"])
+    await self.cache.set(key, profile, ttl=600)
+    return ok(profile=profile)
+
+@action("invalidate")
+async def invalidate(self, payload: dict) -> dict:
+    await self.cache.delete(f"profile:{payload['user_id']}")
+    return ok()
+
+@action("batch_prime")
+async def batch_prime(self, payload: dict) -> dict:
+    # Opérations batch — toujours préférer mset/mget (44-77x plus rapide sur Redis)
+    data = {"key:1": "val1", "key:2": "val2", "key:3": "val3"}
+    await self.cache.mset(data)
+
+    values = await self.cache.mget(list(data.keys()))
+    return ok(values=values)
+```
+
+API complète :
+
+| Méthode | Description |
+|:--------|:------------|
+| `get(key)` | Lit une valeur |
+| `set(key, value, ttl=None)` | Écrit une valeur |
+| `delete(key)` | Supprime une clé |
+| `clear()` | Vide le cache entier |
+| `mget(keys)` | Lit plusieurs clés en une opération |
+| `mset(mapping)` | Écrit plusieurs clés en une opération |
+
+> **Performance** : avec Redis (réseau ~2 ms), `mset`/`mget` sur 100 clés est **44–77× plus rapide** que les appels séquentiels. Voir [Benchmarks](../reference/benchmarks.md).
+
+---
+
+## Scheduler
+
+### Configuration
+
+```yaml
+services:
+  scheduler:
+    enabled: true
+    backend: memory       # memory | redis | database
+    timezone: Europe/Paris
+
+    # Jobs statiques (optionnel — les plugins peuvent en ajouter dynamiquement)
+    jobs:
+      - id: cleanup
+        func: myapp.tasks:cleanup
+        trigger: cron
+        hour: 3
+        minute: 0
+```
+
+Backends :
+
+| Backend | Persistance | Usage |
+|:--------|:------------|:------|
+| `memory` | Non — perdu au redémarrage | Développement |
+| `redis` | Oui — via Redis | Production |
+| `database` | Oui — via SQLAlchemy | Production sans Redis |
+
+### Utilisation depuis un plugin
+
+```python
+async def on_load(self):
+    self.scheduler = self.get_service("scheduler")
+
+    # Cron : tous les jours à 3h
+    @self.scheduler.cron("0 3 * * *")
+    async def nightly_cleanup():
+        await self._cleanup()
+
+    # Interval
+    self.scheduler.add_job(
+        self._sync_data,
+        trigger="interval",
+        minutes=5,
+        id="sync_data",
+        replace_existing=True,
+    )
+
+    # One-shot (date précise)
+    from datetime import datetime, timedelta
+    self.scheduler.add_job(
+        self._send_reminder,
+        trigger="date",
+        run_date=datetime.now() + timedelta(hours=1),
+        id="reminder_once",
+    )
+
+async def _sync_data(self):
+    # Exécuté toutes les 5 minutes
     pass
-
-# --- Dans votre plugin ---
-class UserPlugin(TrustedBase):
-    async def on_load(self):
-        self.db = self.get_service("db")
-        self.users = UserRepository(User)
-
-    async def create_user(self, name: str):
-        # Utilisation d'une session asynchrone
-        async with self.db.session() as session:
-            new_user = User(name=name)
-            await self.users.create(session, new_user)
-            await session.commit()
-            return new_user.id
 ```
 
 ---
 
-## 3. Service de Cache (`cache`)
+## Extensions (services custom)
 
-Le service de cache supporte le stockage en **Mémoire** ou **Redis**.
+Pour enregistrer un service tiers dans le conteneur :
+
+```yaml
+services:
+  extensions:
+    stripe:
+      api_key: "${STRIPE_KEY}"
+      webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
+```
 
 ```python
-# Accès au service de cache
-cache = self.get_service("cache")
-
-# --- Opérations de base ---
-# Stocker une valeur pendant 5 minutes (300s)
-await cache.set("user_123:profile", {"name": "Alice"}, ttl=300)
-
-# Récupérer une valeur
-profile = await cache.get("user_123:profile")
-
-# Supprimer une valeur
-await cache.delete("user_123:profile")
-
-# --- Opérations groupées (Optimisées Redis) ---
-await cache.mset({"k1": "v1", "k2": "v2"})
-values = await cache.mget(["k1", "k2"])
+# Dans un plugin "stripe_plugin"
+async def on_load(self):
+    cfg = self.ctx.config.services.extensions.get("stripe", {})
+    self._client = StripeClient(api_key=cfg["api_key"])
+    # Enregistrer dans le container pour les autres plugins
+    self.ctx.services.register("stripe", self._client)
 ```
-
----
-
-## 4. Service de Planification (`scheduler`)
-
-XCore intègre **APScheduler** pour exécuter des tâches en arrière-plan ou de manière périodique.
-
-```python
-# Accès au planificateur
-scheduler = self.get_service("scheduler")
-
-# --- Planifier une tâche ---
-# Tâche immédiate (Background Job)
-await scheduler.add_job(
-    self.process_data,
-    args=[data_id],
-    id=f"process_{data_id}"
-)
-
-# Tâche planifiée (Cron)
-await scheduler.add_cron_job(
-    self.daily_report,
-    hour=0,
-    minute=0,
-    id="daily_cleanup"
-)
-
-# Tâche par intervalle
-await scheduler.add_interval_job(
-    self.heartbeat,
-    seconds=60,
-    id="ping_external_api"
-)
-```
-
----
-
-## 5. Propagation des Services
-
-La propagation des services permet à un plugin d'exposer des fonctionnalités à d'autres plugins de manière structurée.
-
-### Cycle de Propagation
-1. Un plugin fournisseur enregistre son service dans `on_load`.
-2. Le `LifecycleManager` détecte l'enregistrement et met à jour le `ServiceContainer` global.
-3. Les plugins dépendants (déclarés dans `requires`) peuvent alors accéder au nouveau service.
-
-```python
-# Plugin Fournisseur (ex: billing)
-class BillingPlugin(TrustedBase):
-    async def on_load(self):
-        self.register_service("billing_engine", self.engine)
-
-# Plugin Consommateur
-class CartPlugin(TrustedBase):
-    async def on_load(self):
-        # Disponible car 'billing' est une dépendance requise
-        self.billing = self.get_service("billing_engine")
-```
-
----
-
-## 6. Surveillance de la Santé (Health Checks)
-
-Chaque service intégré implémente une méthode de santé. Vous pouvez consulter l'état de tous les services via :
-
-```bash
-# Via la CLI
-xcore services status
-
-# Via l'API HTTP
-curl http://localhost:8082/plugin/ipc/health
-```
-
----
-
-## Bonnes Pratiques
-
-1. **Lazy Initialization** : Si votre service consomme beaucoup de ressources, n'établissez la connexion réelle que lors du premier appel.
-2. **Gestion des Timeouts** : Utilisez toujours des timeouts lors des appels aux services externes (DB, Redis) pour ne pas bloquer le framework.
-3. **Namespacing des Clés** : Préfixez toujours vos clés de cache et IDs de jobs par le nom de votre plugin (ex: `auth:token:123`) pour éviter les collisions.

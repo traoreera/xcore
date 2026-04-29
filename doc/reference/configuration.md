@@ -1,110 +1,183 @@
-# Configuration XCore (`xcore.yaml`)
+# Configuration (`xcore.yaml`)
 
-Le fichier `xcore.yaml` est le cerveau du framework. Il centralise toutes les configurations de l'application, des services et des plugins.
+Le fichier `xcore.yaml` centralise toute la configuration du framework.
 
 ---
 
-## 1. Structure Globale
+## Structure complète
 
 ```yaml
+# ── Application ──────────────────────────────────────────────
 app:
-  name: "mon-app-xcore"
-  env: "development" # development | staging | production
+  name: "mon-app"
+  env: development          # development | staging | production
   debug: false
-  secret_key: "change-me-in-production"
-  plugin_prefix: "/plugin" # Préfixe racine des routes HTTP
-  plugin_tags: ["XCore"] # Tags OpenAPI globaux
+  secret_key: "${APP_SECRET_KEY}"   # clé JWT / sessions
+  plugin_prefix: "/plugin"          # préfixe des routes HTTP plugins
+  plugin_tags: []                   # tags OpenAPI globaux
+  server_key: "${SERVER_KEY}"       # clé HMAC pour l'API interne
+  server_key_iterations: 100000
 
+# ── Plugins ──────────────────────────────────────────────────
 plugins:
-  directory: "./plugins" # Répertoire de stockage des plugins
-  secret_key: "change-me-in-production"
-  strict_trusted: true # Refuse les plugins non signés en production
-  interval: 2 # Intervalle du watcher en secondes
-  entry_point: "src/main.py" # Point d'entrée par défaut
+  directory: ./plugins
+  secret_key: "${PLUGIN_SECRET_KEY}"
+  strict_trusted: true      # true = refus des plugins non signés
+  interval: 2               # watcher hot-reload (secondes, 0 = désactivé)
+  entry_point: src/main.py
 
+  # Fichiers ignorés par le watcher
+  snapshot:
+    extensions: [".log", ".pyc", ".html", ".map"]
+    filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
+    hidden: true
+
+# ── Services ─────────────────────────────────────────────────
 services:
-  # Configuration des bases de données SQL/NoSQL
+  # Bases de données (plusieurs connexions possibles)
   databases:
-    default:
-      type: "sqlite" # sqlite | postgresql | mysql
-      url: "sqlite:///./xcore.db"
+    db:                           # accessible via self.get_service("db")
+      type: sqlasync              # sqlasync | sql | redis | mongodb
+      url: "${DATABASE_URL}"
       pool_size: 5
       max_overflow: 10
       echo: false
 
-  # Configuration du cache (Mémoire ou Redis)
-  cache:
-    backend: "memory" # memory | redis
-    ttl: 300
-    max_size: 1000
-    url: "redis://localhost:6379/0" # Requis si backend=redis
+    analytics:                    # accessible via self.get_service("analytics")
+      type: sqlasync
+      url: "${ANALYTICS_DB_URL}"
 
-  # Configuration du planificateur de tâches
+    redis_db:                     # accessible via self.get_service("redis_db")
+      type: redis
+      url: "${REDIS_URL}"
+      max_connections: 50
+
+  # Cache
+  cache:
+    backend: redis                # memory | redis
+    url: "${REDIS_URL}"
+    ttl: 300
+    max_size: 10000               # ignoré en mode redis
+
+  # Scheduler
   scheduler:
     enabled: true
-    backend: "memory" # memory | redis | database
-    timezone: "UTC"
+    backend: redis                # memory | redis | database
+    timezone: Europe/Paris
 
-  # Extensions (Services personnalisés tiers)
+    # Jobs statiques (optionnel)
+    jobs:
+      - id: cleanup
+        func: myapp.tasks:cleanup
+        trigger: cron
+        hour: 3
+        minute: 0
+
+  # Extensions (services custom)
   extensions:
-    mon_service_custom:
-      api_key: "${CUSTOM_API_KEY}"
-      timeout: 30
+    stripe:
+      api_key: "${STRIPE_KEY}"
 
+# ── Observabilité ─────────────────────────────────────────────
 observability:
   logging:
-    level: "INFO" # DEBUG, INFO, WARNING, ERROR
+    level: INFO                   # DEBUG | INFO | WARNING | ERROR
     format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    file: "logs/xcore.log"
+    file: log/app.log
+    max_bytes: 10485760           # 10 MB
+    backup_count: 5
 
   metrics:
-    enabled: false
-    backend: "memory" # memory | prometheus | statsd
-    prefix: "xcore"
+    enabled: true
+    backend: memory               # memory | prometheus | statsd
+    prefix: xcore
 
   tracing:
     enabled: false
-    backend: "noop" # noop | opentelemetry | jaeger
-    service_name: "xcore"
+    backend: noop                 # noop | opentelemetry | jaeger
+    service_name: xcore
+    endpoint: null
 
+# ── Sécurité ─────────────────────────────────────────────────
 security:
-  allowed_imports: ["math", "json", "time"] # Imports autorisés en sandbox
-  forbidden_imports: ["os", "sys", "subprocess"] # Imports bloqués par l'AST
-  rate_limit_default:
-    calls: 100
-    period_seconds: 60
+  # (Réservé — extension future pour Vault, rotation de clés, etc.)
 
+# ── Marketplace ───────────────────────────────────────────────
 marketplace:
-  url: "https://marketplace.xcore.dev"
-  api_key: ""
-  timeout: 10
-  cache_ttl: 300
+  url: "https://marketplace.xcore.io"
+  api_key: "${MARKETPLACE_KEY}"
 ```
 
 ---
 
-## 2. Variables d'Environnement (Interpolation)
+## Types de bases de données
 
-XCore supporte l'injection de variables d'environnement directement dans le fichier YAML via la syntaxe `${VAR_NAME}`.
+| `type` | Driver | Usage |
+|:-------|:-------|:------|
+| `sqlasync` | SQLAlchemy + asyncpg / aiosqlite | PostgreSQL, MySQL, SQLite async |
+| `sql` | SQLAlchemy synchrone | SQLAlchemy sync |
+| `redis` | redis-py asyncio | Redis key/value |
+| `mongodb` | Motor (async) | MongoDB |
+
+---
+
+## Résolution des valeurs
+
+### Substitution `${VAR}`
+
+Toute valeur au format `${NOM_VAR}` est substituée depuis l'environnement OS ou le `.env` configuré.
 
 ```yaml
 app:
-  secret_key: "${APP_SECRET_KEY}"
+  secret_key: "${APP_SECRET_KEY}"   # résolu depuis os.environ
 ```
 
-### Surcharge par variables d'environnement
+### Surcharge via variables d'environnement
 
-Toutes les clés du fichier YAML peuvent être surchargées via des variables d'environnement préfixées par `XCORE__` (double soulignement pour les niveaux d'imbrication).
+Format : `XCORE__<SECTION>__<CLE>=valeur`
 
-- `XCORE__APP__ENV=production` surcharge `app.env`.
-- `XCORE__SERVICES__CACHE__BACKEND=redis` surcharge `services.cache.backend`.
+```bash
+XCORE__APP__DEBUG=true
+XCORE__APP__ENV=production
+XCORE__SERVICES__CACHE__BACKEND=redis
+XCORE__SERVICES__CACHE__URL=redis://prod-redis:6379/0
+XCORE__PLUGINS__STRICT_TRUSTED=true
+```
+
+Priorité : **variables d'environnement > xcore.yaml > valeurs par défaut**
+
+### Chargement d'un `.env`
+
+```yaml
+app:
+  dotenv: "./.env"    # chemin relatif au projet
+```
 
 ---
 
-## 3. Valeurs par Défaut
+## Valeurs par défaut
 
-XCore est conçu pour fonctionner sans configuration (Zéro-Config) en utilisant des valeurs par défaut sécurisées :
-- **DB** : SQLite locale (`./xcore.db`).
-- **Cache** : En mémoire (`memory`).
-- **Logs** : Niveau `INFO` vers la sortie standard.
-- **Plugins** : Dossier `./plugins`.
+Tous les champs ont des valeurs par défaut : un `xcore.yaml` vide (ou absent) ne provoque pas d'erreur, XCore démarre en mode minimal (SQLite en mémoire, cache memory, scheduler désactivé).
+
+---
+
+## Fichiers alternatifs
+
+Le `ConfigLoader` cherche dans cet ordre si aucun chemin n'est spécifié :
+
+1. `integation.yaml`
+2. `integation.yml`
+3. `integation.json`
+4. `config/integation.yaml`
+
+Pour spécifier un chemin custom :
+
+```python
+xcore = Xcore(config_path="config/prod.yaml")
+```
+
+ou via CLI :
+
+```bash
+poetry run xcore --config config/prod.yaml plugin list
+```
