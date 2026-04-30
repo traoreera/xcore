@@ -192,21 +192,37 @@ class FilesystemGuard:
         # ── Couche 1 : Filesystem ─────────────────────────────────────────────
 
         def _guarded_op(func, label):
-            sig = inspect.signature(func)
-            pnames = {"path", "file", "src", "dst", "target", "name", "self"}
+            try:
+                sig = inspect.signature(func)
+                pnames = {"path", "file", "src", "dst", "target", "name", "self"}
+            except (ValueError, TypeError):
+                # Builtin C sans signature introspectable (ex: os.chmod, os.stat…)
+                # Fallback : on considère le 1er argument positionnel comme le chemin
+                sig = None
+                pnames = None
 
             def wrapper(*args, **kwargs):
                 if guard._in_guard:
                     return func(*args, **kwargs)
-                try:
-                    bound = sig.bind_partial(*args, **kwargs).arguments
-                    paths = [
-                        v
-                        for k, v in bound.items()
-                        if k in pnames and isinstance(v, (str, os.PathLike))
-                    ]
-                except Exception:
-                    paths = []
+
+                if sig is not None:
+                    try:
+                        bound = sig.bind_partial(*args, **kwargs).arguments
+                        paths = [
+                            v
+                            for k, v in bound.items()
+                            if k in pnames and isinstance(v, (str, os.PathLike))
+                        ]
+                    except Exception:
+                        paths = []
+                else:
+                    # Fallback builtin : 1er arg positionnel = le chemin
+                    paths = (
+                        [args[0]]
+                        if args and isinstance(args[0], (str, os.PathLike))
+                        else []
+                    )
+
                 guard._in_guard = True
                 try:
                     for p in paths:
@@ -576,6 +592,7 @@ class _PluginManifest:
     entry_point: str = "src/main.py"
     allowed_paths: list = field(default_factory=lambda: ["data/"])
     denied_paths: list = field(default_factory=lambda: ["src/"])
+    configuration: dict = field(default_factory=dict)
 
 
 def _load_manifest(plugin_dir: Path) -> _PluginManifest:
@@ -594,7 +611,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
     return manifest
 
 
-def _extracted_from__load_manifest_20(fname, manifest_path, manifest):
+def _extracted_from__load_manifest_20(fname, manifest_path, manifest: _PluginManifest):
     if fname.endswith(".yaml"):
         import yaml
 
@@ -614,6 +631,9 @@ def _extracted_from__load_manifest_20(fname, manifest_path, manifest):
         manifest.allowed_paths = ap
     if dp := fs.get("denied_paths"):
         manifest.denied_paths = dp
+
+    if cp := raw.get("configuration", {}):
+        manifest.configuration = cp
 
     logger.debug(
         f"Manifeste chargé : entry_point={manifest.entry_point!r}, "
@@ -657,6 +677,7 @@ async def _run(plugin_dir: Path) -> None:
     finally:
         guard._in_guard = False  # à partir d'ici : code plugin, restrictions actives
 
+    plugin._config = manifest.configuration
     if hasattr(plugin, "on_load"):
         await plugin.on_load()
 

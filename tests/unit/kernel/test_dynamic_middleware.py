@@ -2,7 +2,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from xcore.kernel.runtime.loader import PluginLoader
 from xcore.kernel.runtime.supervisor import Middleware, PluginSupervisor
 
 

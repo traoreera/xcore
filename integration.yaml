@@ -18,7 +18,7 @@ plugins:
   secret_key: "12345"
 
   # true = refuse tout plugin Trusted non signé
-  strict_trusted: true
+  strict_trusted: false
 
   # Intervalle du watcher de rechargement à chaud (secondes)
   # Mettre à 0 pour désactiver en prod si tu gères les reloads via API

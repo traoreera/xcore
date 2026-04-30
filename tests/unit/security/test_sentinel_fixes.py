@@ -1,5 +1,3 @@
-import pytest
-
 from xcore.kernel.security.validation import ASTScanner
 
 

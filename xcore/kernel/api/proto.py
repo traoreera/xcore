@@ -63,7 +63,8 @@ class HealthChecker(Protocol):
         ...
 
 
-class PluginRegistry(Protocol): ...
+class PluginRegistry(Protocol):
+    """Registry for plugins."""
 
 
 @dataclass

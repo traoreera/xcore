@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .section import Event, HookInfo, HookResult, InterceptorResult
+from .section import Event, HookInfo, HookResult
 
 logger = logging.getLogger("xcore.events.hooks")
 

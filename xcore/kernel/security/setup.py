@@ -9,7 +9,6 @@ L'extension est placée à côté de validation.py pour que l'import
 `from .scanner_core import ImportClassifier` fonctionne directement.
 """
 
-import setuptools
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 

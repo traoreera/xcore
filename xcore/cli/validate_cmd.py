@@ -37,8 +37,9 @@ def validate_full(
     try:
         validator = ManifestValidator()
         manifest = validator.load_and_validate(path)
-        print(
-            f"✅  Manifeste   : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+        console.print(
+            f"✅  Manifeste   : {manifest.name} v{manifest.version} "
+            f"[{manifest.execution_mode.value}]"
         )
     except Exception as e:
         print(f"❌  Manifeste   : {e}", file=sys.stderr)
@@ -52,7 +53,7 @@ def validate_full(
     if result.passed:
         print(f"✅  Scan AST    : {len(result.scanned)} fichier(s) analysé(s)")
     else:
-        print(f"❌  Scan AST    :")
+        print("❌  Scan AST    :")
         for err in result.errors:
             print(f"     {err}", file=sys.stderr)
         ok = False
@@ -65,7 +66,7 @@ def validate_full(
 
         try:
             verify_plugin(manifest, secret_key)
-            print(f"✅  Signature   : valide")
+            print("✅  Signature   : valide")
         except SignatureError as e:
             if strict:
                 print(f"❌  Signature   : {e}", file=sys.stderr)

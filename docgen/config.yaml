@@ -10,7 +10,7 @@ cache:
 model:
   base_url: http://localhost:11434/v1
   api_key: lm-studio
-  model_name: qwen2.5-coder:1.5b-instruct
+  model_name: aleshribar3/deepseek-r1-tool-calling:1.5b
   temperature: 0.1
 
 generation:

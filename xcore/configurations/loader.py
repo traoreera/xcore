@@ -46,10 +46,10 @@ class ConfigLoader:
     """
 
     DEFAULT_PATHS = [
-        Path("integation.yaml"),
-        Path("integation.yml"),
-        Path("integation.json"),
-        Path("config/integation.yaml"),
+        Path("integration.yaml"),
+        Path("integration.json"),
+        Path("config/integration.json"),
+        Path("config/integration.yaml"),
     ]
 
     @classmethod

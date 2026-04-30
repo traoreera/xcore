@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from xcore.kernel.events.hooks import HookError, HookManager, HookTimeoutError
+from xcore.kernel.events.hooks import HookManager
 from xcore.kernel.events.section import Event
 
 

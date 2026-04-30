@@ -77,8 +77,10 @@ async def _sandbox_run(args) -> None:
     )
 
     info = [
-        f"[bold cyan]Mémoire max :[/][magenta] {manifest.resources.max_memory_mb}MB[/]",
-        f"[bold cyan]Timeout     :[/][magenta] {manifest.resources.timeout_seconds}s[/]",
+        f"[bold cyan]Mémoire max :[/][magenta] "
+        f"{manifest.resources.max_memory_mb}MB[/]",
+        f"[bold cyan]Timeout     :[/][magenta] "
+        f"{manifest.resources.timeout_seconds}s[/]",
     ]
     title = f"[bold green]🚀 Lancement sandbox : {escape(name)}[/]"
     console.print(Panel(Group(*info), title=title, expand=False, border_style="cyan"))
@@ -98,23 +100,21 @@ async def _sandbox_run(args) -> None:
             status = mgr.status()
 
             # Ping de confirmation
-            from xcore.kernel.sandbox.ipc import IPCChannel
-
             resp = await mgr._channel.call("ping", {})
 
         if resp.success:
-            console.print(f"✅ [bold green]Sandbox opérationnelle[/]")
+            console.print("✅ [bold green]Sandbox opérationnelle[/]")
         else:
-            console.print(
-                f"⚠️  [yellow]Sandbox démarrée mais ping échoué : {escape(str(resp.data))}[/]"
-            )
+            msg = escape(str(resp.data))
+            console.print(f"⚠️  [yellow]Sandbox démarrée mais ping échoué : {msg}[/]")
 
         table = Table(box=None, show_header=False, padding=(0, 2))
         table.add_row("[bold cyan]PID   :[/]", f"[magenta]{status['pid']}[/]")
         table.add_row("[bold cyan]État  :[/]", f"[yellow]{status['state']}[/]")
         table.add_row(
             "[bold cyan]Disque:[/]",
-            f"[magenta]{status['disk']['used_mb']}MB / {status['disk']['max_mb']}MB[/]",
+            f"[magenta]{status['disk']['used_mb']}MB / "
+            f"{status['disk']['max_mb']}MB[/]",
         )
         console.print(table)
 
@@ -153,12 +153,14 @@ async def _sandbox_limits(args) -> None:
     rt = manifest.runtime
 
     info = [
-        f"[bold cyan]Mémoire max      :[/][magenta] {r.max_memory_mb} MB[/]",
-        f"[bold cyan]Disque max       :[/][magenta] {r.max_disk_mb} MB[/]",
-        f"[bold cyan]Timeout appel    :[/][magenta] {r.timeout_seconds} s[/]",
-        f"[bold cyan]Rate limit       :[/][magenta] {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s[/]",
+        f"[bold cyan]Mémoire max      :[/][magenta] " f"{r.max_memory_mb} MB[/]",
+        f"[bold cyan]Disque max       :[/][magenta] " f"{r.max_disk_mb} MB[/]",
+        f"[bold cyan]Timeout appel    :[/][magenta] " f"{r.timeout_seconds} s[/]",
+        f"[bold cyan]Rate limit       :[/][magenta] "
+        f"{r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s[/]",
         "\n[bold white]Runtime :[/]",
-        f"  [cyan]Health check     :[/][yellow] {'activé' if rt.health_check.enabled else 'désactivé'}[/]",
+        f"  [cyan]Health check     :[/][yellow] "
+        f"{'activé' if rt.health_check.enabled else 'désactivé'}[/]",
     ]
 
     if rt.health_check.enabled:
@@ -181,7 +183,9 @@ async def _sandbox_limits(args) -> None:
         symbol = "✅" if stats["ok"] else "❌"
         info.append("\n[bold white]État actuel :[/]")
         info.append(
-            f"  [cyan]Disque utilisé   :[/][magenta] {stats['used_mb']}MB / {stats['max_mb']}MB ({stats['used_pct']}%) {symbol}[/]"
+            f"  [cyan]Disque utilisé   :[/][magenta] "
+            f"{stats['used_mb']}MB / {stats['max_mb']}MB "
+            f"({stats['used_pct']}%) {symbol}[/]"
         )
 
     content = Group(*info)
@@ -301,7 +305,9 @@ async def _sandbox_fs(args) -> None:
         for p in fs.allowed_paths:
             abs_path = plugin_dir / p
             status = (
-                "[green]✅ existe[/]" if abs_path.exists() else "[yellow]⚠️  manquant[/]"
+                "[green]✅ existe[/]"
+                if abs_path.exists()
+                else "[yellow]⚠️  manquant[/]"
             )
             table.add_row(escape(str(p)), status)
         info.append(table)
@@ -324,8 +330,9 @@ async def _sandbox_fs(args) -> None:
     data_dir = plugin_dir / "data"
     if not data_dir.exists():
         console.print("")
+        rel_path = escape(str(data_dir.relative_to(plugin_dir.parent)))
         create = Confirm.ask(
-            f"[yellow]⚠️  Le dossier {escape(str(data_dir.relative_to(plugin_dir.parent)))} n'existe pas. Créer ?[/]",
+            f"[yellow]⚠️  Le dossier {rel_path} n'existe pas. Créer ?[/]",
             default=False,
         )
         if create:

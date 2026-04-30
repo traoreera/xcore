@@ -40,7 +40,8 @@ def aggregate_file_summaries(file_map, cfg):
         else:
             final_prompt = f"""You are writing technical documentation for a software project.
 
-The following are partial summaries of different chunks of the same source file: `{path}`.
+The following are partial summaries of different chunks of the same source file:
+`{path}`.
 Merge them into a single, unified technical summary as if the file had been read in full.
 
 Rules:

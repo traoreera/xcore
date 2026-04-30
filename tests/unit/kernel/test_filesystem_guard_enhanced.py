@@ -1,4 +1,3 @@
-import builtins
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,13 +19,10 @@ class TestFilesystemGuardEnhanced:
         return FilesystemGuard(plugin_dir, ["data/"], ["src/"])
 
     def test_os_patches(self, guard, plugin_dir):
-        # Setup the guard (normally done via install(), but we want controlled test)
-        # We need to reach into the local scope of install() to test the logic
-        # OR we just test it via a mock since the logic is now part of the class or global
-
-        # Actually _guarded_op is defined INSIDE install() in the current implementation.
-        # This makes it hard to test in isolation without running install().
-        # Let's verify if I can test it by running install() on a Mock object instead of global builtins.
+        # Setup the guard (normally done via install())
+        # Hard to test in isolation without running install().
+        # Verify if I can test it by running install() on a Mock object
+        # instead of global builtins.
 
         MagicMock()
         MagicMock()
