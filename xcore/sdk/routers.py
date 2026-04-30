@@ -1,7 +1,5 @@
 from typing import Callable
 
-from fastapi import APIRouter
-
 
 class RouterRegistry:
     """

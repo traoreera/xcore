@@ -190,13 +190,19 @@ async def _mkt_show(args) -> None:
         sys.exit(1)
 
     info = [
-        f"[bold cyan]Auteur      :[/][magenta] {escape(str(plugin.get('author', '?')))}[/]",
-        f"[bold cyan]Description :[/] {escape(str(plugin.get('description', '?')))}",
-        f"[bold cyan]Mode        :[/][yellow] {escape(str(plugin.get('execution_mode', 'legacy')))}[/]",
-        f"[bold cyan]Licence     :[/][green] {escape(str(plugin.get('license', '?')))}[/]",
-        f"[bold cyan]Note        :[/] {_stars(plugin.get('rating', 0))} ({plugin.get('rating_count', 0)} votes)",
+        f"[bold cyan]Auteur      :[/][magenta] "
+        f"{escape(str(plugin.get('author', '?')))}[/]",
+        f"[bold cyan]Description :[/] "
+        f"{escape(str(plugin.get('description', '?')))}",
+        f"[bold cyan]Mode        :[/][yellow] "
+        f"{escape(str(plugin.get('execution_mode', 'legacy')))}[/]",
+        f"[bold cyan]Licence     :[/][green] "
+        f"{escape(str(plugin.get('license', '?')))}[/]",
+        f"[bold cyan]Note        :[/] {_stars(plugin.get('rating', 0))} "
+        f"({plugin.get('rating_count', 0)} votes)",
         f"[bold cyan]Téléch.     :[/][bold] {plugin.get('downloads', 0):,}[/]",
-        f"[bold cyan]Dépôt       :[/][blue] {escape(str(plugin.get('repository', '?')))}[/]",
+        f"[bold cyan]Dépôt       :[/][blue] "
+        f"{escape(str(plugin.get('repository', '?')))}[/]",
     ]
     if plugin.get("requires"):
         info.append(
@@ -208,10 +214,18 @@ async def _mkt_show(args) -> None:
         content += "\n\n[bold white]Versions disponibles :[/]\n"
         for v in versions[:5]:
             tag = " [bold green]← latest[/]" if v.get("latest") else ""
-            content += f"  {escape(str(v.get('version', '?'))):12} {escape(str(v.get('released_at', '?')))}{tag}\n"
+            ver_str = escape(str(v.get("version", "?")))
+            rel_at = escape(str(v.get("released_at", "?")))
+            content += f"  {ver_str:12} {rel_at}{tag}\n"
 
-    content += f"\n[italic grey70]Pour installer :[/]\n  [bold]xcore plugin install {escape(name)}[/]"
-    title = f"[bold green]📦 {escape(plugin.get('name', name))} v{escape(str(plugin.get('version', '?')))}[/]"
+    content += (
+        f"\n[italic grey70]Pour installer :[/]\n"
+        f"  [bold]xcore plugin install {escape(name)}[/]"
+    )
+    title = (
+        f"[bold green]📦 {escape(plugin.get('name', name))} "
+        f"v{escape(str(plugin.get('version', '?')))}[/]"
+    )
     console.print(Panel(content, title=title, expand=False, border_style="cyan"))
 
 

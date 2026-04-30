@@ -274,8 +274,8 @@ class TestASTScanner:
 
         scanner = ASTScanner()
 
-        # Mock file read to raise exception. On Python 3.12, Path.read_text is read-only on instances.
-        # Patching it via its string path is more robust.
+        # Mock file read to raise exception. On Python 3.12, Path.read_text is
+        # read-only on instances. Patching it via its string path is more robust.
         with patch(
             "xcore.kernel.security.validation.Path.read_text",
             side_effect=IOError("Permission denied"),

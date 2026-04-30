@@ -2,7 +2,6 @@
 Tests for sandbox worker components.
 """
 
-import builtins
 import os
 import sys
 from pathlib import Path

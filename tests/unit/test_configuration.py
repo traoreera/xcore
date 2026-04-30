@@ -4,9 +4,6 @@ Tests for configuration loading and validation.
 
 import os
 
-import pytest
-import yaml
-
 from xcore.configurations.loader import ConfigLoader
 from xcore.configurations.sections import AppConfig, PluginConfig, ServicesConfig
 

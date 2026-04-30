@@ -207,9 +207,7 @@ def _make_plugin_dir(
     src_dir = plugin_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
 
-    (plugin_dir / "plugin.yaml").write_text(
-        textwrap.dedent(
-            f"""
+    (plugin_dir / "plugin.yaml").write_text(textwrap.dedent(f"""
         name: {name}
         version: 1.0.0
         execution_mode: {mode}
@@ -231,13 +229,9 @@ def _make_plugin_dir(
           rate_limit:
             calls: 100000
             period_seconds: 60
-    """
-        ).strip()
-    )
+    """).strip())
 
-    (src_dir / "main.py").write_text(
-        textwrap.dedent(
-            f"""
+    (src_dir / "main.py").write_text(textwrap.dedent(f"""
         from xcore.kernel.api.contract import BasePlugin
 
         class Plugin(BasePlugin):
@@ -261,9 +255,7 @@ def _make_plugin_dir(
             async def on_unload(self):
                 pass
         {extra_code}
-    """
-        ).strip()
-    )
+    """).strip())
 
     return plugin_dir
 
@@ -271,9 +263,7 @@ def _make_plugin_dir(
 def _make_xcore_config(plugins_dir: Path) -> str:
     """Crée un fichier de config minimal et retourne son chemin."""
     cfg_file = plugins_dir.parent / "xcore_bench.yaml"
-    cfg_file.write_text(
-        textwrap.dedent(
-            f"""
+    cfg_file.write_text(textwrap.dedent(f"""
             app:
               name: my-app
               env: development
@@ -409,9 +399,7 @@ def _make_xcore_config(plugins_dir: Path) -> str:
                 calls: 200
                 period_seconds: 60
 
-    """
-        ).strip()
-    )
+    """).strip())
     return str(cfg_file)
 
 

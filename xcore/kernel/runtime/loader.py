@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...configurations.sections import PluginConfig
     from ..context import KernelContext
 
 from ...kernel.security.validation import ManifestValidator
@@ -343,7 +342,5 @@ class PluginLoader:
                 and handler.plugin_middlewares is not None
             ):
                 middlewares.append(handler.plugin_middlewares)
-        try:
-            return middlewares
-        except:
-            return middlewares
+
+        return middlewares

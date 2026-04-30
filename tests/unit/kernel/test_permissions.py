@@ -1,7 +1,6 @@
 import pytest
 
 from xcore.kernel.permissions.engine import PermissionDenied, PermissionEngine
-from xcore.kernel.permissions.policies import PolicyEffect
 
 
 class TestPermissionEngine:
