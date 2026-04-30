@@ -220,11 +220,10 @@ flowchart LR
 ### Étape 1 : Installation
 
 ```bash
-# Avec Poetry (recommandé)
-poetry add xcore-framework
-
-# Ou avec pip
-pip install xcore-framework
+# Depuis les sources
+git clone https://github.com/traoreera/xcore
+cd xcore
+poetry install
 ```
 
 ### Étape 2 : Configuration
@@ -235,33 +234,37 @@ Créez un fichier `xcore.yaml` :
 app:
   name: "Mon Application"
   debug: true
+  plugin_prefix: "/plugin"
 
 services:
-  db:
-    backend: "sqlite"
-    url: "sqlite+aiosqlite:///./app.db"
+  databases:
+    db:
+      type: sqlasync
+      url: "sqlite+aiosqlite:///./app.db"
 
   cache:
-    backend: "memory"
+    backend: memory
     ttl: 300
+
+  scheduler:
+    enabled: false
 ```
 
 ### Étape 3 : Point d'Entrée
 
 ```python
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from xcore import Xcore
+xcore = Xcore(config_path="xcore.yaml")
 
-app = FastAPI(title="Mon App XCore")
-core = Xcore(config_path="xcore.yaml")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await xcore.boot(app)
+    yield
+    await xcore.shutdown()
 
-@app.on_event("startup")
-async def startup():
-    await core.boot(app)  # 🚀 Boot du kernel
-
-@app.on_event("shutdown")
-async def shutdown():
-    await core.shutdown()  # 🛑 Cleanup
+app = FastAPI(title="Mon App XCore", lifespan=lifespan)
 ```
 
 ### Étape 4 : Premier Plugin
@@ -293,13 +296,24 @@ class Plugin(AutoDispatchMixin, TrustedBase):
         return ok(message=f"Bonjour, {name} !")
 ```
 
-### Étape 5 : Tester
+### Étape 5 : Lancer et tester
 
 ```bash
-# Via CLI
-xcore plugin call hello greet '{"name": "Développeur"}'
+# Démarrer l'application
+poetry run uvicorn main:app --reload
+```
 
-# Résultat : {"status": "ok", "message": "Bonjour, Développeur !"}
+Dans un second terminal :
+
+```bash
+# Vérifier les plugins détectés
+poetry run xcore plugin list
+
+# Appeler l'action greet via l'API IPC
+curl -X POST http://127.0.0.1:8000/plugin/ipc/hello/greet \
+  -H "Content-Type: application/json" \
+  -H "X-Plugin-Key: change-me-in-production" \
+  -d '{"payload":{"name":"Développeur"}}'
 ```
 
 ---

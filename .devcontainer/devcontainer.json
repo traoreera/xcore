@@ -30,9 +30,7 @@
             }
         }
     },
-    "forwardPorts": [
-        8000
-    ],
+    "forwardPorts": [8000],
     "postCreateCommand": "make install",
     "remoteUser": "vscode"
 }
