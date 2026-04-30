@@ -1,7 +1,7 @@
 import pytest
 
 from xcore.kernel.permissions.engine import PermissionEngine
-from xcore.kernel.permissions.policies import Policy, PolicyEffect
+from xcore.kernel.permissions.policies import Policy
 
 
 @pytest.mark.benchmark(group="policy-matching")

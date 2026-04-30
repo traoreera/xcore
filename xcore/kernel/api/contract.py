@@ -55,6 +55,8 @@ class BasePlugin(Protocol):
         async def handle(self, action: str, payload: dict) -> dict
     """
 
+    _config: dict
+
     async def handle(self, action: str, payload: dict) -> dict: ...
 
     # Hooks optionnels

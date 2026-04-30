@@ -109,7 +109,8 @@ async def benchmark_redis_mocked():
             await backend.set(k, v)
         end = time.perf_counter()
         print(
-            f"Sequential SET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+            f"Sequential SET (100 keys, {LATENCY*1000}ms latency): "
+            f"{(end-start)*1000:.2f}ms"
         )
 
         # MSET (Optimized)
@@ -117,7 +118,8 @@ async def benchmark_redis_mocked():
         await backend.mset(values)
         end = time.perf_counter()
         print(
-            f"Optimized MSET (Pipeline) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+            f"Optimized MSET (Pipeline) (100 keys, {LATENCY*1000}ms latency): "
+            f"{(end-start)*1000:.2f}ms"
         )
 
         # 2. GET Benchmark
@@ -127,7 +129,8 @@ async def benchmark_redis_mocked():
             await backend.get(k)
         end = time.perf_counter()
         print(
-            f"Sequential GET (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+            f"Sequential GET (100 keys, {LATENCY*1000}ms latency): "
+            f"{(end-start)*1000:.2f}ms"
         )
 
         # MGET (Optimized)
@@ -135,7 +138,8 @@ async def benchmark_redis_mocked():
         await backend.mget(keys)
         end = time.perf_counter()
         print(
-            f"Optimized MGET (Native) (100 keys, {LATENCY*1000}ms latency): {(end-start)*1000:.2f}ms"
+            f"Optimized MGET (Native) (100 keys, {LATENCY*1000}ms latency): "
+            f"{(end-start)*1000:.2f}ms"
         )
 
 

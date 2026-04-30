@@ -235,13 +235,17 @@ class Xcore:
                         key=f"{middleware['name']}_{key}", value=value
                     )
                     self._logger.info(
-                        f"{middleware['name']}📦 état {middleware['name']}_{key} mis à jour"
+                        f"{middleware['name']}📦 état {middleware['name']}_{key} "
+                        "mis à jour"
                     )
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI
 
     def _validate_secret_keys(self) -> None:
-        """Bloque le démarrage en production si les clés secrètes sont celles par défaut."""
+        """
+        Bloque le démarrage en production si les clés secrètes sont celles
+        par défaut.
+        """
         if self._config.app.env != "production":
             return
         default_key = b"change-me-in-production"

@@ -19,8 +19,9 @@ from rich.table import Table
 
 console = Console()
 
-# Pattern pour valider le nom d'un plugin : alphanumérique, tirets et underscores uniquement.
-# Cela empêche les tentatives de traversal (..) ou de chemins absolus.
+# Pattern pour valider le nom d'un plugin : alphanumérique, tirets et
+# underscores uniquement. Cela empêche les tentatives de traversal (..)
+# ou de chemins absolus.
 PLUGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
@@ -66,9 +67,11 @@ async def handle_plugin(args) -> None:
     if handler:
         await handler(args)
     else:
-        print(
-            "Usage : xcore plugin <list|health|install|remove|info|load|reload|sign|verify|validate>"
+        usage = (
+            "Usage : xcore plugin <list|health|install|remove|info|load|"
+            "reload|sign|verify|validate>"
         )
+        print(usage)
 
 
 # ── list ──────────────────────────────────────────────────────
@@ -211,7 +214,8 @@ async def _plugin_install(args) -> None:
             f"[bold red]❌ Erreur :[/] Plugin '{name}' déjà installé dans {dest}"
         )
         console.print(
-            f"    Pour mettre à jour : xcore plugin remove {name} && xcore plugin install {name}"
+            f"    Pour mettre à jour : xcore plugin remove {name} && "
+            f"xcore plugin install {name}"
         )
         sys.exit(1)
 
@@ -220,7 +224,7 @@ async def _plugin_install(args) -> None:
 
     elif source == "zip" or (url and (url.endswith(".zip") or url.startswith("http"))):
         if not url:
-            console.print(f"[bold red]❌ Erreur :[/] --url requis pour --source zip")
+            console.print("[bold red]❌ Erreur :[/] --url requis pour --source zip")
             sys.exit(1)
         await _install_from_zip(name, url, dest)
 
@@ -315,7 +319,8 @@ async def _install_from_marketplace(client, name: str, dest: Path, cfg) -> None:
     source_type = plugin.get("source_type", "zip")
 
     print(
-        f"📦  Plugin trouvé : v{plugin.get('version', '?')} — {plugin.get('description', '')}"
+        f"📦  Plugin trouvé : v{plugin.get('version', '?')} — "
+        f"{plugin.get('description', '')}"
     )
 
     if source_type == "git":
@@ -407,11 +412,14 @@ async def _plugin_info(args) -> None:
     # Construction du contenu du panel
     info = [
         f"[bold cyan]Auteur      :[/][magenta] {escape(str(manifest.author))}[/]",
-        f"[bold cyan]Description :[/] {escape(str(manifest.description))}",
-        f"[bold cyan]Mode        :[/][yellow] {escape(str(manifest.execution_mode.value))}[/]",
-        f"[bold cyan]Framework   :[/][green] {escape(str(manifest.framework_version))}[/]",
-        f"[bold cyan]Entry point :[/][blue] {escape(str(manifest.entry_point))}[/]",
-        f"[bold cyan]Signé       :[/] {'✅ oui' if is_signed(manifest) else '⚠️  non'}",
+        f"[bold cyan]Description :[/] " f"{escape(str(manifest.description))}",
+        f"[bold cyan]Mode        :[/][yellow] "
+        f"{escape(str(manifest.execution_mode.value))}[/]",
+        f"[bold cyan]Framework   :[/][green] "
+        f"{escape(str(manifest.framework_version))}[/]",
+        f"[bold cyan]Entry point :[/][blue] " f"{escape(str(manifest.entry_point))}[/]",
+        f"[bold cyan]Signé       :[/] "
+        f"{'✅ oui' if is_signed(manifest) else '⚠️  non'}",
     ]
 
     if manifest.requires:
@@ -431,7 +439,8 @@ async def _plugin_info(args) -> None:
     info.append(f"  [cyan]mémoire max :[/][magenta] {r.max_memory_mb}MB[/]")
     info.append(f"  [cyan]disque max  :[/][magenta] {r.max_disk_mb}MB[/]")
     info.append(
-        f"  [cyan]rate limit  :[/][magenta] {r.rate_limit.calls} appels / {r.rate_limit.period_seconds}s[/]"
+        f"  [cyan]rate limit  :[/][magenta] {r.rate_limit.calls} appels "
+        f"/ {r.rate_limit.period_seconds}s[/]"
     )
 
     # Permissions
@@ -463,7 +472,8 @@ async def _plugin_validate(args) -> None:
         v = ManifestValidator()
         manifest = v.load_and_validate(path)
         console.print(
-            f"✅  Manifeste valide : {manifest.name} v{manifest.version} [{manifest.execution_mode.value}]"
+            f"✅  Manifeste valide : {manifest.name} v{manifest.version} "
+            f"[{manifest.execution_mode.value}]"
         )
     except Exception as e:
         console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
@@ -584,7 +594,8 @@ async def _ipc_call(args, action: str, method: str = "POST") -> None:
 
     except URLError:
         console.print(
-            f"[bold red]❌ Erreur :[/] Impossible de joindre le serveur xcore sur {host}:{port}.\n"
+            f"[bold red]❌ Erreur :[/] Impossible de joindre le serveur "
+            f"xcore sur {host}:{port}.\n"
             f"    Vérifiez que le serveur est démarré.",
         )
         sys.exit(1)

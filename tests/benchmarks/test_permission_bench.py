@@ -69,9 +69,9 @@ class PermissionEngine:
     def allows(self, plugin_name: str, resource: str, action: str) -> bool:
         try:
             self.check(plugin_name, resource, action)
-            # This is a bit simplified compared to original but should show the overhead of _evaluate
+            # Simplified version to show the overhead of _evaluate
             return True
-        except:
+        except Exception:
             return False
 
 

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
 
-from .ipc import IPCChannel, IPCProcessDead, IPCResponse
+from .ipc import IPCChannel, IPCProcessDead
 from .isolation import DiskQuotaExceeded, DiskWatcher
 
 logger = logging.getLogger("xcore.sandbox.process_manager")

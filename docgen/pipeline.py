@@ -31,7 +31,8 @@ def main():
     chunks = scan_repo(cfg)
     if not chunks:
         print(
-            "No files found to process. Check repo_path and include_extensions in config."
+            "No files found to process. Check repo_path and "
+            "include_extensions in config."
         )
         return
 

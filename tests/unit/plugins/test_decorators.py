@@ -5,7 +5,7 @@ Tests for SDK decorators.
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from xcore.sdk.decorators import (
     AutoDispatchMixin,
@@ -284,7 +284,6 @@ class TestRoutedPlugin:
     async def test_routerin_returns_router(self):
         """Test RouterIn returns APIRouter."""
         pytest.importorskip("fastapi")
-        from fastapi import APIRouter
 
         class TestPlugin(RoutedPlugin):
             @route("/ping", method="GET")

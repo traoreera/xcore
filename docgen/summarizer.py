@@ -78,16 +78,23 @@ def summarize_chunk(path, content, cfg=None):
     print(f"[PROCESSING] {path}")
 
     prompt = f"""You are documenting a software project for other developers.
-Analyze the following source file chunk and produce a concise technical summary.
+Analyze the following source file chunk and produce a concise technical
+summary.
 
-Write in clear, professional English. Use plain prose — avoid filler phrases like "this file contains" or "it is responsible for".
-Go straight to the point. Be specific: name the actual classes, functions, and modules involved.
+Write in clear, professional English. Use plain prose — avoid filler phrases
+like "this file contains" or "it is responsible for".
+Go straight to the point. Be specific: name the actual classes, functions,
+and modules involved.
 
 Cover these aspects in order:
-1. **Purpose** — What problem does this file solve? What is its role in the system?
-2. **Key components** — List the main classes and functions with a one-line description of each.
-3. **Dependencies** — What does this file import or rely on (internal modules, external libraries)?
-4. **Interactions** — How does this file connect to the rest of the codebase (called by, calls into, data it produces or consumes)?
+1. **Purpose** — What problem does this file solve? What is its role in the
+   system?
+2. **Key components** — List the main classes and functions with a one-line
+   description of each.
+3. **Dependencies** — What does this file import or rely on (internal
+   modules, external libraries)?
+4. **Interactions** — How does this file connect to the rest of the
+   codebase (called by, calls into, data it produces or consumes)?
 
 Keep the summary under 200 words. Do not repeat the file path in your answer.
 
