@@ -160,7 +160,7 @@ async def _plugin_health(args) -> None:
             status.update(f"[bold green]Analyzing {escape(name)}...")
             try:
                 validator = ManifestValidator()
-                manifest = validator.load_and_validate(plugin_dir_entry)
+                manifest, _, _ = validator.load_and_validate(plugin_dir_entry)
 
                 # Signature
                 signed = "✅" if is_signed(manifest) else "⚠️ "
@@ -342,7 +342,7 @@ async def _auto_sign(plugin_dir: Path, cfg) -> None:
     from xcore.kernel.security.validation import ManifestValidator
 
     try:
-        manifest = ManifestValidator().load_and_validate(plugin_dir)
+        manifest, _, _ = ManifestValidator().load_and_validate(plugin_dir)
     except Exception as e:
         print(f"⚠️   Signature auto ignorée (manifeste invalide) : {e}")
         return
@@ -404,7 +404,7 @@ async def _plugin_info(args) -> None:
 
     try:
         validator = ManifestValidator()
-        manifest = validator.load_and_validate(plugin_dir)
+        manifest, _, _ = validator.load_and_validate(plugin_dir)
     except Exception as e:
         console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
         sys.exit(1)
@@ -470,7 +470,7 @@ async def _plugin_validate(args) -> None:
         sys.exit(1)
     try:
         v = ManifestValidator()
-        manifest = v.load_and_validate(path)
+        manifest, _, _ = v.load_and_validate(path)
         console.print(
             f"✅  Manifeste valide : {manifest.name} v{manifest.version} "
             f"[{manifest.execution_mode.value}]"
@@ -486,7 +486,7 @@ async def _plugin_sign(args) -> None:
 
     path = Path(args.path)
     key = (args.key or "change-me").encode()
-    manifest = ManifestValidator().load_and_validate(path)
+    manifest, _, _ = ManifestValidator().load_and_validate(path)
     sig = sign_plugin(manifest, key)
     print(f"✅  Signé : {sig}")
 
