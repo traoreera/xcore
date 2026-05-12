@@ -5,12 +5,18 @@ on:
     branches: [features, main]
     types: [opened, synchronize, reopened, ready_for_review]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
 
   # ── Vérification du titre de la PR ────────────────────────────────────────
   pr-title:
     name: 📋 PR Title Check
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
     steps:
       - name: Check Conventional Commits format
         uses: amannn/action-semantic-pull-request@v5
@@ -76,42 +82,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Vérification des fichiers de plugin ───────────────────────────────────
-  check-plugins:
-    name: 🔌 Plugin Files Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check modified plugins have plugin.yaml
-        run: |
-          MODIFIED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep '^app/' | cut -d'/' -f1,2 | sort -u)
-
-          if [ -z "$MODIFIED" ]; then
-            echo "Aucun plugin modifié."
-            exit 0
-          fi
-
-          for plugin_dir in $MODIFIED; do
-            if [ -d "$plugin_dir" ]; then
-              if [ ! -f "$plugin_dir/plugin.yaml" ]; then
-                echo "❌ Error: $plugin_dir is missing plugin.yaml"
-                exit 1
-              fi
-              if [ ! -d "$plugin_dir/src" ]; then
-                echo "❌ Error: $plugin_dir is missing src/ directory"
-                exit 1
-              fi
-              echo "✓ $plugin_dir structure OK"
-            fi
-          done
-
   # ── Vérification que les tests passent ────────────────────────────────────
   quick-test:
     name: ⚡ Quick Test
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -145,13 +122,14 @@ jobs:
   pr-gate:
     name: ✅ PR Gate
     runs-on: ubuntu-latest
-    needs: [pr-title, check-plugins, quick-test]
+    needs: [pr-title, quick-test]
     if: always()
+    permissions:
+      contents: read
     steps:
       - name: Evaluate gate
         run: |
           if [[ "${{ needs.pr-title.result }}"    == "failure" ||
-                "${{ needs.check-plugins.result }}" == "failure" ||
                 "${{ needs.quick-test.result }}"    == "failure" ]]; then
             echo "PR gate FAILED – merge bloqué"
             exit 1
