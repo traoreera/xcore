@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [features, main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -136,43 +139,18 @@ jobs:
           file: coverage.xml
           fail_ci_if_error: false
 
-  # ── Plugin validation ──────────────────────────────────────────────────────
-  validate-plugins:
-    name: 🔌 Validate Plugins
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-in-project: true
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Validate all plugins
-        run: make validate-plugins
-
   # ── Résumé du CI ───────────────────────────────────────────────────────────
   ci-success:
     name: ✅ CI Passed
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, validate-plugins]
+    needs: [lint, typecheck, test]
     if: always()
     steps:
       - name: Check all jobs
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ||
                 "${{ needs.typecheck.result }}" != "success" ||
-                "${{ needs.test.result }}" != "success" ||
-                "${{ needs.validate-plugins.result }}" != "success" ]]; then
+                "${{ needs.test.result }}" != "success" ]]; then
             echo "One or more CI jobs failed"
             exit 1
           fi

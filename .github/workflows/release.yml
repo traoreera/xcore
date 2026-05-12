@@ -6,7 +6,7 @@ on:
       - "v*.*.*"   # déclenché sur v1.0.0, v1.2.3, etc.
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
 
@@ -14,6 +14,8 @@ jobs:
   pre-release-checks:
     name: 🔍 Pre-release Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +53,8 @@ jobs:
     name: 📝 Generate Changelog
     runs-on: ubuntu-latest
     needs: pre-release-checks
+    permissions:
+      contents: read
     outputs:
       notes: ${{ steps.notes.outputs.notes }}
     steps:
@@ -104,6 +108,8 @@ jobs:
     name: 🎉 Build & Create GitHub Release
     runs-on: ubuntu-latest
     needs: changelog
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -144,6 +150,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: release
     if: success()
+    permissions:
+      contents: read
     steps:
       - name: Release summary
         run: |

@@ -7,6 +7,10 @@ on:
     - cron: "0 7 * * 1"   # chaque lundi à 7h UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
 
   # ── Audit des dépendances Python ───────────────────────────────────────────
@@ -17,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5>
+        uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
