@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .cache.service import CacheService
     from .database.adapters.async_sql import AsyncSQLAdapter
     from .scheduler.service import SchedulerService
+    from .xworker.main import WorkerService
 
 from .base import BaseService, BaseServiceProvider
 
@@ -85,6 +86,24 @@ class SchedulerServiceProvider(BaseServiceProvider):
         logger.info("Scheduler : prêt")
 
 
+class XWorkerServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = container._config.xworker
+        if not cfg or not cfg.enabled:
+            return
+        from .xworker.main import WorkerService
+
+        svc = WorkerService(cfg.to_payload())
+        await svc.init()
+        container._services["worker_service"] = svc
+        container._raw["worker"] = svc
+        logger.info(
+            "XWorker : broker=%s queues=%s",
+            cfg.broker_url,
+            cfg.queues,
+        )
+
+
 class ExtensionServiceProvider(BaseServiceProvider):
     async def init(self, container: ServiceContainer) -> None:
         if not container._config.extensions:
@@ -119,11 +138,11 @@ class ServiceContainer:
         await container.shutdown()
     """
 
-    # Pour compatibilité avec les anciens tests
     DEFAULT_PROVIDERS = [
         DatabaseServiceProvider,
         CacheServiceProvider,
         SchedulerServiceProvider,
+        XWorkerServiceProvider,
         ExtensionServiceProvider,
     ]
 
@@ -146,6 +165,7 @@ class ServiceContainer:
                 DatabaseServiceProvider(),
                 CacheServiceProvider(),
                 SchedulerServiceProvider(),
+                XWorkerServiceProvider(),
                 ExtensionServiceProvider(),
             ]
         )
@@ -191,6 +211,9 @@ class ServiceContainer:
 
     @overload
     def get(self, name: "Literal['scheduler']") -> "SchedulerService": ...  # noqa: F811
+
+    @overload
+    def get(self, name: "Literal['worker']") -> "WorkerService": ...  # noqa: F811
 
     @overload
     def get(self, name: str) -> Any: ...  # noqa: F811

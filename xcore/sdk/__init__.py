@@ -8,6 +8,7 @@ Import recommandé dans un plugin :
 
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
 from ..kernel.api.rbac import RBACChecker, require_permission, require_role
+from ..services.xworker import WorkerService, task, task_registry
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
 from .decorators import (
@@ -45,5 +46,8 @@ __all__ = [
     "RBACChecker",
     "require_permission",
     "require_role",
+    "WorkerService",
+    "task_registry",
+    "task",
     "RouterRegistry",
 ]

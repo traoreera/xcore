@@ -72,7 +72,20 @@ services:
     #    func: myapp.tasks.monitoring:snapshot_metrics
     #    trigger: interval
     #    minutes: 5
-
+  extensions:
+    email:
+      module: extensions.email.service:EmailService
+      config:
+          smtp_host: smtp.gmail.com
+          smtp_port: 587
+          smtp_user: ${SMTP_USER}
+          smtp_password: ${SMTP_PASSWORD}
+          from_address: noreply@example.com
+          from_name: "Mon Application"
+          use_tls: true
+          timeout: 10
+          max_retries: 3
+          queue_size: 100
   # ── Observabilité ─────────────────────────────────────────────
 
 observability:

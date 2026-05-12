@@ -27,6 +27,7 @@ from .sections import (
     SecurityConfig,
     ServicesConfig,
     TracingConfig,
+    WorkerConfig,
     XcoreConfig,
 )
 
@@ -204,11 +205,21 @@ class ConfigLoader:
             timezone=s.get("timezone", "UTC"),
             jobs=s.get("jobs", []),
         )
+        xworker_raw = d.get("xworker")
+        celery_raw = d.get("celery")
+
+        if xworker_raw is None and celery_raw is not None:
+            xworker_raw = celery_raw
+
+        xworker = WorkerConfig.from_dict(xworker_raw or {})
+        celery = WorkerConfig.from_dict(celery_raw or {}) if celery_raw else None
         return ServicesConfig(
             databases=dbs,
             cache=cache,
             scheduler=scheduler,
             extensions=d.get("extensions", {}),
+            xworker=xworker,
+            celery=celery,
         )
 
     @staticmethod
