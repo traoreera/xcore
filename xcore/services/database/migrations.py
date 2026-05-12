@@ -8,6 +8,7 @@ Usage dans un plugin Trusted :
         db_url=cfg.url,
         migrations_dir="./migrations",
     )
+    runner.init()      # génère la première révision (ignoré si déjà existante)
     runner.upgrade()   # applique toutes les migrations en attente
     runner.status()    # liste les migrations appliquées / en attente
 """
@@ -44,10 +45,71 @@ class MigrationRunner:
         cfg.set_main_option("script_location", str(self.migrations_dir))
         return cfg
 
-    async def upgrade(self, revision: str = "head") -> None:
-        from alembic import command
+    def _is_async(self) -> bool:
+        return "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url
 
-        if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
+    async def init(self, autogenerate: bool = True, message: str = "init") -> None:
+        """
+        Génère la première révision de migration.
+        Ignoré silencieusement si des révisions existent déjà.
+
+        Args:
+            autogenerate: Si True, Alembic détecte automatiquement les changements
+                          de schéma depuis les modèles SQLAlchemy.
+            message:      Message/label de la révision (ex: "init", "create_users").
+        """
+        from alembic import command  # type: ignore
+
+        if not self.migrations_dir.exists():
+            raise MigrationError(
+                f"Le dossier de migrations '{self.migrations_dir}' n'existe pas. "
+                "Lancez d'abord `alembic init <dossier>` pour initialiser la structure."
+            )
+
+        # Vérifie si des révisions existent déjà
+        versions_dir = self.migrations_dir / "versions"
+        if versions_dir.exists():
+            existing = [
+                f
+                for f in versions_dir.iterdir()
+                if f.suffix == ".py" and f.name != "__init__.py"
+            ]
+            if existing:
+                logger.info(
+                    f"{len(existing)} migration(s) déjà existante(s) — init ignoré. "
+                    "Utilisez `revision()` pour créer une nouvelle révision."
+                )
+                return
+
+        kwargs = dict(message=message, autogenerate=autogenerate)
+
+        if self._is_async():
+            engine = create_async_engine(self.db_url)
+            async with engine.begin() as conn:
+
+                def do_init(sync_conn):
+                    cfg = self._get_config()
+                    cfg.attributes["connection"] = sync_conn
+                    command.revision(config=cfg, **kwargs)
+
+                await conn.run_sync(do_init)
+
+            await engine.dispose()
+            logger.info(
+                f"Première révision '{message}' générée (async, autogenerate={autogenerate})"
+            )
+            return
+
+        command.revision(config=self._get_config(), **kwargs)
+        logger.info(
+            f"Première révision '{message}' générée (sync, autogenerate={autogenerate})"
+        )
+
+    async def upgrade(self, revision: str = "head") -> None:
+        """Applique toutes les migrations en attente jusqu'à `revision`."""
+        from alembic import command  # type: ignore
+
+        if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
                 logger.info("Migration asynchrone demare")
@@ -62,41 +124,41 @@ class MigrationRunner:
             logger.info("Migration faite avec sucess")
             return
 
-        else:
-            # Mode synchrone classique
-            logger.info(f"Migration sync upgrade → {revision}")
-            command.upgrade(self._get_config(), revision)
+        logger.info(f"Migration sync upgrade → {revision}")
+        command.upgrade(self._get_config(), revision)
 
     async def downgrade(self, revision: str = "-1") -> None:
+        """Annule la dernière migration (ou jusqu'à `revision`)."""
         from alembic import command  # type: ignore
 
-        if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
+        if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
 
-                def do_downgrade(conn):
+                def do_downgrade(sync_conn):
                     cfg = self._get_config()
-                    cfg.attributes["connection"] = conn
+                    cfg.attributes["connection"] = sync_conn
                     command.downgrade(config=cfg, revision=revision)
 
                 await conn.run_sync(do_downgrade)
             await engine.dispose()
-
+            logger.info(f"Migration downgrade → {revision}")
             return
 
-        logger.info(f"Migration downgrade → {revision}")
+        logger.info(f"Migration sync downgrade → {revision}")
         command.downgrade(self._get_config(), revision)
 
-    async def revison(self, **kwargs):
+    async def revison(self, **kwargs) -> None:
+        """Crée une nouvelle révision de migration."""
         from alembic import command  # type: ignore
 
-        if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
+        if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
 
-                def do_revision(conn):
+                def do_revision(sync_conn):
                     cfg = self._get_config()
-                    cfg.attributes["connection"] = conn
+                    cfg.attributes["connection"] = sync_conn
                     command.revision(config=cfg, **kwargs)
 
                 await conn.run_sync(do_revision)
@@ -106,21 +168,22 @@ class MigrationRunner:
 
         command.revision(config=self._get_config(), **kwargs)
 
-    async def status(self, **kwargs):
+    async def status(self, **kwargs) -> None:
+        """Affiche les migrations appliquées et en attente."""
         from alembic import command  # type: ignore
 
-        if "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url:
+        if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
 
-                def do_revision(conn):
+                def do_status(sync_conn):
                     cfg = self._get_config()
-                    cfg.attributes["connection"] = conn
+                    cfg.attributes["connection"] = sync_conn
                     command.status(config=cfg, **kwargs)
 
-                await conn.run_sync(do_revision)
+                await conn.run_sync(do_status)
 
             await engine.dispose()
             return
 
-        command.revision(config=self._get_config(), **kwargs)
+        command.status(config=self._get_config(), **kwargs)
