@@ -104,7 +104,7 @@ security:
 
 # ── Marketplace ───────────────────────────────────────────────
 marketplace:
-  url: "https://marketplace.xcore.io"
+  url: "https://marketplace.xcore.dev"
   api_key: "${MARKETPLACE_KEY}"
 ```
 
@@ -161,23 +161,18 @@ Tous les champs ont des valeurs par défaut : un `xcore.yaml` vide (ou absent) n
 
 ---
 
-## Fichiers alternatifs
+## Chemin du fichier de configuration
 
-Le `ConfigLoader` cherche dans cet ordre si aucun chemin n'est spécifié :
-
-1. `integation.yaml`
-2. `integation.yml`
-3. `integation.json`
-4. `config/integation.yaml`
-
-Pour spécifier un chemin custom :
+Pour éviter toute ambiguïté, il est recommandé de passer explicitement le chemin du fichier :
 
 ```python
 xcore = Xcore(config_path="config/prod.yaml")
 ```
 
-ou via CLI :
+Ou via CLI :
 
 ```bash
 poetry run xcore --config config/prod.yaml plugin list
 ```
+
+Si aucun chemin n'est fourni, le `ConfigLoader` essaie des chemins de fallback historiques (`integation.yaml`, `integation.yml`, `integation.json`, `config/integation.yaml`).

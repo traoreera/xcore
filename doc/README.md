@@ -3,7 +3,7 @@
 [![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://github.com/traoreera/xcore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.118+-green.svg)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-green.svg)](https://fastapi.tiangolo.com/)
 
 **XCore** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
@@ -64,12 +64,12 @@ flowchart TB
 
 3. **Run the development server**:
    ```bash
-   make run-dev
+   poetry run uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 ### or use pip to install and use it
 ```bash
-uv add https://github.com/traoreera/xcore
+uv add "xcore @ git+https://github.com/traoreera/xcore"
 ```
 
 ---
@@ -170,8 +170,11 @@ XCore comes with a powerful CLI for management and security.
 | `xcore plugin list` | List all loaded plugins |
 | `xcore plugin load <name>` | Load a specific plugin |
 | `xcore plugin reload <name>` | Hot-reload a plugin |
+| `xcore plugin info <name>` | Show plugin metadata and permissions |
 | `xcore plugin sign <path>` | Generate a security signature for a plugin |
+| `xcore plugin verify <path>` | Verify plugin signature |
 | `xcore plugin validate <path>`| Validate plugin manifest and structure |
+| `xcore plugin health` | Run plugin health checks |
 | `xcore services status` | Check the health of DB, Cache, and Scheduler |
 | `xcore health` | Perform a global system health check |
 
@@ -181,10 +184,14 @@ XCore comes with a powerful CLI for management and security.
 
 | Command | Description |
 | :--- | :--- |
-| `make init` | Initialize project (install + run) |
+| `make install` | Install project dependencies |
+| `make dev` | Run development server with auto-reload |
 | `make test` | Run the test suite |
-| `make lint-fix` | Auto-format code (Black, Isort) |
-| `make docker-dev` | Spin up development environment with Docker |
+| `make lint-check` | Validate formatting/linting without modifying files |
+| `make lint-fix` | Auto-format code (Black, Isort, Autopep8) |
+| `make benchmark` | Run performance benchmarks |
+| `make security-check` | Run basic project security checks |
+| `make pre-commit-run` | Run pre-commit hooks on all files |
 | `make logs-live` | View real-time structured logs |
 
 ---
