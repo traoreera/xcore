@@ -34,6 +34,59 @@ class DatabaseConfig:
 
 
 @dataclass
+class WorkerConfig:
+    enabled: bool = False
+    module: str = "extensions.xworker.main:WorkerService"
+    broker_url: str = "redis://localhost:6379/0"
+    result_backend: str = "redis://localhost:6379/1"
+    concurrency: int = 4
+    task_soft_time_limit: int = 300
+    task_time_limit: int = 360
+    broker_connection_retry_on_startup: bool = True
+    task_serializer: str = "json"
+    result_serializer: str = "json"
+    accept_content: list[str] = field(default_factory=lambda: ["json"])
+    result_expires: int = 86400
+    queues: list[str] = field(default_factory=lambda: ["default"])
+    modules: list[str] = field(default_factory=list)
+    task_list: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.task_list and not self.modules:
+            self.modules = list(self.task_list)
+        if self.modules and not self.task_list:
+            self.task_list = list(self.modules)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "WorkerConfig":
+        # type: ignore[attr-defined]
+        valid = {f.name for f in cls.__dataclass_fields__.values()}
+        parsed = {k: v for k, v in d.items() if k in valid}
+        if "task_list" not in parsed and "modules" in parsed:
+            parsed["task_list"] = list(parsed["modules"])
+        if "modules" not in parsed and "task_list" in parsed:
+            parsed["modules"] = list(parsed["task_list"])
+        return cls(**parsed)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = {
+            "broker_url": self.broker_url,
+            "result_backend": self.result_backend,
+            "concurrency": self.concurrency,
+            "task_soft_time_limit": self.task_soft_time_limit,
+            "task_time_limit": self.task_time_limit,
+            "broker_connection_retry_on_startup": self.broker_connection_retry_on_startup,
+            "task_serializer": self.task_serializer,
+            "result_serializer": self.result_serializer,
+            "accept_content": self.accept_content,
+            "result_expires": self.result_expires,
+            "queues": self.queues,
+            "modules": self.modules or self.task_list,
+        }
+        return payload
+
+
+@dataclass
 class CacheConfig:
     backend: str = "memory"  # memory | redis
     ttl: int = 300
@@ -55,6 +108,12 @@ class ServicesConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     extensions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    xworker: WorkerConfig = field(default_factory=WorkerConfig)
+    celery: WorkerConfig | None = None
+
+    def __post_init__(self) -> None:
+        if self.celery and not self.xworker.enabled:
+            self.xworker = self.celery
 
 
 @dataclass

@@ -16,6 +16,7 @@ from xcore.services.container import (
     ExtensionServiceProvider,
     SchedulerServiceProvider,
     ServiceContainer,
+    XWorkerServiceProvider,
 )
 
 
@@ -76,10 +77,11 @@ class TestServiceContainer:
 
     def test_default_providers_present(self):
         """Test default providers are present."""
-        assert len(ServiceContainer.DEFAULT_PROVIDERS) == 4
+        assert len(ServiceContainer.DEFAULT_PROVIDERS) == 5
         assert DatabaseServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
         assert CacheServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
         assert SchedulerServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
+        assert XWorkerServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
         assert ExtensionServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
 
     def test_get_nonexistent_service(self, container):
