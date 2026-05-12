@@ -1,6 +1,6 @@
 [project]
 name = "xcore"
-version = "2.1.2"
+version = "2.1.3"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
