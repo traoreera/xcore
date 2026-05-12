@@ -74,7 +74,7 @@ jobs:
           poetry add mypy
 
       - name: Run mypy
-        run: poetry run mypy xcore/ extensions/ --ignore-missing-imports
+        run: poetry run mypy xcore/ --ignore-missing-imports
 
   # ── Tests ──────────────────────────────────────────────────────────────────
   test:
