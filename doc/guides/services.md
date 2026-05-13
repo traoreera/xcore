@@ -1,6 +1,6 @@
 # Services
 
-XCore expose trois services partagés via le `ServiceContainer` : **Base de données**, **Cache** et **Scheduler**. Tous sont accessibles depuis `self.get_service(name)` dans un plugin `TrustedBase`.
+XCore expose cinq services partagés via le `ServiceContainer` : **Base de données**, **Cache**, **Scheduler**, **XWorker (Celery)** et **Extensions**. Tous sont accessibles depuis `self.get_service(name)` dans un plugin `TrustedBase`.
 
 ---
 
@@ -11,6 +11,7 @@ XCore expose trois services partagés via le `ServiceContainer` : **Base de donn
 self.db        = self.get_service("db")        # → AsyncSQLAdapter
 self.cache     = self.get_service("cache")     # → CacheService
 self.scheduler = self.get_service("scheduler") # → SchedulerService
+self.worker    = self.get_service("worker")    # → WorkerService
 
 # Connexion nommée avec type explicite
 from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
@@ -21,32 +22,27 @@ self.analytics = self.get_service_as("analytics", AsyncSQLAdapter)
 
 ## Base de données
 
-### Configuration `xcore.yaml`
+### Configuration
 
 ```yaml
 services:
   databases:
-    # Connexion principale (accessible via self.get_service("db"))
     db:
-      type: sqlasync          # sqlasync | sql | redis | mongodb
+      type: sqlasync
       url: postgresql+asyncpg://user:pass@localhost/mydb
       pool_size: 5
       max_overflow: 10
       echo: false
 
-    # Connexion secondaire (accessible via self.get_service("analytics"))
     analytics:
       type: sqlasync
       url: postgresql+asyncpg://user:pass@analytics-host/metrics
 
-    # Redis comme base de données (clé/valeur)
     redis_db:
       type: redis
       url: redis://localhost:6379/0
       max_connections: 50
 ```
-
-Types supportés :
 
 | `type` | Adaptateur | Usage |
 |:-------|:-----------|:------|
@@ -55,7 +51,7 @@ Types supportés :
 | `redis` | `RedisAdapter` | Redis key/value |
 | `mongodb` | `MongoDBAdapter` | MongoDB |
 
-### Utilisation (SQLAlchemy async)
+### Utilisation
 
 ```python
 async def on_load(self):
@@ -70,10 +66,6 @@ async def get_users(self, payload: dict) -> dict:
     return ok(users=[u.to_dict() for u in users])
 ```
 
-### Migrations Alembic
-
-XCore intègre Alembic pour les migrations. Configurer `alembic.ini` normalement, le `DATABASE_URL` peut être surchargé via `XCORE__SERVICES__DATABASES__DB__URL`.
-
 ---
 
 ## Cache
@@ -83,10 +75,10 @@ XCore intègre Alembic pour les migrations. Configurer `alembic.ini` normalement
 ```yaml
 services:
   cache:
-    backend: memory       # memory | redis
-    ttl: 300              # TTL par défaut en secondes
-    max_size: 1000        # Taille max (memory uniquement)
-    url: redis://localhost:6379/0   # Requis si backend=redis
+    backend: redis        # memory | redis
+    url: redis://localhost:6379/0
+    ttl: 300
+    max_size: 1000        # ignoré si backend=redis
 ```
 
 ### API
@@ -98,33 +90,14 @@ async def on_load(self):
 @action("get_profile")
 async def get_profile(self, payload: dict) -> dict:
     key = f"profile:{payload['user_id']}"
-
-    # Lecture
     cached = await self.cache.get(key)
     if cached:
         return ok(profile=cached, from_cache=True)
 
-    # Écriture avec TTL custom
     profile = await self._fetch_profile(payload["user_id"])
     await self.cache.set(key, profile, ttl=600)
     return ok(profile=profile)
-
-@action("invalidate")
-async def invalidate(self, payload: dict) -> dict:
-    await self.cache.delete(f"profile:{payload['user_id']}")
-    return ok()
-
-@action("batch_prime")
-async def batch_prime(self, payload: dict) -> dict:
-    # Opérations batch — toujours préférer mset/mget (44-77x plus rapide sur Redis)
-    data = {"key:1": "val1", "key:2": "val2", "key:3": "val3"}
-    await self.cache.mset(data)
-
-    values = await self.cache.mget(list(data.keys()))
-    return ok(values=values)
 ```
-
-API complète :
 
 | Méthode | Description |
 |:--------|:------------|
@@ -135,7 +108,7 @@ API complète :
 | `mget(keys)` | Lit plusieurs clés en une opération |
 | `mset(mapping)` | Écrit plusieurs clés en une opération |
 
-> **Performance** : avec Redis (réseau ~2 ms), `mset`/`mget` sur 100 clés est **44–77× plus rapide** que les appels séquentiels. Voir [Benchmarks](../reference/benchmarks.md).
+> **Performance** : `mset`/`mget` sur 100 clés Redis est **44–77× plus rapide** que les appels séquentiels. Voir [Benchmarks](../reference/benchmarks.md).
 
 ---
 
@@ -147,10 +120,8 @@ API complète :
 services:
   scheduler:
     enabled: true
-    backend: memory       # memory | redis | database
+    backend: redis        # memory | redis | database
     timezone: Europe/Paris
-
-    # Jobs statiques (optionnel — les plugins peuvent en ajouter dynamiquement)
     jobs:
       - id: cleanup
         func: myapp.tasks:cleanup
@@ -159,26 +130,16 @@ services:
         minute: 0
 ```
 
-Backends :
-
-| Backend | Persistance | Usage |
-|:--------|:------------|:------|
-| `memory` | Non — perdu au redémarrage | Développement |
-| `redis` | Oui — via Redis | Production |
-| `database` | Oui — via SQLAlchemy | Production sans Redis |
-
-### Utilisation depuis un plugin
+### Utilisation
 
 ```python
 async def on_load(self):
     self.scheduler = self.get_service("scheduler")
 
-    # Cron : tous les jours à 3h
     @self.scheduler.cron("0 3 * * *")
     async def nightly_cleanup():
         await self._cleanup()
 
-    # Interval
     self.scheduler.add_job(
         self._sync_data,
         trigger="interval",
@@ -186,40 +147,104 @@ async def on_load(self):
         id="sync_data",
         replace_existing=True,
     )
+```
 
-    # One-shot (date précise)
-    from datetime import datetime, timedelta
-    self.scheduler.add_job(
-        self._send_reminder,
-        trigger="date",
-        run_date=datetime.now() + timedelta(hours=1),
-        id="reminder_once",
+---
+
+## XWorker (Celery)
+
+Service de traitement asynchrone de tâches basé sur Celery.
+
+### Configuration
+
+```yaml
+services:
+  xworker:
+    enabled: true
+    name: "mon-app"
+    broker_url: redis://localhost:6379/0
+    result_backend: redis://localhost:6379/1
+    task_default_queue: default
+    concurrency: 4
+    task_soft_time_limit: 300     # SoftTimeLimitExceeded après 300s
+    task_time_limit: 360          # kill forcé après 360s
+    task_serializer: json
+    result_serializer: json
+    accept_content: [json]
+    result_expires: 86400         # conservation 24h
+    broker_connection_retry_on_startup: true
+    queues:
+      - default
+      - emails
+    modules:
+      - myapp.tasks.emails        # modules chargés au démarrage
+      - myapp.tasks.reports
+```
+
+### Déclarer une tâche
+
+```python
+from xcore.services.xworker import task
+
+@task(name="emails.send_welcome", queue="emails", bind=True, max_retries=3)
+def send_welcome_email(self, user_id: int, **kwargs):
+    try:
+        # logique d'envoi...
+        pass
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=60)
+```
+
+### Envoyer une tâche depuis un plugin
+
+```python
+async def on_load(self):
+    self.worker = self.get_service("worker")
+
+@action("register")
+async def register(self, payload: dict) -> dict:
+    user = await self._create_user(payload)
+
+    # Envoi asynchrone — non bloquant
+    self.worker.send(
+        "emails.send_welcome",
+        user_id=user.id,
+        queue="emails",
     )
+    return ok(user_id=user.id)
+```
 
-async def _sync_data(self):
-    # Exécuté toutes les 5 minutes
-    pass
+### Vérifier le résultat
+
+```python
+result = self.worker.get_result(task_id)
+if result.ready():
+    print(result.get())
+```
+
+### Lancer le worker
+
+```bash
+xcore worker start celery
+xcore worker start celery -Q default,emails -c 8 --detach
+xcore worker beat --detach     # scheduler Celery Beat
+xcore worker inspect            # tâches et workers actifs
 ```
 
 ---
 
 ## Extensions (services custom)
 
-Pour enregistrer un service tiers dans le conteneur :
-
 ```yaml
 services:
   extensions:
     stripe:
-      api_key: "${STRIPE_KEY}"
-      webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
+      module: myapp.services.stripe:StripeService
+      config:
+        api_key: "${STRIPE_KEY}"
 ```
 
 ```python
-# Dans un plugin "stripe_plugin"
 async def on_load(self):
-    cfg = self.ctx.config.services.extensions.get("stripe", {})
-    self._client = StripeClient(api_key=cfg["api_key"])
-    # Enregistrer dans le container pour les autres plugins
-    self.ctx.services.register("stripe", self._client)
+    stripe = self.get_service("ext.stripe")
 ```

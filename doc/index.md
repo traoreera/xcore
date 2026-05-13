@@ -328,7 +328,8 @@ curl -X POST http://127.0.0.1:8000/plugin/ipc/hello/greet \
 | [🏗️ Architecture](architecture/overview.md) | Comprendre les internals du framework |
 | [🛡️ Sécurité](guides/security.md) | Sandbox, permissions et isolation |
 | [📡 Événements](guides/events.md) | Système de messagerie et hooks |
-| [🔧 Services](guides/services.md) | Utiliser DB, Cache et Scheduler |
+| [🔧 Services](guides/services.md) | Utiliser DB, Cache, Scheduler et XWorker (Celery) |
+| [🔀 Middlewares](guides/middlewares.md) | Déclarer et écrire des middlewares ASGI |
 | [📖 SDK Reference](reference/sdk.md) | API complète du SDK |
 
 ---
@@ -339,6 +340,7 @@ curl -X POST http://127.0.0.1:8000/plugin/ipc/hello/greet \
 -   [CLI Reference](reference/cli.md) - Commandes de gestion
 -   [Troubleshooting](guides/troubleshooting.md) - Résolution de problèmes
 -   [Contributing](development/contributing.md) - Guide de contribution
+-   [Vision & Évolution](vision.md) - Roadmap et directions futures du framework
 
 ---
 

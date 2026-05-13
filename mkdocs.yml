@@ -1,6 +1,6 @@
 site_name: XCore Framework
-site_description: Plugin-first orchestration framework built on FastAPI
-site_author: XCore Team
+site_description: Framework d'orchestration plugin-first sur FastAPI — v2.1.3
+site_author: Eliezer Traore
 site_url: https://xcore.readthedocs.io
 
 docs_dir: doc
@@ -28,10 +28,15 @@ theme:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.indexes
+    - navigation.footer
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
     - content.code.annotate
+    - content.tabs.link
+    - toc.follow
 
 extra:
   social:
@@ -39,6 +44,18 @@ extra:
       link: https://github.com/traoreera/xcore
   version:
     provider: mike
+  analytics:
+    feedback:
+      title: Cette page vous a-t-elle été utile ?
+      ratings:
+        - icon: material/thumb-up-outline
+          name: Oui
+          data: 1
+          note: Merci pour votre retour !
+        - icon: material/thumb-down-outline
+          name: Non
+          data: 0
+          note: Merci — nous allons améliorer cette page.
 
 plugins:
   - search
@@ -76,36 +93,53 @@ markdown_extensions:
 
 nav:
   - Accueil: index.md
-  - Getting Started:
+
+  - Démarrage:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
+
   - Guides:
       - Créer un Plugin: guides/creating-plugins.md
-      - Services (DB, Cache, Scheduler): guides/services.md
+      - Services (DB, Cache, Scheduler, Celery): guides/services.md
+      - Middlewares: guides/middlewares.md
       - Événements & Hooks: guides/events.md
       - Sécurité: guides/security.md
+      - Marketplace: guides/marketplace.md
       - Monitoring: guides/monitoring.md
       - Scalabilité: guides/scaling.md
       - Troubleshooting: guides/troubleshooting.md
-  - Reference:
+
+  - Référence:
       - SDK: reference/sdk.md
-      - Configuration: reference/configuration.md
+      - Configuration (integration.yaml): reference/configuration.md
       - CLI: reference/cli.md
       - API: reference/api.md
       - Benchmarks: reference/benchmarks.md
+
   - Architecture:
       - Vue d'ensemble: architecture/overview.md
       - Décisions: architecture/decisions.md
-  - Deployment:
+
+  - Déploiement:
       - Guide: deployment/guide.md
-  - Development:
+
+  - Développement:
       - Tests: development/testing.md
       - Contribuer: development/contributing.md
+
   - Exemples:
+      - Vue d'ensemble: examples/README.md
       - Plugin basique: examples/basic-plugin.md
       - Plugin complet: examples/complete-plugin.md
       - Plugin Trusted: examples/trusted-plugin.md
       - Plugin Sandboxed: examples/sandboxed-plugin.md
-  - Changelog: versions.md
 
-copyright: Copyright &copy; 2026 XCore Team
+  - Versions & Changelog:
+      - Historique des versions: versions.md
+      - Changelog complet: ../CHANGELOG.md
+
+  - Vision: vision.md
+
+copyright: >
+  Copyright &copy; 2026 <a href="https://github.com/traoreera">Eliezer Traore</a>
+  — XCore Framework v2.1.3 — Licence MIT

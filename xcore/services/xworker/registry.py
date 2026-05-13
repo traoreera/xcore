@@ -18,6 +18,8 @@ import logging
 from functools import wraps
 from typing import Any, Callable
 
+from ...configurations.sections import WorkerConfig
+
 logger = logging.getLogger("xcore.worker.registry")
 
 _app: Any = None
@@ -39,15 +41,19 @@ def get_app() -> Any:
     return _app
 
 
-def build_app(cfg: Any) -> Any:
+def build_app(cfg: "WorkerConfig") -> Any:
     """Construit ou reconfigure l'app Celery depuis un WorkerConfig."""
     from celery import Celery  # type: ignore[import]
     from kombu import Queue  # type: ignore[import]
 
-    _app_instance = Celery("app")
+    queues = [Queue(q) for q in cfg.queues]
+
+    _app_instance = Celery(
+        cfg.name,
+        broker=cfg.broker_url,
+        backend=cfg.result_backend,
+    )
     _app_instance.conf.update(
-        broker_url=cfg.broker_url,
-        result_backend=cfg.result_backend,
         task_serializer=cfg.task_serializer,
         result_serializer=cfg.result_serializer,
         accept_content=cfg.accept_content,
@@ -55,9 +61,8 @@ def build_app(cfg: Any) -> Any:
         task_time_limit=cfg.task_time_limit,
         result_expires=cfg.result_expires,
         broker_connection_retry_on_startup=cfg.broker_connection_retry_on_startup,
-        worker_concurrency=cfg.concurrency,
-        task_default_queue="default",
-        task_queues=tuple(Queue(q) for q in cfg.queues),
+        task_default_queue=cfg.task_default_queue,
+        task_queues=queues,
     )
     return _app_instance
 

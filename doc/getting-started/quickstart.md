@@ -52,8 +52,11 @@ async def lifespan(app: FastAPI):
     yield
     await xcore.shutdown()  # arrêt propre
 
-app = FastAPI(title="Mon App XCore", lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
+xcore.setup(app)            # enregistre les middlewares (avant démarrage)
 ```
+
+> `xcore.setup(app)` est nécessaire uniquement si vous avez des middlewares déclarés dans `integration.yaml`. Il doit être appelé **après** `FastAPI()` et **avant** que uvicorn démarre.
 
 ---
 

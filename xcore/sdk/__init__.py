@@ -6,8 +6,18 @@ Import recommandé dans un plugin :
     from xcore.sdk import PluginManifest
 """
 
+from ..kernel.api.auth import (
+    get_auth_backend,
+    register_auth_backend,
+    unregister_auth_backend,
+)
 from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
-from ..kernel.api.rbac import RBACChecker, require_permission, require_role
+from ..kernel.api.rbac import (
+    RBACChecker,
+    get_current_user,
+    require_permission,
+    require_role,
+)
 from ..services.xworker import WorkerService, task, task_registry
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
@@ -49,5 +59,9 @@ __all__ = [
     "WorkerService",
     "task_registry",
     "task",
+    "register_auth_backend",
+    "unregister_auth_backend",
+    "get_auth_backend",
     "RouterRegistry",
+    "get_current_user",
 ]

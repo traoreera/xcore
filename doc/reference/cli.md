@@ -1,10 +1,10 @@
 # CLI Reference
 
-Le CLI `xcore` expose des commandes pour gérer les plugins, le sandbox, le marketplace et l'état du système.
+Le CLI `xcore` expose des commandes pour gérer les plugins, le sandbox, le marketplace, les services et les processus worker.
 
 ```bash
-poetry run xcore --help
-poetry run xcore --version
+xcore --help
+xcore --version
 ```
 
 ---
@@ -13,89 +13,64 @@ poetry run xcore --version
 
 ### `list`
 
-Liste tous les plugins installés dans le répertoire configuré.
-
 ```bash
-poetry run xcore plugin list
+xcore plugin list
 ```
 
 ### `info <name>`
 
-Affiche les métadonnées détaillées d'un plugin (version, mode, auteur, permissions).
-
 ```bash
-poetry run xcore plugin info mon_plugin
+xcore plugin info mon_plugin
 ```
 
 ### `load <name>`
 
-Charge un plugin sur le serveur en cours d'exécution via l'API interne.
-
 ```bash
-poetry run xcore plugin load mon_plugin [--host 127.0.0.1] [--port 8000] [--key <api_key>]
+xcore plugin load mon_plugin [--host 127.0.0.1] [--port 8000] [--key <api_key>]
 ```
 
 ### `reload <name>`
 
-Recharge à chaud un plugin sans redémarrer le serveur.
-
 ```bash
-poetry run xcore plugin reload mon_plugin
+xcore plugin reload mon_plugin
 ```
 
 ### `install <name>`
 
-Installe un plugin depuis le marketplace, un fichier zip ou un dépôt git.
-
 ```bash
-# Depuis le marketplace (défaut)
-poetry run xcore plugin install auth_plugin
-
-# Depuis une archive zip
-poetry run xcore plugin install mon_plugin --source zip --url https://example.com/plugin.zip
-
-# Depuis git
-poetry run xcore plugin install mon_plugin --source git --url https://github.com/user/plugin
+xcore plugin install auth_plugin                          # marketplace (défaut)
+xcore plugin install mon_plugin --source zip --url <url>  # archive zip
+xcore plugin install mon_plugin --source git --url <url>  # dépôt git
 ```
 
 ### `remove <name>`
 
-Supprime un plugin du répertoire.
-
 ```bash
-poetry run xcore plugin remove mon_plugin
+xcore plugin remove mon_plugin
 ```
 
 ### `sign <path>`
 
-Génère une signature HMAC-SHA256 (`plugin.sig`) pour un plugin Trusted.
-
 ```bash
-poetry run xcore plugin sign plugins/mon_plugin --key "ma_cle_secrete"
+xcore plugin sign plugins/mon_plugin --key "ma_cle_secrete"
 ```
 
 ### `verify <path>`
 
-Vérifie la signature d'un plugin.
-
 ```bash
-poetry run xcore plugin verify plugins/mon_plugin --key "ma_cle_secrete"
+xcore plugin verify plugins/mon_plugin --key "ma_cle_secrete"
 ```
 
 ### `validate <path>`
 
-Valide le manifeste d'un plugin (structure, types, compatibilité framework).
-
 ```bash
-poetry run xcore plugin validate plugins/mon_plugin
+xcore plugin validate plugins/mon_plugin
 ```
 
 ### `health`
 
-Vérifie l'état de santé de tous les plugins.
-
 ```bash
-poetry run xcore plugin health
+xcore plugin health
 ```
 
 ---
@@ -104,101 +79,156 @@ poetry run xcore plugin health
 
 ### `run <name>`
 
-Lance un plugin dans un processus sandbox isolé.
-
 ```bash
-poetry run xcore sandbox run mon_plugin
+xcore sandbox run mon_plugin
 ```
 
 ### `limits <name>`
 
-Affiche les limites de ressources configurées (mémoire, timeout, rate limit).
-
 ```bash
-poetry run xcore sandbox limits mon_plugin
+xcore sandbox limits mon_plugin
 ```
 
 ### `network <name>`
 
-Affiche la politique réseau du plugin sandboxed.
-
 ```bash
-poetry run xcore sandbox network mon_plugin
+xcore sandbox network mon_plugin
 ```
 
 ### `fs <name>`
 
-Affiche la politique filesystem (chemins autorisés/interdits).
-
 ```bash
-poetry run xcore sandbox fs mon_plugin
+xcore sandbox fs mon_plugin
 ```
 
 ---
 
 ## `xcore marketplace`
 
-### `list`
-
-Liste tous les plugins disponibles sur le marketplace.
-
 ```bash
-poetry run xcore marketplace list
-```
-
-### `trending`
-
-Affiche les plugins populaires.
-
-```bash
-poetry run xcore marketplace trending
-```
-
-### `search <query>`
-
-Recherche des plugins par mot-clé.
-
-```bash
-poetry run xcore marketplace search "authentication"
-```
-
-### `show <name>`
-
-Affiche les détails d'un plugin du marketplace.
-
-```bash
-poetry run xcore marketplace show auth_plugin
-```
-
-### `rate <name> --score <1-5>`
-
-Note un plugin.
-
-```bash
-poetry run xcore marketplace rate auth_plugin --score 5
+xcore marketplace list
+xcore marketplace trending
+xcore marketplace search "authentication"
+xcore marketplace show auth_plugin
+xcore marketplace rate auth_plugin --score 5
 ```
 
 ---
 
 ## `xcore services status`
 
-Affiche l'état de tous les services (DB, Cache, Scheduler).
-
 ```bash
-poetry run xcore services status
-poetry run xcore services status --json
+xcore services status
+xcore services status --json
 ```
 
 ---
 
 ## `xcore health`
 
-Health check global du système.
+```bash
+xcore health
+xcore health --json
+```
+
+---
+
+## `xcore worker`
+
+Gère les processus FastAPI (uvicorn) et Celery en arrière-plan avec fichiers PID et logs séparés.
+
+### `start [api|celery|all]`
+
+Lance un ou plusieurs processus. Cible par défaut : `all`.
 
 ```bash
-poetry run xcore health
-poetry run xcore health --json
+xcore worker start                      # API + Celery (foreground)
+xcore worker start --detach             # arrière-plan, PIDs dans .xcore/pids/
+xcore worker start api --reload         # API seule en dev
+xcore worker start celery -Q default,emails -c 4
+xcore worker start --host 0.0.0.0 --port 8080
 ```
+
+| Option | Description |
+|:-------|:------------|
+| `--detach / -d` | Lance en arrière-plan |
+| `--loglevel / -l` | Niveau de log (`debug`…`critical`) |
+| `--app` | App ASGI (`main:app`) |
+| `--host` | Adresse d'écoute (défaut: `integration.yaml → server.host`) |
+| `--port / -p` | Port (défaut: `integration.yaml → server.port`) |
+| `--workers / -w` | Workers uvicorn |
+| `--reload` | Auto-reload uvicorn |
+| `--queues / -Q` | Files Celery (défaut: `integration.yaml → xworker.queues`) |
+| `--concurrency / -c` | Concurrence Celery (défaut: `integration.yaml → xworker.concurrency`) |
+| `--hostname / -n` | Nom du worker Celery (ex: `worker1@%h`) |
+
+### `stop [api|celery|all]`
+
+```bash
+xcore worker stop              # arrête tout
+xcore worker stop api
+xcore worker stop celery
+```
+
+### `status`
+
+```bash
+xcore worker status
+xcore worker status --json
+```
+
+Affiche un tableau avec PID, état et chemin de log pour chaque processus.
+
+### `logs [api|celery|all]`
+
+```bash
+xcore worker logs                      # 50 dernières lignes de tout
+xcore worker logs api -n 100
+xcore worker logs celery --follow      # tail -f en temps réel
+```
+
+| Option | Description |
+|:-------|:------------|
+| `--lines / -n` | Nombre de lignes (défaut: 50) |
+| `--follow / -f` | Suit en temps réel (cible unique uniquement) |
+
+### `inspect`
+
+Liste les tâches Celery enregistrées et les workers actifs.
+
+```bash
+xcore worker inspect
+```
+
+### `purge [queue]`
+
+Vide une file d'attente Celery.
+
+```bash
+xcore worker purge              # vide la file "default"
+xcore worker purge emails
+```
+
+### `beat`
+
+Lance le scheduler Celery Beat.
+
+```bash
+xcore worker beat
+xcore worker beat --detach
+xcore worker beat --schedule /tmp/beat-schedule
+```
+
+### Fichiers générés
+
+| Fichier | Description |
+|:--------|:------------|
+| `.xcore/pids/api.pid` | PID du processus uvicorn |
+| `.xcore/pids/celery.pid` | PID du worker Celery |
+| `.xcore/pids/beat.pid` | PID de Celery Beat |
+| `log/api.log` | Logs uvicorn |
+| `log/celery.log` | Logs Celery worker |
+| `log/beat.log` | Logs Celery Beat |
 
 ---
 
@@ -206,5 +236,5 @@ poetry run xcore health --json
 
 | Option | Description |
 |:-------|:------------|
-| `--config <path>` | Chemin vers `xcore.yaml` (défaut : auto-détection) |
-| `--version` | Affiche la version (`xcore v2.1.2`) |
+| `--config <path>` | Chemin vers `integration.yaml` (défaut : auto-détection) |
+| `--version` | Affiche la version (`xcore v2.1.3`) |

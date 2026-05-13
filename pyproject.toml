@@ -47,10 +47,11 @@ dependencies = [
     "watchdog>=6.0.0,<7.0.0",
     "markdown>=3.8.2,<4.0.0",
     "pillow>=11.2.1,<13.0.0",
+    "celery (>=5.6.3,<6.0.0)",
 ]
 
 [project.scripts]
-xcore = "xcore.cli.main:main"
+xcore = "xcore.cli.cli:main"
 
 # ── Build system ──────────────────────────────────────────────────────────────
 

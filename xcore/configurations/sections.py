@@ -6,7 +6,44 @@ Toutes ont des valeurs par défaut : zéro config = zéro crash.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+
+@dataclass
+class FastAPIConfig:
+    """Paramètres passés au constructeur FastAPI()."""
+
+    debug: bool = False
+    title: str = "xcore"
+    summary: str | None = None
+    description: str = ""
+    version: str = "0.1.0"
+    openapi_url: str | None = "/openapi.json"
+    openapi_tags: list[dict[str, Any]] = field(default_factory=list)
+    redirect_slashes: bool = True
+    docs_url: str | None = "/docs"
+    redoc_url: str | None = "/redoc"
+    swagger_ui_oauth2_redirect_url: str = "/docs/oauth2-redirect"
+    terms_of_service: str | None = None
+    contact: dict[str, Any] | None = None
+    license_info: dict[str, Any] | None = None
+    openapi_prefix: str = ""
+    root_path: str = ""
+    deprecated: bool = False
+
+
+@dataclass
+class ServerConfig:
+    """Paramètres uvicorn pour `xcore worker start api`."""
+
+    app: str = "main:app"
+    host: str = "0.0.0.0"
+    port: int = 8000
+    workers: int = 1
+    reload: bool = False
+    log_level: str = "info"
+    proxy_headers: bool = True
+    forwarded_allow_ips: str = "*"
 
 
 @dataclass
@@ -19,6 +56,8 @@ class AppConfig:
     plugin_tags: list[str] = field(default_factory=list)
     server_key: bytes | str = b"change-me-in-production"
     server_key_iterations: int = 100_000
+    fastapi: FastAPIConfig = field(default_factory=FastAPIConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
 
 
 @dataclass
@@ -36,9 +75,10 @@ class DatabaseConfig:
 @dataclass
 class WorkerConfig:
     enabled: bool = False
-    module: str = "extensions.xworker.main:WorkerService"
+    name: str = "App"
     broker_url: str = "redis://localhost:6379/0"
     result_backend: str = "redis://localhost:6379/1"
+    task_default_queue: str = "default"
     concurrency: int = 4
     task_soft_time_limit: int = 300
     task_time_limit: int = 360
@@ -49,27 +89,14 @@ class WorkerConfig:
     result_expires: int = 86400
     queues: list[str] = field(default_factory=lambda: ["default"])
     modules: list[str] = field(default_factory=list)
-    task_list: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if self.task_list and not self.modules:
-            self.modules = list(self.task_list)
-        if self.modules and not self.task_list:
-            self.task_list = list(self.modules)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "WorkerConfig":
-        # type: ignore[attr-defined]
-        valid = {f.name for f in cls.__dataclass_fields__.values()}
-        parsed = {k: v for k, v in d.items() if k in valid}
-        if "task_list" not in parsed and "modules" in parsed:
-            parsed["task_list"] = list(parsed["modules"])
-        if "modules" not in parsed and "task_list" in parsed:
-            parsed["modules"] = list(parsed["task_list"])
-        return cls(**parsed)
+        valid = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in d.items() if k in valid})
 
     def to_payload(self) -> dict[str, Any]:
-        payload = {
+        return {
             "broker_url": self.broker_url,
             "result_backend": self.result_backend,
             "concurrency": self.concurrency,
@@ -80,10 +107,9 @@ class WorkerConfig:
             "result_serializer": self.result_serializer,
             "accept_content": self.accept_content,
             "result_expires": self.result_expires,
-            "queues": self.queues,
-            "modules": self.modules or self.task_list,
+            "task_queues": self.queues,
+            "task_default_queue": self.task_default_queue,
         }
-        return payload
 
 
 @dataclass
@@ -192,6 +218,20 @@ class MarketplaceConfig:
 
 
 @dataclass
+class MiddleParams:
+    type: Literal["internal", "external"] = "external"
+    name: str = ""
+    value: Any = None
+
+
+@dataclass
+class MiddlewareConfig:
+    name: str
+    module: str | None = None
+    config: list[MiddleParams] = field(default_factory=list)
+
+
+@dataclass
 class XcoreConfig:
     app: AppConfig = field(default_factory=AppConfig)
     plugins: PluginConfig = field(default_factory=PluginConfig)
@@ -200,3 +240,9 @@ class XcoreConfig:
     security: SecurityConfig = field(default_factory=SecurityConfig)
     marketplace: MarketplaceConfig = field(default_factory=MarketplaceConfig)
     raw: dict[str, Any] = field(default_factory=dict)
+    middleware: list[MiddlewareConfig] = field(default_factory=list)
+    cors_allow_credentials: bool = True
+    cors_max_age: int = 3600
+    cors_expose_headers: list[str] = field(default_factory=list)
+    cors_redirect_status: int = 307
+    cors_preflight_continue: bool = False

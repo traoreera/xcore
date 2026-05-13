@@ -1,6 +1,6 @@
-# Configuration (`xcore.yaml`)
+# Configuration (`integration.yaml`)
 
-Le fichier `xcore.yaml` centralise toute la configuration du framework.
+Le fichier `integration.yaml` centralise toute la configuration du framework.
 
 ---
 
@@ -12,21 +12,50 @@ app:
   name: "mon-app"
   env: development          # development | staging | production
   debug: false
-  secret_key: "${APP_SECRET_KEY}"   # clé JWT / sessions
-  plugin_prefix: "/plugin"          # préfixe des routes HTTP plugins
-  plugin_tags: []                   # tags OpenAPI globaux
-  server_key: "${SERVER_KEY}"       # clé HMAC pour l'API interne
+  secret_key: "${APP_SECRET_KEY}"
+  plugin_prefix: "/plugin"
+  plugin_tags: []
+  server_key: "${SERVER_KEY}"
   server_key_iterations: 100000
+
+  # ── FastAPI ──────────────────────────────────────────────────
+  fastapi:
+    title: "Mon App"
+    summary: "API propulsée par xcore"
+    description: ""
+    version: "1.0.0"
+    debug: false
+    docs_url: "/docs"
+    redoc_url: "/redoc"
+    openapi_url: "/openapi.json"
+    redirect_slashes: true
+    # terms_of_service: "https://example.com/terms"
+    # contact:
+    #   name: "Support"
+    #   email: "support@example.com"
+    # license_info:
+    #   name: "MIT"
+    deprecated: false
+
+  # ── Uvicorn ──────────────────────────────────────────────────
+  server:
+    app: "main:app"
+    host: "0.0.0.0"
+    port: 8000
+    workers: 1
+    reload: false
+    log_level: "info"
+    proxy_headers: true
+    forwarded_allow_ips: "*"
 
 # ── Plugins ──────────────────────────────────────────────────
 plugins:
   directory: ./plugins
   secret_key: "${PLUGIN_SECRET_KEY}"
-  strict_trusted: true      # true = refus des plugins non signés
-  interval: 2               # watcher hot-reload (secondes, 0 = désactivé)
+  strict_trusted: true
+  interval: 2
   entry_point: src/main.py
 
-  # Fichiers ignorés par le watcher
   snapshot:
     extensions: [".log", ".pyc", ".html", ".map"]
     filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
@@ -34,79 +63,232 @@ plugins:
 
 # ── Services ─────────────────────────────────────────────────
 services:
-  # Bases de données (plusieurs connexions possibles)
   databases:
-    db:                           # accessible via self.get_service("db")
-      type: sqlasync              # sqlasync | sql | redis | mongodb
+    db:
+      type: sqlasync
       url: "${DATABASE_URL}"
       pool_size: 5
       max_overflow: 10
       echo: false
 
-    analytics:                    # accessible via self.get_service("analytics")
-      type: sqlasync
-      url: "${ANALYTICS_DB_URL}"
-
-    redis_db:                     # accessible via self.get_service("redis_db")
+    redis_db:
       type: redis
       url: "${REDIS_URL}"
       max_connections: 50
 
-  # Cache
   cache:
-    backend: redis                # memory | redis
+    backend: redis            # memory | redis
     url: "${REDIS_URL}"
     ttl: 300
-    max_size: 10000               # ignoré en mode redis
+    max_size: 10000
 
-  # Scheduler
   scheduler:
     enabled: true
-    backend: redis                # memory | redis | database
+    backend: redis
     timezone: Europe/Paris
 
-    # Jobs statiques (optionnel)
-    jobs:
-      - id: cleanup
-        func: myapp.tasks:cleanup
-        trigger: cron
-        hour: 3
-        minute: 0
+  # ── Celery / XWorker ─────────────────────────────────────────
+  xworker:
+    enabled: true
+    name: "mon-app"
+    broker_url: "${REDIS_URL}"
+    result_backend: "redis://localhost:6379/1"
+    task_default_queue: default
+    concurrency: 4
+    task_soft_time_limit: 300
+    task_time_limit: 360
+    task_serializer: json
+    result_serializer: json
+    accept_content:
+      - json
+    result_expires: 86400
+    broker_connection_retry_on_startup: true
+    queues:
+      - default
+      - result
+    modules: []               # modules Python contenant les @task()
 
-  # Extensions (services custom)
   extensions:
     stripe:
-      api_key: "${STRIPE_KEY}"
+      module: myapp.services.stripe:StripeService
+      config:
+        api_key: "${STRIPE_KEY}"
+
+# ── Middlewares ───────────────────────────────────────────────
+middleware:
+  - name: timing
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
+
+  - name: cache_header
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
+    config:
+      - name: header_prefix
+        type: external
+        value: "X-App"
+      - name: cache_getter
+        type: internal      # résolu via services.get("cache") à chaque requête
+        value: cache
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:
   logging:
-    level: INFO                   # DEBUG | INFO | WARNING | ERROR
+    level: INFO
     format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     file: log/app.log
-    max_bytes: 10485760           # 10 MB
+    max_bytes: 10485760
     backup_count: 5
 
   metrics:
     enabled: true
-    backend: memory               # memory | prometheus | statsd
+    backend: memory           # memory | prometheus | statsd
     prefix: xcore
 
   tracing:
     enabled: false
-    backend: noop                 # noop | opentelemetry | jaeger
+    backend: noop             # noop | opentelemetry | jaeger
     service_name: xcore
     endpoint: null
 
 # ── Sécurité ─────────────────────────────────────────────────
 security:
-  # (Réservé — extension future pour Vault, rotation de clés, etc.)
+  allowed_imports:
+    - fastapi
+    - json
+    - re
+    - math
+    - asyncio
+    - logging
+    - uuid
+  forbidden_imports:
+    - os
+  rate_limit_default:
+    calls: 200
+    period_seconds: 60
 
 # ── Marketplace ───────────────────────────────────────────────
 marketplace:
   url: "https://marketplace.xcore.dev"
   api_key: "${MARKETPLACE_KEY}"
 ```
+
+---
+
+## Section `app`
+
+### Champs principaux
+
+| Champ | Type | Défaut | Description |
+|:------|:-----|:-------|:------------|
+| `name` | str | `"xcore-app"` | Nom de l'application |
+| `env` | str | `"development"` | Environnement (`development` / `staging` / `production`) |
+| `debug` | bool | `false` | Mode debug global |
+| `secret_key` | str | — | Clé JWT / sessions (obligatoire en prod) |
+| `plugin_prefix` | str | `"/plugin"` | Préfixe URL des routes plugins |
+| `server_key` | str | — | Clé HMAC pour l'API interne |
+
+### Sous-section `fastapi`
+
+Configure le constructeur `FastAPI()`. Tous ces champs sont passés directement à FastAPI au démarrage.
+
+| Champ | Type | Défaut | Description |
+|:------|:-----|:-------|:------------|
+| `title` | str | `"xcore"` | Titre affiché dans la doc Swagger |
+| `summary` | str | `null` | Résumé court |
+| `description` | str | `""` | Description longue (Markdown supporté) |
+| `version` | str | `"0.1.0"` | Version de l'API |
+| `docs_url` | str | `"/docs"` | URL Swagger UI (`null` pour désactiver) |
+| `redoc_url` | str | `"/redoc"` | URL ReDoc (`null` pour désactiver) |
+| `openapi_url` | str | `"/openapi.json"` | URL du schéma OpenAPI |
+| `redirect_slashes` | bool | `true` | Redirection slash final |
+| `terms_of_service` | str | `null` | URL CGU |
+| `contact` | dict | `null` | Contact `{name, email, url}` |
+| `license_info` | dict | `null` | Licence `{name, url}` |
+| `deprecated` | bool | `false` | Marque l'API comme dépréciée |
+
+### Sous-section `server`
+
+Configure uvicorn pour `xcore worker start api`.
+
+| Champ | Type | Défaut | Description |
+|:------|:-----|:-------|:------------|
+| `app` | str | `"main:app"` | Chemin de l'app ASGI |
+| `host` | str | `"0.0.0.0"` | Adresse d'écoute |
+| `port` | int | `8000` | Port |
+| `workers` | int | `1` | Nombre de workers uvicorn |
+| `reload` | bool | `false` | Auto-reload (dev uniquement) |
+| `log_level` | str | `"info"` | Niveau de log uvicorn |
+| `proxy_headers` | bool | `true` | Confiance aux headers `X-Forwarded-*` |
+| `forwarded_allow_ips` | str | `"*"` | IPs autorisées pour les headers proxy |
+
+---
+
+## Section `services.xworker`
+
+Intégration native de Celery dans le `ServiceContainer`.
+
+| Champ | Type | Défaut | Description |
+|:------|:-----|:-------|:------------|
+| `enabled` | bool | `false` | Active le service |
+| `name` | str | `"App"` | Nom de l'app Celery (logs, Flower) |
+| `broker_url` | str | Redis local | URL du broker |
+| `result_backend` | str | Redis local | URL du backend de résultats |
+| `task_default_queue` | str | `"default"` | File par défaut |
+| `concurrency` | int | `4` | Workers Celery (surchargeable via `-c`) |
+| `task_soft_time_limit` | int | `300` | Secondes avant `SoftTimeLimitExceeded` |
+| `task_time_limit` | int | `360` | Secondes avant kill forcé |
+| `queues` | list | `["default"]` | Files d'attente déclarées |
+| `modules` | list | `[]` | Modules Python contenant les `@task()` |
+| `result_expires` | int | `86400` | Conservation des résultats (secondes) |
+
+Accès depuis un plugin :
+
+```python
+worker = self.get_service("worker")    # → WorkerService
+worker.send("tasks.send_email", user_id=42, queue="emails")
+result = worker.get_result(task_id)
+```
+
+---
+
+## Section `middleware`
+
+Déclare les middlewares ASGI chargés automatiquement au démarrage.
+
+```yaml
+middleware:
+  - name: mon_middleware
+    module: myapp.middlewares.auth:AuthMiddleware
+    config:
+      - name: secret
+        type: external        # valeur directe
+        value: "${JWT_SECRET}"
+      - name: cache_getter
+        type: internal        # callable () → service, résolu à chaque requête
+        value: cache
+```
+
+| Champ | Description |
+|:------|:------------|
+| `name` | Identifiant du middleware (logs) |
+| `module` | Chemin Python `package.module:ClassName` |
+| `config` | Liste de paramètres (voir ci-dessous) |
+
+### Paramètres (`config`)
+
+| Champ | Valeurs | Description |
+|:------|:--------|:------------|
+| `name` | str | Nom du paramètre dans le constructeur |
+| `type` | `external` / `internal` | `external` = valeur directe ; `internal` = service résolu paresseusement |
+| `value` | any | Valeur ou clé du service (ex: `"cache"`, `"db"`) |
+
+> **Important** : les params `internal` reçoivent un callable `() → service` dans le constructeur, pas l'instance directe. Appeler `my_param()` à l'intérieur de `dispatch()` pour obtenir le service.
+
+### Middlewares intégrés
+
+| Module | Description |
+|:-------|:------------|
+| `xcore.kernel.api.middlewares.timing:RequestTimingMiddleware` | Ajoute `X-Process-Time` à chaque réponse |
+| `xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware` | Ajoute des headers de diagnostic cache |
 
 ---
 
@@ -125,11 +307,9 @@ marketplace:
 
 ### Substitution `${VAR}`
 
-Toute valeur au format `${NOM_VAR}` est substituée depuis l'environnement OS ou le `.env` configuré.
-
 ```yaml
 app:
-  secret_key: "${APP_SECRET_KEY}"   # résolu depuis os.environ
+  secret_key: "${APP_SECRET_KEY}"
 ```
 
 ### Surcharge via variables d'environnement
@@ -140,39 +320,20 @@ Format : `XCORE__<SECTION>__<CLE>=valeur`
 XCORE__APP__DEBUG=true
 XCORE__APP__ENV=production
 XCORE__SERVICES__CACHE__BACKEND=redis
-XCORE__SERVICES__CACHE__URL=redis://prod-redis:6379/0
-XCORE__PLUGINS__STRICT_TRUSTED=true
+XCORE__SERVICES__XWORKER__CONCURRENCY=8
 ```
 
-Priorité : **variables d'environnement > xcore.yaml > valeurs par défaut**
+Priorité : **variables d'environnement > integration.yaml > valeurs par défaut**
 
 ### Chargement d'un `.env`
 
 ```yaml
 app:
-  dotenv: "./.env"    # chemin relatif au projet
+  dotenv: "./.env"
 ```
 
 ---
 
 ## Valeurs par défaut
 
-Tous les champs ont des valeurs par défaut : un `xcore.yaml` vide (ou absent) ne provoque pas d'erreur, XCore démarre en mode minimal (SQLite en mémoire, cache memory, scheduler désactivé).
-
----
-
-## Chemin du fichier de configuration
-
-Pour éviter toute ambiguïté, il est recommandé de passer explicitement le chemin du fichier :
-
-```python
-xcore = Xcore(config_path="config/prod.yaml")
-```
-
-Ou via CLI :
-
-```bash
-poetry run xcore --config config/prod.yaml plugin list
-```
-
-Si aucun chemin n'est fourni, le `ConfigLoader` essaie des chemins de fallback historiques (`integation.yaml`, `integation.yml`, `integation.json`, `config/integation.yaml`).
+Tous les champs ont des valeurs par défaut : un fichier absent ou vide ne provoque pas d'erreur — xcore démarre en mode minimal.
