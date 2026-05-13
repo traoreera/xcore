@@ -46,8 +46,24 @@ def build_app(cfg: "WorkerConfig") -> Any:
     from celery import Celery  # type: ignore[import]
     from kombu import Queue  # type: ignore[import]
 
-    _app_instance = Celery(cfg.name)
-    _app_instance.conf.update(**cfg.to_payload())
+    queues = [Queue(q) for q in cfg.queues]
+
+    _app_instance = Celery(
+        cfg.name,
+        broker=cfg.broker_url,
+        backend=cfg.result_backend,
+    )
+    _app_instance.conf.update(
+        task_serializer=cfg.task_serializer,
+        result_serializer=cfg.result_serializer,
+        accept_content=cfg.accept_content,
+        task_soft_time_limit=cfg.task_soft_time_limit,
+        task_time_limit=cfg.task_time_limit,
+        result_expires=cfg.result_expires,
+        broker_connection_retry_on_startup=cfg.broker_connection_retry_on_startup,
+        task_default_queue=cfg.task_default_queue,
+        task_queues=queues,
+    )
     return _app_instance
 
 

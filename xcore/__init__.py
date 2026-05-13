@@ -17,7 +17,15 @@ Quickstart:
     ```
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
 from .__version__ import __version__
+from .configurations.sections import MiddlewareConfig
 from .kernel.api import (
     AuthBackend,
     AuthPayload,
@@ -27,6 +35,7 @@ from .kernel.api import (
     unregister_auth_backend,
 )
 from .kernel.api.contract import BasePlugin, TrustedBase
+from .kernel.api.middleware import Middlewares
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
 from .kernel.observability import (
@@ -116,6 +125,31 @@ class Xcore:
 
         self._logger = get_logger("xcore")
 
+    def setup(self, app: "FastAPI") -> "Xcore":
+        """
+        Enregistre les middlewares sur l'app FastAPI.
+        Doit être appelé AVANT le démarrage (avant uvicorn / lifespan).
+
+        Usage :
+            xcore = Xcore()
+            app = FastAPI(lifespan=lifespan)
+            xcore.setup(app)          # ← ici, avant que l'app démarre
+        """
+        from .kernel.api.middleware import Middlewares
+
+        def _lazy_service(name: str):
+            """Résout le service au moment de la requête, pas à l'enregistrement."""
+            if self.services is None:
+                raise RuntimeError(f"Service '{name}' demandé avant boot()")
+            return self.services.get(name)
+
+        print("Enregistrement des middlewares...")
+        Middlewares(
+            config=self._config.middleware,
+            prototypes=_lazy_service,
+        ).configure(app, self._logger)
+        return self
+
     async def boot(self, app=None) -> "Xcore":
         """Démarre tous les sous-systèmes dans le bon ordre."""
 
@@ -159,6 +193,7 @@ class Xcore:
             health=self.health,
         )
         self.plugins = PluginSupervisor(ctx)
+
         await self.plugins.boot()
         self.plugins_lists = self.plugins.list_plugins()
 

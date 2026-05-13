@@ -1,6 +1,32 @@
 # Versions
 
-## v2.1.2 — Actuelle (2026-04-29)
+## v2.1.3 — Actuelle (2026-05-13)
+
+### XWorker (Celery natif)
+- Intégration Celery complète dans le `ServiceContainer` — activé via `services.xworker.enabled: true`
+- Bootstrap automatique de `_celery_worker` à l'import pour que `celery -A xcore.services.xworker.xworker:_celery_worker` fonctionne directement
+- Fix broker : `broker=` passé au constructeur `Celery()`, fin du fallback AMQP
+- Décorateur `@task()` compatible avec le registry, enregistrement paresseux avant `boot()`
+
+### CLI `xcore worker`
+- Gestion complète des processus FastAPI (uvicorn) et Celery en arrière-plan
+- Fichiers PID dans `.xcore/pids/`, logs dans `log/`
+- Commandes : `start`, `stop`, `status`, `logs --follow`, `inspect`, `purge`, `beat`
+- Valeurs par défaut lues depuis `integration.yaml` (sections `app.server` et `services.xworker`)
+
+### Configuration étendue
+- `app.fastapi` — tous les paramètres du constructeur `FastAPI()` configurables dans le YAML
+- `app.server` — paramètres uvicorn (`host`, `port`, `workers`, `reload`, `log_level`…)
+
+### Système de middlewares déclaratifs
+- Chargement automatique depuis `integration.yaml → middleware`
+- Params `external` (valeur directe) et `internal` (service résolu paresseusement)
+- `Xcore.setup(app)` — à appeler après `FastAPI()`, avant uvicorn
+- Middlewares intégrés : `RequestTimingMiddleware`, `CacheHeaderMiddleware`
+
+---
+
+## v2.1.2 — (2026-04-29)
 
 ### Corrections
 - 13 échecs de tests critiques résolus (kernel, permissions, sandbox).

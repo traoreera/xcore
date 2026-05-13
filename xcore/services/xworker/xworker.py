@@ -16,19 +16,30 @@ logger = logging.getLogger("xcore.worker")
 
 
 def _make_app_from_env(cfg: "WorkerConfig") -> Any:
-    """Crée l'app Celery depuis les vars d'env — appelé à l'import pour le CLI."""
+    """Crée l'app Celery depuis un WorkerConfig."""
     try:
-        from celery import Celery  # type: ignore[import]
-        from kombu import Queue  # type: ignore[import]
+        from .registry import build_app
+
+        return build_app(cfg)
     except ImportError:
         return None
 
-    _app = Celery(cfg.name)
-    _app.conf.update(**cfg.to_payload())
-    return _app
+
+def _bootstrap() -> Any:
+    """Initialise l'app Celery à l'import pour que `celery -A ...` fonctionne."""
+    try:
+        from ...configurations.loader import ConfigLoader
+
+        cfg = ConfigLoader.load(None)
+        wcfg = cfg.services.xworker
+        if wcfg and wcfg.enabled:
+            return build_app(wcfg)
+    except Exception:
+        pass
+    return None
 
 
-_celery_worker = None
+_celery_worker = _bootstrap()
 
 
 class WorkerService(BaseService):

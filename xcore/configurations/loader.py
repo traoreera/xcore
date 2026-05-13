@@ -21,6 +21,7 @@ from .sections import (
     LoggingConfig,
     MarketplaceConfig,
     MetricsConfig,
+    MiddlewareConfig,
     ObservabilityConfig,
     PluginConfig,
     SchedulerConfig,
@@ -136,14 +137,36 @@ class ConfigLoader:
             observability=cls._parse_observability(raw.get("observability", {})),
             security=cls._parse_security(raw.get("security", {})),
             marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
+            middleware=cls._parse_middleware(raw.get("middleware", {})),
             raw=raw,
         )
 
     @staticmethod
     def _parse_app(d: dict) -> AppConfig:
+        from .sections import FastAPIConfig, ServerConfig
+
         sk = d.get("secret_key", "change-me-in-production")
         if isinstance(sk, str):
             sk = sk.encode()
+
+        fapi_raw = d.get("fastapi", {})
+        fapi = FastAPIConfig(
+            **{
+                k: v
+                for k, v in fapi_raw.items()
+                if k in FastAPIConfig.__dataclass_fields__
+            }
+        )
+
+        srv_raw = d.get("server", {})
+        srv = ServerConfig(
+            **{
+                k: v
+                for k, v in srv_raw.items()
+                if k in ServerConfig.__dataclass_fields__
+            }
+        )
+
         return AppConfig(
             name=d.get("name", "xcore-app"),
             env=d.get("env", "development"),
@@ -153,6 +176,8 @@ class ConfigLoader:
             plugin_tags=d.get("plugin_tags", []),
             server_key=d.get("server_key", "change-me-in-production"),
             server_key_iterations=d.get("server_key_iterations", 100000),
+            fastapi=fapi,
+            server=srv,
         )
 
     @staticmethod
@@ -175,6 +200,40 @@ class ConfigLoader:
                 },
             ),
         )
+
+    @classmethod
+    def _parse_middleware(cls, d: list) -> list[MiddlewareConfig]:
+        from .sections import MiddleParams
+
+        if not isinstance(d, list):
+            return []
+
+        result = []
+        for mw in d:
+            if not isinstance(mw, dict) or "name" not in mw:
+                logger.warning(f"Middleware invalide (ignoré) : {mw}")
+                continue
+            raw_params = mw.get("config", [])
+            if isinstance(raw_params, list):
+                params = [
+                    MiddleParams(
+                        type=p.get("type", "external"),
+                        name=p.get("name", ""),
+                        value=p.get("value"),
+                    )
+                    for p in raw_params
+                    if isinstance(p, dict)
+                ]
+            else:
+                params = []
+            result.append(
+                MiddlewareConfig(
+                    name=mw["name"],
+                    module=mw.get("module"),
+                    config=params,
+                )
+            )
+        return result
 
     @classmethod
     def _parse_services(cls, d: dict) -> ServicesConfig:

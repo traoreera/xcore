@@ -10,6 +10,36 @@ app:
   plugin_tags:
     - "test"
 
+  # ── FastAPI ────────────────────────────────────────────────────
+  fastapi:
+    title: "My App"
+    summary: "API propulsée par xcore"
+    description: ""
+    version: "1.0.0"
+    debug: false
+    docs_url: "/docs"
+    redoc_url: "/redoc"
+    openapi_url: "/openapi.json"
+    redirect_slashes: true
+    terms_of_service: "https://example.com/terms"
+    contact:
+      name: "Support"
+      email: "support@example.com"
+    license_info:
+      name: "MIT"
+    deprecated: false
+
+  # ── Uvicorn ────────────────────────────────────────────────────
+  server:
+    app: "main:app"
+    host: "0.0.0.0"
+    port: 8000
+    workers: 1
+    reload: false
+    log_level: "info"
+    proxy_headers: true
+    forwarded_allow_ips: "*"
+
 # ── Plugins ───────────────────────────────────────────────────
 plugins:
   directory: ./app
@@ -191,3 +221,17 @@ security:
   rate_limit_default:
     calls: 200
     period_seconds: 60
+
+middleware:
+  - name: timing
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
+
+  - name: cache_header
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
+    config:
+      - name: header_prefix
+        type: external
+        value: "X-App"
+      - name: cache_getter
+        type: internal
+        value: cache

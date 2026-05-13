@@ -10,22 +10,50 @@ Versionnage selon [Semantic Versioning](https://semver.org/lang/fr/).
 ## [2.1.3] — 2026-05-13
 
 ### Ajouté
-- **Service XWorker** — intégration native de Celery dans le `ServiceContainer` via `XWorkerServiceProvider` ; activé avec `services.xworker.enabled: true` dans `integration.yaml`
-- **CLI `xcore worker`** — gestion complète des processus FastAPI et Celery en processus séparés :
-  - `xcore worker start [api|celery]` — lance uvicorn et/ou le worker Celery
-  - `xcore worker stop [api|celery]` — arrêt propre via fichiers PID (`.xcore/pids/`)
-  - `xcore worker status` — état des processus avec sortie JSON optionnelle
-  - `xcore worker logs [api|celery]` — tail des logs avec `--follow`
-  - `xcore worker inspect` — liste les tâches enregistrées et les workers actifs
-  - `xcore worker purge [queue]` — vide une file d'attente Celery
-  - `xcore worker beat` — lance le scheduler Celery Beat
-- **`WorkerConfig`** dans `sections.py` — configuration typée avec synchronisation `modules` ↔ `task_list` et méthode `to_payload()`
-- **Overload de typage** `container.get("worker") → WorkerService` dans `ServiceContainer`
+
+#### XWorker (Celery)
+- **Service XWorker** — intégration native de Celery dans le `ServiceContainer` via `XWorkerServiceProvider` ; activé avec `services.xworker.enabled: true`
+- **`WorkerConfig`** — dataclass typée avec `from_dict()`, `to_payload()`, champs `modules`, `queues`, limites de temps
+- **Overload de typage** `container.get("worker") → WorkerService`
+- **`_celery_worker` bootstrap** — l'app Celery est initialisée à l'import du module pour que `celery -A xcore.services.xworker.xworker:_celery_worker` fonctionne sans `WorkerService`
+- **Fix broker** — `broker=` et `backend=` passés au constructeur `Celery()` pour éviter le fallback AMQP
+- **Fix `task_queues`** — conversion strings → `kombu.Queue` dans `build_app()`
 - **Suite de tests** pour `WorkerConfig`, `WorkerService`, `task registry` et `XWorkerServiceProvider` (54 tests)
 
+#### CLI `xcore worker`
+- `xcore worker start [api|celery|all]` — lance uvicorn et/ou Celery ; valeurs par défaut lues depuis `integration.yaml`
+- `xcore worker stop [api|celery|all]` — arrêt propre via PID (`.xcore/pids/`)
+- `xcore worker status [--json]` — état des processus
+- `xcore worker logs [api|celery] [--follow] [-n N]` — tail des logs
+- `xcore worker inspect` — tâches enregistrées et workers actifs
+- `xcore worker purge [queue]` — vide une file Celery
+- `xcore worker beat [--detach] [--schedule FILE]` — Celery Beat
+
+#### Configuration FastAPI et Uvicorn
+- **`app.fastapi`** — nouvelle sous-section : `title`, `summary`, `description`, `version`, `docs_url`, `redoc_url`, `openapi_url`, `contact`, `license_info`, `terms_of_service`, `deprecated`, etc.
+- **`app.server`** — nouvelle sous-section uvicorn : `app`, `host`, `port`, `workers`, `reload`, `log_level`, `proxy_headers`
+- Le CLI `xcore worker start api` lit `app.server` comme valeurs par défaut (surchargées par les args)
+
+#### Middlewares automatiques
+- **Système de middlewares déclaratifs** — chargement depuis `integration.yaml` via `xcore.setup(app)`
+- **`MiddlewareConfig` / `MiddleParams`** — dataclasses dans `sections.py`
+- **Params `external`** — valeur directe passée au constructeur du middleware
+- **Params `internal`** — callable `() → service` résolu paresseusement à chaque requête (découplé du cycle `boot()`)
+- **`Xcore.setup(app)`** — méthode publique à appeler après `FastAPI()`, avant le démarrage uvicorn
+- **`RequestTimingMiddleware`** — intégré, ajoute `X-Process-Time` à chaque réponse
+- **`CacheHeaderMiddleware`** — intégré, démontre params externes + service interne
+
 ### Modifié
-- `ServiceContainer.DEFAULT_PROVIDERS` inclut maintenant `XWorkerServiceProvider` (5 providers)
-- `ServicesConfig` accepte les clés `xworker` et `celery` (alias) dans `integration.yaml`
+- `ServiceContainer.DEFAULT_PROVIDERS` : 4 → 5 providers (`XWorkerServiceProvider` ajouté)
+- `ServicesConfig` accepte les clés `xworker` et `celery` (alias)
+- `_parse_middleware` dans `ConfigLoader` parse correctement `list[MiddleParams]`
+- `XcoreConfig` : champ `middleware: list[MiddlewareConfig]` ajouté
+
+### Corrigé
+- `WorkerConfig.from_dict()` filtre les clés inconnues (évitait `TypeError` avec `to_payload()`)
+- `isinstance(cls, Middleware)` remplacé par import direct (check incorrect sur une classe vs instance)
+- `add_middleware` appelé après démarrage de l'app (`RuntimeError`) — déplacé dans `setup()` pré-démarrage
+- `MiddlewareConfig` défini avant `XcoreConfig` dans `sections.py` (référence forward résolue)
 
 ---
 

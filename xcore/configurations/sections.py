@@ -6,7 +6,44 @@ Toutes ont des valeurs par défaut : zéro config = zéro crash.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+
+@dataclass
+class FastAPIConfig:
+    """Paramètres passés au constructeur FastAPI()."""
+
+    debug: bool = False
+    title: str = "xcore"
+    summary: str | None = None
+    description: str = ""
+    version: str = "0.1.0"
+    openapi_url: str | None = "/openapi.json"
+    openapi_tags: list[dict[str, Any]] = field(default_factory=list)
+    redirect_slashes: bool = True
+    docs_url: str | None = "/docs"
+    redoc_url: str | None = "/redoc"
+    swagger_ui_oauth2_redirect_url: str = "/docs/oauth2-redirect"
+    terms_of_service: str | None = None
+    contact: dict[str, Any] | None = None
+    license_info: dict[str, Any] | None = None
+    openapi_prefix: str = ""
+    root_path: str = ""
+    deprecated: bool = False
+
+
+@dataclass
+class ServerConfig:
+    """Paramètres uvicorn pour `xcore worker start api`."""
+
+    app: str = "main:app"
+    host: str = "0.0.0.0"
+    port: int = 8000
+    workers: int = 1
+    reload: bool = False
+    log_level: str = "info"
+    proxy_headers: bool = True
+    forwarded_allow_ips: str = "*"
 
 
 @dataclass
@@ -19,6 +56,8 @@ class AppConfig:
     plugin_tags: list[str] = field(default_factory=list)
     server_key: bytes | str = b"change-me-in-production"
     server_key_iterations: int = 100_000
+    fastapi: FastAPIConfig = field(default_factory=FastAPIConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
 
 
 @dataclass
@@ -179,6 +218,20 @@ class MarketplaceConfig:
 
 
 @dataclass
+class MiddleParams:
+    type: Literal["internal", "external"] = "external"
+    name: str = ""
+    value: Any = None
+
+
+@dataclass
+class MiddlewareConfig:
+    name: str
+    module: str | None = None
+    config: list[MiddleParams] = field(default_factory=list)
+
+
+@dataclass
 class XcoreConfig:
     app: AppConfig = field(default_factory=AppConfig)
     plugins: PluginConfig = field(default_factory=PluginConfig)
@@ -187,3 +240,9 @@ class XcoreConfig:
     security: SecurityConfig = field(default_factory=SecurityConfig)
     marketplace: MarketplaceConfig = field(default_factory=MarketplaceConfig)
     raw: dict[str, Any] = field(default_factory=dict)
+    middleware: list[MiddlewareConfig] = field(default_factory=list)
+    cors_allow_credentials: bool = True
+    cors_max_age: int = 3600
+    cors_expose_headers: list[str] = field(default_factory=list)
+    cors_redirect_status: int = 307
+    cors_preflight_continue: bool = False
