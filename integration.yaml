@@ -47,66 +47,112 @@ services:
 
   # ── Cache ────────────────────────────────────────────────────
   cache:
-    backend: redisrhverujierf
+    backend: redis
     url: redis://localhost:6379/0
-    ttl: 300 # TTL par défaut en secondes
-    max_size: 10000 # ignoré en mode redis, actif en mode memory
+    ttl: 300          # TTL par défaut en secondes
+    max_size: 10000   # ignoré en mode redis, actif en mode memory
 
   # ── Scheduler ────────────────────────────────────────────────
   scheduler:
     enabled: true
-    backend: redis # redis = tâches persistantes, survivent au redémarrage
+    backend: redis    # redis = tâches persistantes, survivent au redémarrage
     timezone: Europe/Paris
 
     # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
     #jobs:
-    #  # Nettoyage des sessions expirées chaque nuit à 2h
     #  - id: cleanup_sessions
     #    func: myapp.tasks.maintenance:cleanup_sessions
     #    trigger: cron
     #    hour: 2
     #    minute: 0
     #
-    #  # Snapshot des métriques toutes les 5 minutes
     #  - id: metrics_snapshot
     #    func: myapp.tasks.monitoring:snapshot_metrics
     #    trigger: interval
     #    minutes: 5
+
+  # ── Celery / XWorker ──────────────────────────────────────────
+  # Accès depuis les plugins : self.ctx.services.get("worker")
+  # Lancer le worker   : xcore worker start celery
+  # Lancer le beat     : xcore worker beat
+  # Inspecter          : xcore worker inspect
+  xworker:
+    enabled: true
+
+    # Nom de l'app Celery (affiché dans les logs et Flower)
+    name: my-app
+
+    # Broker et backend de résultats (Redis recommandé)
+    broker_url: redis://localhost:6379/0
+    result_backend: redis://localhost:6379/1
+
+    # File par défaut si aucune queue n'est précisée dans @task()
+    task_default_queue: default
+
+    # Nombre de processus worker Celery (override via -c à la CLI)
+    concurrency: 4
+
+    # Limites de temps des tâches (secondes)
+    task_soft_time_limit: 300   # envoie SoftTimeLimitExceeded — pour cleanup
+    task_time_limit: 360        # kill forcé si dépassé
+
+    # Sérialisation
+    task_serializer: json
+    result_serializer: json
+    accept_content:
+      - json
+
+    # Durée de conservation des résultats (secondes) — 24h
+    result_expires: 86400
+
+    broker_connection_retry_on_startup: true
+
+    # Files d'attente déclarées
+    queues:
+      - default
+      - result
+      # - emails       # ajouter selon les besoins de l'application
+      # - submissions
+
+    # Modules Python contenant les tâches @task() à charger au démarrage
+    # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
+    modules: []
+
+  # ── Extensions ────────────────────────────────────────────────
   extensions:
     email:
       module: extensions.email.service:EmailService
       config:
-          smtp_host: smtp.gmail.com
-          smtp_port: 587
-          smtp_user: ${SMTP_USER}
-          smtp_password: ${SMTP_PASSWORD}
-          from_address: noreply@example.com
-          from_name: "Mon Application"
-          use_tls: true
-          timeout: 10
-          max_retries: 3
-          queue_size: 100
-  # ── Observabilité ─────────────────────────────────────────────
+        smtp_host: smtp.gmail.com
+        smtp_port: 587
+        smtp_user: ${SMTP_USER}
+        smtp_password: ${SMTP_PASSWORD}
+        from_address: noreply@example.com
+        from_name: "Mon Application"
+        use_tls: true
+        timeout: 10
+        max_retries: 3
+        queue_size: 100
 
+# ── Observabilité ─────────────────────────────────────────────
 observability:
   logging:
-    enabled: true
-    level: DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    level: DEBUG      # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
-    max_bytes: 52428800 # 50 MB par fichier
-    backup_count: 10 # 10 fichiers de rotation = 500 MB max
+    max_bytes: 52428800   # 50 MB par fichier
+    backup_count: 10      # 10 fichiers de rotation = 500 MB max
 
   metrics:
     enabled: true
-    backend: prometheus # memory | prometheus | statsd
-    prefix: myapp # préfixe des métriques exposées sur /metrics
+    backend: prometheus   # memory | prometheus | statsd
+    prefix: myapp
 
   tracing:
-    enabled: false # true si tu utilises OpenTelemetry / Jaeger
-    backend: noop # noop | opentelemetry | jaeger
+    enabled: false
+    backend: noop         # noop | opentelemetry | jaeger
     service_name: my-app
-    endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
+    endpoint: null        # ex: http://jaeger:4317 (OTLP gRPC)
 
 # ── Sécurité ──────────────────────────────────────────────────
 security:

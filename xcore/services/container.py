@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from .cache.service import CacheService
     from .database.adapters.async_sql import AsyncSQLAdapter
     from .scheduler.service import SchedulerService
-    from .xworker.main import WorkerService
+    from .xworker.xworker import WorkerService
 
 from .base import BaseService, BaseServiceProvider
 
@@ -91,9 +91,11 @@ class XWorkerServiceProvider(BaseServiceProvider):
         cfg = container._config.xworker
         if not cfg or not cfg.enabled:
             return
-        from .xworker.main import WorkerService
+        from dataclasses import asdict
 
-        svc = WorkerService(cfg.to_payload())
+        from .xworker.xworker import WorkerService
+
+        svc = WorkerService(asdict(cfg))
         await svc.init()
         container._services["worker_service"] = svc
         container._raw["worker"] = svc
