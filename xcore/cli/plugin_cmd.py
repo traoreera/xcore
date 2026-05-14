@@ -479,6 +479,71 @@ async def _plugin_validate(args) -> None:
         console.print(f"[bold red]❌ Manifeste invalide :[/] {e}")
         sys.exit(1)
 
+    check_breaking = getattr(args, "check_breaking", None)
+    if not check_breaking:
+        return
+
+    previous_path = Path(check_breaking)
+    if not previous_path.exists():
+        console.print(
+            f"[bold red]❌ Erreur :[/] Fichier schemas introuvable : {previous_path}"
+        )
+        sys.exit(1)
+
+    from xcore.kernel.schema import BreakingChangeDetector, SchemaRegistry
+
+    previous = SchemaRegistry.load(previous_path)
+    if not previous.all():
+        console.print(
+            "[yellow]⚠️  Aucun schéma dans le fichier précédent — rien à comparer.[/]"
+        )
+        return
+
+    # Charger le plugin pour remplir le registry courant
+    try:
+        import importlib.util
+
+        src_dir = path / "src"
+        entry = path / "main.py"
+        if not entry.exists() and src_dir.exists():
+            entry = src_dir / "main.py"
+
+        if entry.exists():
+            spec = importlib.util.spec_from_file_location("_validate_plugin", entry)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+    except Exception as e:
+        console.print(
+            f"[yellow]⚠️  Impossible de charger le plugin pour l'analyse : {e}[/]"
+        )
+
+    from xcore.kernel.schema import schema_registry
+
+    detector = BreakingChangeDetector(previous, schema_registry)
+    changes = detector.detect()
+
+    if not changes:
+        console.print("[bold green]✅  Aucun breaking change détecté.[/]")
+        return
+
+    table = Table(title="Breaking Changes détectés", show_lines=True)
+    table.add_column("Plugin:Action", style="cyan")
+    table.add_column("Type", style="yellow")
+    table.add_column("Champ", style="magenta")
+    table.add_column("Message", style="red")
+
+    for c in changes:
+        table.add_row(
+            f"{c.plugin}:{c.action}",
+            c.kind,
+            c.field or "—",
+            c.message,
+        )
+
+    console.print(table)
+    console.print(f"\n[bold red]❌ {len(changes)} breaking change(s) détecté(s).[/]")
+    sys.exit(2)
+
 
 async def _plugin_sign(args) -> None:
     from xcore.kernel.security.signature import sign_plugin

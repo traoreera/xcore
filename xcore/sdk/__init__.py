@@ -22,15 +22,16 @@ from ..services.xworker import WorkerService, task, task_registry
 from .adapter.asyncsql import BaseAsyncRepository
 from .adapter.syncsql import BaseSyncRepository
 from .decorators import (
-    AutoDispatchMixin,
     RoutedPlugin,
     action,
     require_service,
     route,
     sandboxed,
+    schema,
     trusted,
     validate_payload,
 )
+from .mixin.ipc import AutoDispatchMixin
 from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
 from .routers import RouterRegistry
 
@@ -64,4 +65,6 @@ __all__ = [
     "get_auth_backend",
     "RouterRegistry",
     "get_current_user",
+    "scheamas",
+    "schema",
 ]

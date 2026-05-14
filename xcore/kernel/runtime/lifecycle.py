@@ -168,6 +168,10 @@ class LifecycleManager:
 
         await self._invoke_hooks(["on_init", "on_load", "on_start"])
 
+        # Enregistre les schémas @schema dans le SchemaRegistry global
+        if hasattr(self._instance, "_register_schemas"):
+            self._instance._register_schemas(self.manifest.name)
+
         # Collecte le router HTTP custom si le plugin en expose un
         self._collect_router()
         self._collect_middlewares()
