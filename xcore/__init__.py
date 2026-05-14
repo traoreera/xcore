@@ -143,7 +143,11 @@ class Xcore:
                 raise RuntimeError(f"Service '{name}' demandé avant boot()")
             return self.services.get(name)
 
-        print("Enregistrement des middlewares...")
+        from .kernel.tenancy import TenantMiddleware
+
+        # TenantMiddleware toujours présent — si disabled, injecte juste default_tenant
+        app.add_middleware(TenantMiddleware, config=self._config.tenancy)
+
         Middlewares(
             config=self._config.middleware,
             prototypes=_lazy_service,

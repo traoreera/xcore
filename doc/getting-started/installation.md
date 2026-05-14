@@ -80,5 +80,7 @@ mon-projet/
 
 ```bash
 poetry run xcore --version
-# xcore v2.1.2
+# xcore v2.2.0
 ```
+
+> **Minimalisme** : Depuis la v2.2.0, XCore est livré avec un noyau ultra-léger. Les bibliothèques tierces comme `psutil`, `markdown` ou `pillow` sont désormais optionnelles ou limitées aux groupes de développement/doc.

@@ -1,6 +1,58 @@
 # Versions
 
-## v2.1.3 — Actuelle (2026-05-13)
+## v2.3.0 — Actuelle (2026-05-14)
+
+### Multi-Tenancy natif (Axe 1)
+
+- **`TenantMiddleware`** — extrait le `tenant_id` depuis le header HTTP (`X-Tenant-ID`) ou le sous-domaine ; injecte `request.state.tenant_id` sur chaque requête.
+- **`TenantAwareCache`** — wrappe le cache et préfixe automatiquement toutes les clés par `{tenant_id}:`. Méthodes : `get`, `set`, `delete`, `exists`, `incr`, `keys`, `clear`.
+- **`TenantAwareDB`** — wrappe les adapters SQL et exécute `SET search_path TO {tenant_id}, public` (PostgreSQL) avant chaque requête. Détection automatique de tous les adapters nommés (`AsyncSQLAdapter`, `MongoDBAdapter`…).
+- **`TenantAwareScheduler`** — préfixe les `job_id` APScheduler par `{tenant_id}:` ; `get_jobs()` filtre les jobs au tenant courant.
+- **`wrap_services_for_tenant()`** — remplace les services dans le contexte plugin à chaque appel ; zéro changement de code pour les plugins existants.
+
+### Autorisation IPC (`allowed_callers`)
+
+- **`IPCAuthMiddleware`** — premier middleware de la pipeline ; vérifie `allowed_callers` déclaré dans `plugin.yaml` avant tout traitement.
+- **Deny-by-default** — liste vide ou absente = tout appel IPC refusé. Les appels HTTP directs (`caller=None`) passent toujours.
+- **`PluginLoader.get_manifest(name)`** — méthode ajoutée pour accéder au manifeste depuis le middleware.
+
+### `@schema` — Décorateur versionné avec validation intégrée (Axe 3)
+
+- **`@schema(version, input, output, …)`** — combine documentation du schéma ET validation Pydantic en un seul décorateur (source unique de vérité).
+- **`SchemaRegistry`** — singleton qui stocke tous les schémas déclarés par `@schema`.
+- **`BreakingChangeDetector`** — détecte les breaking changes entre deux versions du registre (action supprimée, champ supprimé, type modifié).
+- **`xcore plugin validate --check-breaking schemas_v1.json`** — commande CLI pour comparer les schémas.
+
+### Configuration
+
+- Section `tenancy:` dans `integration.yaml` avec 8 flags : `enabled`, `header`, `subdomain`, `default_tenant`, `isolate_cache`, `isolate_db`, `isolate_scheduler`, `enforce_ipc`.
+- `TenancyConfig` dataclass dans `configurations/sections.py`.
+- `allowed_callers: list[str]` ajouté à `PluginManifest`.
+
+### Tests
+
+- **58 nouveaux tests** : `tests/unit/kernel/test_tenancy.py` (41) et `tests/integration/test_tenancy_integration.py` (17).
+
+### Documentation
+
+- `doc/guides/tenancy.md` — guide complet multi-tenancy avec exemples.
+- `doc/guides/plugin-manifest.md` — référence de `plugin.yaml` avec tous les champs.
+- `doc/reference/configuration.md` — section `tenancy:` documentée.
+- `doc/reference/sdk.md` — `@schema` documenté.
+- `doc/guides/security.md` — section `allowed_callers` et IPC.
+- `doc/architecture/decisions.md` — décisions 7 (tenancy), 8 (IPC deny-by-default), 9 (`@schema` source unique).
+
+---
+
+## v2.2.0 — (2026-05-14)
+**Security Release & Dependency Optimization**
+
+- 🛡️ **Sécurité** : Suppression de `python-jose` et `python-ecdsa` pour éliminer la vulnérabilité aux attaques temporelles Minerva (CVE-2024-23342).
+- 🧹 **Nettoyage** : Retrait de 7 dépendances inutilisées dans le noyau (`pillow`, `watchdog`, `user-agents`, `aiocache`, `toml`, `mysql-connector-python`).
+- ⚡ **Optimisation** : Déplacement de `psutil` en dépendance de développement et `markdown` en dépendance de documentation.
+- 📦 **Minimalisme** : Le framework est maintenant plus léger de ~15 Mo et possède une surface d'attaque réduite.
+
+## v2.1.3 (2026-05-13)
 
 ### XWorker (Celery natif)
 - Intégration Celery complète dans le `ServiceContainer` — activé via `services.xworker.enabled: true`
@@ -82,6 +134,7 @@
 
 | Version | Fonctionnalité prévue |
 |:--------|:----------------------|
-| **v2.2.0** | Gestionnaire de secrets intégré (Vault / SOPS) |
-| **v2.3.0** | Support natif gRPC pour l'IPC haute performance |
-| **v3.0.0** | Clusterisation multi-nœuds native |
+| **v2.4.0** | Plugin Federation (Axe 2) — appels cross-instances |
+| **v2.5.0** | AgentBase (Axe 4) — plugins IA avec mémoire et outils |
+| **v2.6.0** | Hot-swap de services (Axe 5) — remplacement sans redémarrage |
+| **v3.0.0** | OpenTelemetry natif (Axe 7) + Clusterisation multi-nœuds |

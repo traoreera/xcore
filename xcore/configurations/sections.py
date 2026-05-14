@@ -218,6 +218,31 @@ class MarketplaceConfig:
 
 
 @dataclass
+class TenancyConfig:
+    """
+    Configuration du système multi-tenant.
+
+    enabled          → active/désactive tout le système (défaut: False)
+    header           → nom du header HTTP lu pour extraire le tenant_id
+    subdomain        → active l'extraction depuis le sous-domaine
+    default_tenant   → tenant utilisé si aucun header/sous-domaine trouvé
+    isolate_cache      → préfixe automatique des clés cache par tenant_id
+    isolate_db         → applique SET search_path par tenant_id (PostgreSQL)
+    isolate_scheduler  → préfixe les job_id APScheduler par tenant_id
+    enforce_ipc        → active la vérification allowed_callers sur IPC
+    """
+
+    enabled: bool = False
+    header: str = "X-Tenant-ID"
+    subdomain: bool = False
+    default_tenant: str = "default"
+    isolate_cache: bool = True
+    isolate_db: bool = True
+    isolate_scheduler: bool = False
+    enforce_ipc: bool = True
+
+
+@dataclass
 class MiddleParams:
     type: Literal["internal", "external"] = "external"
     name: str = ""
@@ -239,6 +264,7 @@ class XcoreConfig:
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
     marketplace: MarketplaceConfig = field(default_factory=MarketplaceConfig)
+    tenancy: TenancyConfig = field(default_factory=TenancyConfig)
     raw: dict[str, Any] = field(default_factory=dict)
     middleware: list[MiddlewareConfig] = field(default_factory=list)
     cors_allow_credentials: bool = True

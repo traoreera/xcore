@@ -124,9 +124,13 @@ def build_router(
         plugin_name: str,
         action: str,
         body: CallRequest,
+        request: Request,
     ) -> CallResponse:
 
-        result = await supervisor.call(plugin_name, action, body.payload)
+        tenant_id = getattr(request.state, "tenant_id", "default")
+        result = await supervisor.call(
+            plugin_name, action, body.payload, tenant_id=tenant_id
+        )
 
         if not result:
             raise HTTPException(

@@ -326,11 +326,13 @@ curl -X POST http://127.0.0.1:8000/plugin/ipc/hello/greet \
 | [⚡ Quick Start](getting-started/quickstart.md) | Créer votre premier plugin en 5 minutes |
 | [🧩 Créer un Plugin](guides/creating-plugins.md) | Guide complet du développement de plugins |
 | [🏗️ Architecture](architecture/overview.md) | Comprendre les internals du framework |
-| [🛡️ Sécurité](guides/security.md) | Sandbox, permissions et isolation |
+| [🛡️ Sécurité](guides/security.md) | Sandbox, permissions, IPC et isolation |
+| [🏢 Multi-Tenancy](guides/tenancy.md) | Isolation cache/DB/scheduler par tenant, autorisations IPC |
+| [📄 Manifeste Plugin](guides/plugin-manifest.md) | Référence complète de `plugin.yaml` |
 | [📡 Événements](guides/events.md) | Système de messagerie et hooks |
 | [🔧 Services](guides/services.md) | Utiliser DB, Cache, Scheduler et XWorker (Celery) |
 | [🔀 Middlewares](guides/middlewares.md) | Déclarer et écrire des middlewares ASGI |
-| [📖 SDK Reference](reference/sdk.md) | API complète du SDK |
+| [📖 SDK Reference](reference/sdk.md) | API complète du SDK (`@action`, `@schema`, `AutoDispatchMixin`) |
 
 ---
 

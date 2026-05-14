@@ -220,6 +220,10 @@ class PluginManifest:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     filesystem: FilesystemConfig = field(default_factory=FilesystemConfig)
 
+    # IPC : liste des plugins autorisés à appeler ce plugin
+    # Liste vide = tout appel IPC est refusé (deny-by-default)
+    allowed_callers: list[str] = field(default_factory=list)
+
     # Config arbitraire du plugin (bloc extra)
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -249,6 +253,7 @@ class PluginManifest:
             "execution_mode",
             "requires",
             "allowed_imports",
+            "allowed_callers",
             "permissions",
             "env",
             "envconfiguration",
@@ -269,6 +274,7 @@ class PluginManifest:
             execution_mode=mode,
             requires=requires,
             allowed_imports=raw.get("allowed_imports", []),
+            allowed_callers=raw.get("allowed_callers", []),
             permissions=raw.get("permissions", []),
             env=resolved_env,
             resources=ResourceConfig(

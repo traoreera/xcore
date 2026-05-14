@@ -261,6 +261,13 @@ class PluginLoader:
         available = sorted(list(self._handlers.keys()))
         raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
 
+    def get_manifest(self, name: str):
+        """Retourne le PluginManifest d'un plugin chargé, ou None."""
+        handler = self._handlers.get(name)
+        if handler is None:
+            return None
+        return getattr(handler, "manifest", None)
+
     def has(self, name: str) -> bool:
         return name in self._handlers
 

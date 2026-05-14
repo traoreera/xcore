@@ -89,10 +89,18 @@ class PluginSupervisor:
 
         self._loader = PluginLoader(
             ctx=self._ctx,
-            caller=lambda name, action, payload: self.call(name, action, payload),
+            caller=lambda name, action, payload, **kw: self.call(
+                name, action, payload, **kw
+            ),
+            # tenant_id injecté à chaque appel via kwargs — voir _dispatch
         )
 
         # ── 1. Pipeline initialisée AVANT load_all ─────────────
+        from .middlewares.ipc_auth import IPCAuthMiddleware
+
+        tenancy_cfg = getattr(self._ctx.config, "tenancy", None)
+        enforce_ipc = getattr(tenancy_cfg, "enforce_ipc", True)
+
         mw_context = {
             "tracer": self._tracer,
             "metrics": self._metrics,
@@ -103,6 +111,10 @@ class PluginSupervisor:
             names=["tracing", "rate_limit", "permissions", "retry"],
             context=mw_context,
             final_handler=self._dispatch,
+        )
+        # IPC auth en premier : bloque avant tout le reste
+        self._pipeline.add_middleware(
+            IPCAuthMiddleware(self._loader, enforce=enforce_ipc), first=True
         )
 
         # ── 2. KernelHandler enregistré AVANT load_all ─────────
@@ -190,9 +202,21 @@ class PluginSupervisor:
 
     # ── Appel ─────────────────────────────────────────────────
 
-    async def call(self, plugin_name, action, payload, *, resource=None) -> dict:
+    async def call(
+        self,
+        plugin_name,
+        action,
+        payload,
+        *,
+        resource=None,
+        caller=None,
+        tenant_id: str = "default",
+    ) -> dict:
         """
         Appelle une action sur un plugin via la pipeline de middlewares.
+        caller=None     → appel HTTP direct (non IPC)
+        caller="crm"    → appel IPC depuis le plugin "crm"
+        tenant_id       → identifiant du tenant courant
         """
         if self._loader is None or self._pipeline is None:
             return self._err("Supervisor non démarré", "not_ready")
@@ -202,17 +226,49 @@ class PluginSupervisor:
 
         handler = self._loader.get(plugin_name)
 
-        # Exécution de la pipeline (inclut tracing, retry, rate limit et permissions)
         return await self._pipeline.execute(
-            plugin_name, action, payload, handler=handler, resource=resource
+            plugin_name,
+            action,
+            payload,
+            handler=handler,
+            resource=resource,
+            caller=caller,
+            tenant_id=tenant_id,
         )
 
     async def _dispatch(
         self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
+        from ..tenancy.services import wrap_services_for_tenant
+
         if handler is None:
             handler = self._loader.get(plugin_name)
+
+        tenancy = (
+            self._ctx.config.tenancy if hasattr(self._ctx.config, "tenancy") else None
+        )
+        tenant_id: str = kwargs.get(
+            "tenant_id", getattr(tenancy, "default_tenant", "default")
+        )
+
+        # Injecte tenant_id dans le contexte du plugin et wrappe les services si activé
+        if tenancy is None or tenancy.enabled:
+            instance = getattr(handler, "_instance", None)
+            if (
+                instance is not None
+                and hasattr(instance, "ctx")
+                and instance.ctx is not None
+            ):
+                instance.ctx.tenant_id = tenant_id
+                instance.ctx.services = wrap_services_for_tenant(
+                    instance.ctx.services,
+                    tenant_id,
+                    isolate_cache=getattr(tenancy, "isolate_cache", True),
+                    isolate_db=getattr(tenancy, "isolate_db", True),
+                    isolate_scheduler=getattr(tenancy, "isolate_scheduler", False),
+                )
+
         return await handler.call(action, payload)
 
     # ── Gestion dynamique ─────────────────────────────────────
