@@ -79,13 +79,13 @@ services:
   cache:
     backend: redis
     url: redis://localhost:6379/0
-    ttl: 300          # TTL par défaut en secondes
-    max_size: 10000   # ignoré en mode redis, actif en mode memory
+    ttl: 300 # TTL par défaut en secondes
+    max_size: 10000 # ignoré en mode redis, actif en mode memory
 
   # ── Scheduler ────────────────────────────────────────────────
   scheduler:
     enabled: true
-    backend: redis    # redis = tâches persistantes, survivent au redémarrage
+    backend: redis # redis = tâches persistantes, survivent au redémarrage
     timezone: Europe/Paris
 
     # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
@@ -123,8 +123,8 @@ services:
     concurrency: 4
 
     # Limites de temps des tâches (secondes)
-    task_soft_time_limit: 300   # envoie SoftTimeLimitExceeded — pour cleanup
-    task_time_limit: 360        # kill forcé si dépassé
+    task_soft_time_limit: 300 # envoie SoftTimeLimitExceeded — pour cleanup
+    task_time_limit: 360 # kill forcé si dépassé
 
     # Sérialisation
     task_serializer: json
@@ -167,22 +167,22 @@ services:
 # ── Observabilité ─────────────────────────────────────────────
 observability:
   logging:
-    level: DEBUG      # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    level: DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
     format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
     file: log/app.log
-    max_bytes: 52428800   # 50 MB par fichier
-    backup_count: 10      # 10 fichiers de rotation = 500 MB max
+    max_bytes: 52428800 # 50 MB par fichier
+    backup_count: 10 # 10 fichiers de rotation = 500 MB max
 
   metrics:
     enabled: true
-    backend: prometheus   # memory | prometheus | statsd
+    backend: prometheus # memory | prometheus | statsd
     prefix: myapp
 
   tracing:
     enabled: false
-    backend: noop         # noop | opentelemetry | jaeger
+    backend: noop # noop | opentelemetry | jaeger
     service_name: my-app
-    endpoint: null        # ex: http://jaeger:4317 (OTLP gRPC)
+    endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
 
 # ── Sécurité ──────────────────────────────────────────────────
 security:
@@ -222,6 +222,30 @@ security:
     calls: 200
     period_seconds: 60
 
+tenancy:
+  # Active le système multi-tenant (false = tout tourne sous default_tenant)
+  enabled: false
+  # Header HTTP lu pour identifier le tenant
+  header: "X-Tenant-ID"
+
+  # Extraire le tenant depuis le sous-domaine (acme.myapp.com → "acme")
+  subdomain: false
+
+  # Tenant utilisé si aucun header / sous-domaine trouvé
+  default_tenant: "default"
+
+  # Préfixe automatique des clés cache par tenant_id ("acme:invoices")
+  isolate_cache: true
+
+  # SET search_path TO <tenant_id>, public avant chaque requête DB (PostgreSQL)
+  isolate_db: true
+
+  # Préfixe les job_id APScheduler par tenant_id ("acme:cleanup")
+  isolate_scheduler: false
+
+  # Vérifie allowed_callers sur chaque appel IPC plugin-à-plugin
+  enforce_ipc: true
+
 middleware:
   - name: timing
     module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
@@ -235,3 +259,9 @@ middleware:
       - name: cache_getter
         type: internal
         value: cache
+
+cors:
+  allow_origins: ["*", "http://localhost:3000", "http://localhost:3001"]
+  allow_credentials: false
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]

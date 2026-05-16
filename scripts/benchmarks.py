@@ -306,22 +306,17 @@ def _make_xcore_config(plugins_dir: Path) -> str:
                   type: sqlasync
                   url: sqlite+aiosqlite:///db.sqlite3
                   echo: false
-                redis_db:
-                  type: redis
-                  url: redis://localhost:6379/0
-                  max_connections: 50
 
               # ── Cache ────────────────────────────────────────────────────
               cache:
-                backend: redisrhverujierf
-                url: redis://localhost:6379/0
-                ttl: 300 # TTL par défaut en secondes
-                max_size: 10000 # ignoré en mode redis, actif en mode memory
+                backend: memory
+                ttl: 300
+                max_size: 10000
 
               # ── Scheduler ────────────────────────────────────────────────
               scheduler:
-                enabled: true
-                backend: redis # redis = tâches persistantes, survivent au redémarrage
+                enabled: false
+                backend: memory
                 timezone: Europe/Paris
 
                 # Jobs déclarés statiquement (optionnel)
@@ -1155,6 +1150,198 @@ def _make_ctx(services: _MockServices):
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Section 7 — Tenancy (TenantAwareCache, IPCAuthMiddleware)               ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+
+class TenancyBench:
+    """Benchmarks du système multi-tenant : wrappers de services et IPC auth."""
+
+    CATEGORY = "tenancy"
+
+    async def bench_cache_wrapper(self, n: int = 10_000) -> list[BenchResult]:
+        from xcore.kernel.tenancy.services import TenantAwareCache
+        from xcore.services.cache.backends.memory import MemoryBackend
+
+        backend = MemoryBackend(ttl=300, max_size=100_000)
+        # Pré-remplir quelques clés
+        for i in range(100):
+            await backend.set(f"acme:key:{i}", i)
+
+        results: list[BenchResult] = []
+
+        # -- 1. Overhead du préfixage sur set() --
+        raw_samples: list[float] = []
+        for i in range(n):
+            t0 = time.perf_counter()
+            await backend.set(f"acme:key:{i}", i)
+            raw_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                raw_samples, n, 0, "cache_set_raw", self.CATEGORY, notes="sans wrapper"
+            )
+        )
+
+        wrapped = TenantAwareCache(backend, "acme")
+        wrapped_samples: list[float] = []
+        for i in range(n):
+            t0 = time.perf_counter()
+            await wrapped.set(f"key:{i}", i)
+            wrapped_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                wrapped_samples,
+                n,
+                0,
+                "cache_set_wrapped",
+                self.CATEGORY,
+                notes="TenantAwareCache",
+            )
+        )
+
+        # -- 2. get() overhead --
+        raw_get: list[float] = []
+        for i in range(n):
+            t0 = time.perf_counter()
+            await backend.get(f"acme:key:{i % 100}")
+            raw_get.append((time.perf_counter() - t0) * 1000)
+        results.append(_measure(raw_get, n, 0, "cache_get_raw", self.CATEGORY))
+
+        wrapped_get: list[float] = []
+        for i in range(n):
+            t0 = time.perf_counter()
+            await wrapped.get(f"key:{i % 100}")
+            wrapped_get.append((time.perf_counter() - t0) * 1000)
+        results.append(_measure(wrapped_get, n, 0, "cache_get_wrapped", self.CATEGORY))
+
+        # -- 3. Isolation : deux tenants en parallèle --
+        wrapped_b = TenantAwareCache(backend, "beta")
+        iso_samples: list[float] = []
+        for i in range(n // 2):
+            t0 = time.perf_counter()
+            await wrapped.set(f"x:{i}", i)
+            await wrapped_b.set(f"x:{i}", i * 2)
+            iso_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                iso_samples, n // 2, 0, "cache_two_tenants_interleaved", self.CATEGORY
+            )
+        )
+
+        return results
+
+    async def bench_ipc_auth(self, n: int = 10_000) -> list[BenchResult]:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from xcore.kernel.runtime.middlewares.ipc_auth import IPCAuthMiddleware
+
+        results: list[BenchResult] = []
+        next_fn = AsyncMock(return_value={"status": "ok"})
+
+        def _make_loader(allowed):
+            manifest = MagicMock()
+            manifest.allowed_callers = allowed
+            loader = MagicMock()
+            loader.get_manifest.return_value = manifest
+            return loader
+
+        # -- 1. Appel HTTP direct (caller=None) → fast path --
+        mw = IPCAuthMiddleware(_make_loader([]), enforce=True)
+        http_samples: list[float] = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            await mw("target", "action", {}, next_fn, handler=MagicMock(), caller=None)
+            http_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                http_samples,
+                n,
+                0,
+                "ipc_http_direct_pass",
+                self.CATEGORY,
+                notes="caller=None",
+            )
+        )
+
+        # -- 2. IPC autorisé --
+        mw_allow = IPCAuthMiddleware(_make_loader(["billing"]), enforce=True)
+        allow_samples: list[float] = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            await mw_allow(
+                "target", "action", {}, next_fn, handler=MagicMock(), caller="billing"
+            )
+            allow_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(allow_samples, n, 0, "ipc_caller_allowed", self.CATEGORY)
+        )
+
+        # -- 3. IPC refusé (deny-by-default) --
+        mw_deny = IPCAuthMiddleware(_make_loader([]), enforce=True)
+        deny_samples: list[float] = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            await mw_deny(
+                "target", "action", {}, next_fn, handler=MagicMock(), caller="intruder"
+            )
+            deny_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                deny_samples,
+                n,
+                0,
+                "ipc_caller_denied",
+                self.CATEGORY,
+                notes="deny-by-default",
+            )
+        )
+
+        # -- 4. enforce=False → bypass complet --
+        mw_off = IPCAuthMiddleware(_make_loader([]), enforce=False)
+        bypass_samples: list[float] = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            await mw_off(
+                "target", "action", {}, next_fn, handler=MagicMock(), caller="anyone"
+            )
+            bypass_samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(bypass_samples, n, 0, "ipc_enforce_off_bypass", self.CATEGORY)
+        )
+
+        return results
+
+    async def bench_wrap_services(self, n: int = 5_000) -> list[BenchResult]:
+        from xcore.kernel.tenancy.services import wrap_services_for_tenant
+        from xcore.services.cache.backends.memory import MemoryBackend
+
+        backend = MemoryBackend(ttl=300, max_size=10_000)
+        services = {"cache": backend, "db": None, "scheduler": None}
+        results: list[BenchResult] = []
+
+        # -- Coût de wrap_services_for_tenant() à chaque appel --
+        samples: list[float] = []
+        for i in range(n):
+            tenant = f"tenant_{i % 10}"
+            t0 = time.perf_counter()
+            wrap_services_for_tenant(
+                services, tenant, isolate_cache=True, isolate_db=False
+            )
+            samples.append((time.perf_counter() - t0) * 1000)
+        results.append(
+            _measure(
+                samples,
+                n,
+                0,
+                "wrap_services_per_call",
+                self.CATEGORY,
+                notes="coût instanciation wrapper/appel",
+            )
+        )
+        return results
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Runner principal                                                        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
@@ -1180,7 +1367,15 @@ async def run_suite(args) -> BenchReport:
     suites_to_run = (
         args.suite
         if args.suite
-        else ["lifecycle", "calls", "middleware", "events", "permissions", "cache"]
+        else [
+            "lifecycle",
+            "calls",
+            "middleware",
+            "events",
+            "permissions",
+            "cache",
+            "tenancy",
+        ]
     )
 
     t_global = time.perf_counter()
@@ -1246,14 +1441,34 @@ async def run_suite(args) -> BenchReport:
 
     # ── 6. Cache ──────────────────────────────────────────────
     if "cache" in suites_to_run:
-        print("\n[6/7] CacheService (memory backend) benchmarks...")
+        print("\n[6/8] CacheService (memory backend) benchmarks...")
         bench = CacheBench()
         for r in await bench.bench_memory_backend(n=3000):
             report.add(r)
             ops = r.throughput_ops_sec
             print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
 
-    # ── 7. Capacity ───────────────────────────────────────────
+    # ── 7. Tenancy ────────────────────────────────────────────
+    if "tenancy" in suites_to_run:
+        print("\n[7/8] Tenancy (cache wrapper + IPC auth) benchmarks...")
+        tbench = TenancyBench()
+        for r in await tbench.bench_cache_wrapper(n=10_000):
+            report.add(r)
+            print(
+                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
+            )
+        for r in await tbench.bench_ipc_auth(n=10_000):
+            report.add(r)
+            print(
+                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
+            )
+        for r in await tbench.bench_wrap_services(n=5_000):
+            report.add(r)
+            print(
+                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
+            )
+
+    # ── 8. Capacity ───────────────────────────────────────────
     if "capacity" in suites_to_run or args.capacity:
         max_p = args.capacity if args.capacity else 100
         step = max(10, max_p // 10)
@@ -1452,6 +1667,7 @@ def main():
             "events",
             "permissions",
             "cache",
+            "tenancy",
             "capacity",
         ],
         help="Suites à exécuter (défaut: toutes sauf capacity)",

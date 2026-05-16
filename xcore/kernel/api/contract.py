@@ -133,7 +133,13 @@ class TrustedBase(ABC):
                 f"[{self.ctx.name}] call_plugin() non disponible "
                 "(plugin sandboxed ou test sans caller)."
             )
-        return await self.ctx.caller(plugin_name, action, payload or {})
+        return await self.ctx.caller(
+            plugin_name,
+            action,
+            payload or {},
+            caller=self.ctx.name,
+            tenant_id=self.ctx.tenant_id,
+        )
 
     # ── get_service — overloads typés ─────────────────────────────────────────
     #

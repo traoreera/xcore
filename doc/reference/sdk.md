@@ -156,6 +156,72 @@ En cas d'erreur de validation, retourne automatiquement :
 
 ---
 
+### `@schema(version, input, output, *, description, deprecated_fields, breaking_since, validate, type_response)`
+
+Déclare le schéma versionné d'une action **et** applique automatiquement la validation Pydantic (source unique de vérité).
+
+| Paramètre | Type | Défaut | Description |
+|:----------|:-----|:-------|:------------|
+| `version` | string | — | Version du schéma (`"1.0"`, `"2.0"`) |
+| `input` | dict | `None` | Champs d'entrée : `{"field": type}` ou `{"field": (type, default)}`. `...` = obligatoire. |
+| `output` | dict | `None` | Champs de sortie (documentation uniquement) |
+| `description` | string | `""` | Description OpenAPI |
+| `deprecated_fields` | dict | `{}` | `{"old_field": "use new_field instead"}` |
+| `breaking_since` | string | `None` | Marque un breaking change depuis cette version |
+| `validate` | bool | `True` | Active la validation Pydantic automatique |
+| `type_response` | `"dict"` / `"model"` / `"_"` | `"_"` | Format du payload reçu par le handler |
+
+```python
+from xcore.sdk import action, schema, ok, error
+
+class Plugin(AutoDispatchMixin, TrustedBase):
+
+    @action("create_user")
+    @schema(
+        version="1.0",
+        input={
+            "email": (str, ...),        # obligatoire
+            "username": (str, ...),
+            "role": (str, "user"),      # optionnel avec défaut
+        },
+        output={"user_id": int, "created_at": str},
+        description="Crée un nouvel utilisateur",
+    )
+    async def create_user(self, payload: dict) -> dict:
+        # payload est déjà validé et typé
+        return ok(user_id=42, created_at="2024-01-01")
+
+    @action("update_user")
+    @schema(
+        version="2.0",
+        input={"user_id": (int, ...), "email": (str, None)},
+        deprecated_fields={"username": "use email instead"},
+        breaking_since="2.0",
+    )
+    async def update_user(self, payload: dict) -> dict: ...
+```
+
+En cas d'erreur de validation :
+```json
+{
+  "status": "error",
+  "code": "validation_error",
+  "errors": [{"field": "email", "msg": "field required"}]
+}
+```
+
+**Registre des schémas :**
+
+```bash
+# Exporter le schéma d'un plugin (JSON)
+xcore plugin validate plugins/my_plugin --export schemas.json
+
+# Détecter les breaking changes vs une version précédente
+xcore plugin validate plugins/my_plugin --check-breaking schemas_v1.json
+```
+
+---
+
 ### `@require_service(*names: str)`
 
 Vérifie que les services sont disponibles avant l'exécution.

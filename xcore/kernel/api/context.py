@@ -39,6 +39,7 @@ class PluginContext:
     env: dict[str, str] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
     caller: Callable[[str, str, dict], Awaitable[dict]] | None = None
+    tenant_id: str = "default"
 
     metrics: MetricsRegistry = None  # MetricsRegistry
     tracer: Tracer = None  # Tracer

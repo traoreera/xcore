@@ -13,7 +13,6 @@ dependencies = [
     # Web
     "fastapi[standard]>=0.135.1,<1.0.0",
     "uvicorn>=0.38.0,<1.0.0",
-    "user-agents>=2.2.0,<3.0.0",
 
     # Data validation
     "pydantic[email]>=2.11.7,<3.0.0",
@@ -24,26 +23,19 @@ dependencies = [
     "alembic>=1.16.1,<2.0.0",
     "psycopg2>=2.9.11,<3.0.0",
     "aiosqlite>=0.22.1,<1.0.0",
-    "mysql-connector-python>=9.4.0,<10.0.0",
 
     # Cache
     "redis[hiredis]>=7.0.0,<8.0.0",
-    "aiocache>=0.12.3,<1.0.0",
 
     # Scheduling
     "apscheduler>=3.11.0,<4.0.0",
     # Configuration & environment
     "python-dotenv>=1.1.0,<2.0.0",
     "pyyaml>=6.0.3,<7.0.0",
-    "toml>=0.10.2,<1.0.0",
 
     # Observability & utilities
     "rich>=14.0.0,<15.0.0",
-    "psutil>=7.0.0,<8.0.0",
-    "watchdog>=6.0.0,<7.0.0",
-    "markdown>=3.8.2,<4.0.0",
-    "pillow>=11.2.1,<13.0.0",
-    "celery (>=5.6.3,<6.0.0)",
+    "celery>=5.6.3,<6.0.0",
 ]
 
 [project.scripts]
@@ -67,6 +59,9 @@ httpx = "^0.28.1"
 aiohttp = "^3.13.3"
 faker = "^37.8.0"
 
+# Benchmarking
+psutil = "^7.0.0"
+
 # Linting & formatting
 black = "^26.3.1"
 isort = "^8.0.1"
@@ -88,6 +83,7 @@ mkdocs-material = "^9.7.3"
 mkdocs-minify-plugin = "^0.8.0"
 mkdocstrings = "^1.0.3"
 mkdocstrings-python = ">=2.0.3,<3.0.0"
+markdown = "^3.8.2"
 
 # ── Tool configuration ────────────────────────────────────────────────────────
 

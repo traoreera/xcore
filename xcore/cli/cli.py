@@ -150,6 +150,13 @@ def main() -> None:
 
     validate_p = plugin_sub.add_parser("validate", help="Valide le manifeste")
     validate_p.add_argument("path")
+    validate_p.add_argument(
+        "--check-breaking",
+        metavar="SCHEMA_FILE",
+        default=None,
+        help="Chemin vers un schemas.json précédent pour détecter les breaking changes",
+    )
+    _add_config(validate_p)
 
     for _p in (plugin_p, install_p, remove_p, info_p):
         _add_config(_p) if not any(a.dest == "config" for a in _p._actions) else None

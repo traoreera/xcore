@@ -100,6 +100,9 @@ nav:
 
   - Guides:
       - Créer un Plugin: guides/creating-plugins.md
+      - Cree un Services: guides/creating-services.md
+      - Manifeste du plugin: guides/plugin-manifest.md
+      - Le multi-tennant: guides/tenancy.md
       - Services (DB, Cache, Scheduler, Celery): guides/services.md
       - Middlewares: guides/middlewares.md
       - Événements & Hooks: guides/events.md
@@ -136,7 +139,7 @@ nav:
 
   - Versions & Changelog:
       - Historique des versions: versions.md
-      - Changelog complet: ../CHANGELOG.md
+      - Changelog complet: ./CHANGELOG.md
 
   - Vision: vision.md
 

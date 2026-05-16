@@ -165,6 +165,17 @@ security:
     calls: 200
     period_seconds: 60
 
+# ── Multi-Tenancy ─────────────────────────────────────────────
+tenancy:
+  enabled: false             # true = active l'isolation par tenant
+  header: "X-Tenant-ID"     # header HTTP lu pour identifier le tenant
+  subdomain: false           # true = acme.monapp.com → tenant "acme"
+  default_tenant: "default"  # utilisé si aucun header/subdomain trouvé
+  isolate_cache: true        # préfixe les clés cache par tenant_id
+  isolate_db: true           # SET search_path TO <tenant_id> (PostgreSQL)
+  isolate_scheduler: false   # préfixe les job_id APScheduler par tenant_id
+  enforce_ipc: true          # vérifie allowed_callers sur les appels IPC
+
 # ── Marketplace ───────────────────────────────────────────────
 marketplace:
   url: "https://marketplace.xcore.dev"
@@ -331,6 +342,25 @@ Priorité : **variables d'environnement > integration.yaml > valeurs par défaut
 app:
   dotenv: "./.env"
 ```
+
+---
+
+## Section `tenancy`
+
+Active et configure le système multi-tenant.
+
+| Champ | Type | Défaut | Description |
+|:------|:-----|:-------|:------------|
+| `enabled` | bool | `false` | Active l'isolation par tenant. `false` = mode mono-tenant, `default_tenant` injecté partout. |
+| `header` | string | `"X-Tenant-ID"` | Nom du header HTTP lu pour identifier le tenant. |
+| `subdomain` | bool | `false` | Extrait le tenant depuis le sous-domaine (`acme.monapp.com` → `"acme"`). |
+| `default_tenant` | string | `"default"` | Tenant utilisé si aucun header / sous-domaine trouvé. |
+| `isolate_cache` | bool | `true` | Préfixe toutes les clés cache par `{tenant_id}:`. |
+| `isolate_db` | bool | `true` | Exécute `SET search_path TO {tenant_id}, public` avant chaque requête (PostgreSQL). |
+| `isolate_scheduler` | bool | `false` | Préfixe les `job_id` APScheduler par `{tenant_id}:`. |
+| `enforce_ipc` | bool | `true` | Vérifie `allowed_callers` dans `plugin.yaml` sur chaque appel IPC. `false` = tout IPC autorisé. |
+
+Voir [Guide Multi-Tenancy](../guides/tenancy.md) pour les exemples complets.
 
 ---
 

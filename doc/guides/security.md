@@ -130,7 +130,11 @@ XCore fournit un système d'authentification pluggable via l'`AuthBackend` proto
 
 ### Implémenter un backend
 
+XCore ne fournit pas de bibliothèque JWT par défaut pour rester léger. Nous recommandons **PyJWT** (avec l'extension `crypto`) pour sa protection contre les attaques temporelles.
+
 ```python
+# pip install "pyjwt[crypto]"
+import jwt
 from xcore.kernel.api.auth import AuthBackend, AuthPayload, register_auth_backend
 
 class JWTBackend:
@@ -142,6 +146,7 @@ class JWTBackend:
 
     async def decode_token(self, token: str) -> AuthPayload | None:
         try:
+            # Toujours spécifier les algorithmes autorisés
             payload = jwt.decode(token, SECRET, algorithms=["HS256"])
             return AuthPayload(
                 sub=payload["sub"],
@@ -153,6 +158,9 @@ class JWTBackend:
 
     async def has_permission(self, payload: AuthPayload, permission: str) -> bool:
         return permission in (payload.get("permissions") or [])
+```
+
+> **Note de sécurité** : Évitez l'utilisation de `python-jose` ou `python-ecdsa` (vulnérables à l'attaque Minerva sur les courbes P-256). Préférez des bibliothèques basées sur OpenSSL comme `cryptography` (utilisée par PyJWT).
 
 # Dans on_load() du plugin auth
 class Plugin(TrustedBase):
@@ -188,7 +196,35 @@ async def list_all_users(self):
 
 ---
 
-## 5. Validation des manifestes
+## 5. Autorisation IPC (`allowed_callers`)
+
+Chaque plugin déclare dans `plugin.yaml` les plugins autorisés à l'appeler via IPC. Les appels HTTP directs ne sont jamais filtrés par cette règle.
+
+```yaml
+# plugins/inventory/plugin.yaml
+name: inventory
+allowed_callers:
+  - billing
+  - dashboard
+```
+
+**Règle deny-by-default :** liste vide ou absente = tout appel IPC refusé.
+
+```
+Appel IPC billing → inventory  ✅  (billing dans allowed_callers)
+Appel IPC reporting → inventory ❌  (reporting absent de la liste)
+Appel HTTP → inventory          ✅  (toujours autorisé)
+```
+
+Le middleware `IPCAuthMiddleware` est le premier de la pipeline — il bloque avant Tracing, RateLimit et Permissions.
+
+La vérification est activée par `enforce_ipc: true` dans `integration.yaml` (défaut). Mettre `enforce_ipc: false` désactive la vérification globalement.
+
+Voir [Guide Multi-Tenancy](tenancy.md#autorisation-ipc) pour les exemples complets et la propagation automatique du `caller`.
+
+---
+
+## 6. Validation des manifestes
 
 Le `ManifestValidator` vérifie chaque manifeste au chargement :
 
@@ -205,7 +241,7 @@ poetry run xcore plugin validate plugins/mon_plugin
 
 ---
 
-## 6. Bonnes pratiques
+## 7. Bonnes pratiques
 
 - Utiliser `strict_trusted: true` en production et signer tous les plugins.
 - Privilegier `sandboxed` pour les plugins tiers ou non audités.
