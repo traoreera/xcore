@@ -17,6 +17,7 @@ from .helper import _resolve
 from .sections import (
     AppConfig,
     CacheConfig,
+    CORSConfig,
     DatabaseConfig,
     LoggingConfig,
     MarketplaceConfig,
@@ -140,6 +141,7 @@ class ConfigLoader:
             marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
             middleware=cls._parse_middleware(raw.get("middleware", {})),
             tenancy=cls._parse_tenancy(raw.get("tenancy", {})),
+            cors=cls._parse_cors(raw.get("cors", {})),
             raw=raw,
         )
 
@@ -236,6 +238,12 @@ class ConfigLoader:
                 )
             )
         return result
+
+    # parser cors
+
+    @classmethod
+    def _parse_cors(cls, d: dict) -> CORSConfig:
+        return CORSConfig.from_dict(d)
 
     @classmethod
     def _parse_services(cls, d: dict) -> ServicesConfig:

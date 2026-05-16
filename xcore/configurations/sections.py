@@ -31,6 +31,27 @@ class FastAPIConfig:
     root_path: str = ""
     deprecated: bool = False
 
+    def to_dict(self):
+        return {
+            "debug": self.debug,
+            "title": self.title,
+            "summary": self.summary,
+            "description": self.description,
+            "version": self.version,
+            "openapi_url": self.openapi_url,
+            "openapi_tags": self.openapi_tags,
+            "redirect_slashes": self.redirect_slashes,
+            "docs_url": self.docs_url,
+            "redoc_url": self.redoc_url,
+            "swagger_ui_oauth2_redirect_url": self.swagger_ui_oauth2_redirect_url,
+            "terms_of_service": self.terms_of_service,
+            "contact": self.contact,
+            "license_info": self.license_info,
+            "openapi_prefix": self.openapi_prefix,
+            "root_path": self.root_path,
+            "deprecated": self.deprecated,
+        }
+
 
 @dataclass
 class ServerConfig:
@@ -44,6 +65,20 @@ class ServerConfig:
     log_level: str = "info"
     proxy_headers: bool = True
     forwarded_allow_ips: str = "*"
+    lifespan: str = "on"
+
+    def to_dict(self):
+        return {
+            "app": self.app,
+            "host": self.host,
+            "port": self.port,
+            "workers": self.workers,
+            "reload": self.reload,
+            "log_level": self.log_level,
+            "proxy_headers": self.proxy_headers,
+            "forwarded_allow_ips": self.forwarded_allow_ips,
+            "lifespan": self.lifespan,
+        }
 
 
 @dataclass
@@ -243,8 +278,35 @@ class TenancyConfig:
 
 
 @dataclass
+class CORSConfig:
+    allow_origins: list = field(default_factory=list)
+    allow_credentials: bool = False
+    allow_methods: list[str] = field(default_factory=list)
+    allow_headers: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allow_origins": self.allow_origins,
+            "allow_credentials": self.allow_credentials,
+            "allow_methods": self.allow_methods,
+            "allow_headers": self.allow_headers,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "CORSConfig":
+        return cls(
+            allow_origins=value.get("allow_origins", []),
+            allow_credentials=value.get("allow_credentials", False),
+            allow_methods=value.get("allow_methods", []),
+            allow_headers=value.get("allow_headers", []),
+        )
+
+
+@dataclass
 class MiddleParams:
-    type: Literal["internal", "external"] = "external"
+    type: Literal["internal", "external", "events"] = (
+        "external"  # add events bus systeme
+    )
     name: str = ""
     value: Any = None
 
@@ -267,6 +329,7 @@ class XcoreConfig:
     tenancy: TenancyConfig = field(default_factory=TenancyConfig)
     raw: dict[str, Any] = field(default_factory=dict)
     middleware: list[MiddlewareConfig] = field(default_factory=list)
+    cors: CORSConfig = field(default_factory=CORSConfig)
     cors_allow_credentials: bool = True
     cors_max_age: int = 3600
     cors_expose_headers: list[str] = field(default_factory=list)

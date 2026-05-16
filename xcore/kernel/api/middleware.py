@@ -8,9 +8,12 @@ from ...configurations.sections import MiddlewareConfig
 
 
 class Middlewares:
-    def __init__(self, config: list[MiddlewareConfig], prototypes: Callable) -> None:
+    def __init__(
+        self, config: list[MiddlewareConfig], prototypes: Callable, event_bus: Any
+    ) -> None:
         self._config = config
         self._prototypes = prototypes
+        self._event_bus = event_bus
 
     def _build_instances(self, logger: logging.Logger) -> list[dict[str, Any]]:
         instances = []
@@ -47,6 +50,9 @@ class Middlewares:
                     # Passe un callable () → service, résolu à la requête
                     svc_name = param.value
                     config[param.name] = lambda n=svc_name: self._prototypes(n)
+                elif param.type == "events":
+                    # Passe un callable () → event bus, résolu à la requête
+                    config[param.name] = lambda: self._event_bus
                 else:
                     config[param.name] = param.value
             instances.append({"cls": cls, "config": config, "name": mddw.name})

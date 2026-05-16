@@ -151,6 +151,7 @@ class Xcore:
         Middlewares(
             config=self._config.middleware,
             prototypes=_lazy_service,
+            event_bus=self.events,
         ).configure(app, self._logger)
         return self
 
