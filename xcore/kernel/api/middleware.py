@@ -12,7 +12,7 @@ class Middlewares:
         self._config = config
         self._prototypes = prototypes
 
-    def _build_instances(self) -> list[dict[str, Any]]:
+    def _build_instances(self, logger: logging.Logger) -> list[dict[str, Any]]:
         instances = []
         for mddw in self._config:
             if not mddw.module:
@@ -56,6 +56,6 @@ class Middlewares:
         """Enregistre les middlewares — DOIT être appelé avant le démarrage de l'app."""
         if app is None or not self._config:
             return
-        for mdw in self._build_instances():
+        for mdw in self._build_instances(logger):
             app.add_middleware(mdw["cls"], **mdw["config"])
             logger.info("Middleware '%s' ajouté (%s)", mdw["name"], mdw["cls"].__name__)
