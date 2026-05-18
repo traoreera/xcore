@@ -1,7 +1,7 @@
 # ⚡ XCore Framework
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/traoreera/xcore/main/doc/assets/logo.png" alt="XCore Logo" width="200" />
+  <img src="https://files.catbox.moe/v6hda0.jpg" alt="XCore Logo" width="200" />
 </p>
 
 <p align="center">
