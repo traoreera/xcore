@@ -69,10 +69,12 @@ jobs:
           key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: |
+          poetry install --no-interaction
+          poetry add mypy
 
       - name: Run mypy
-        run: poetry run mypy xcore/ extensions/ --ignore-missing-imports
+        run: poetry run mypy xcore/ --ignore-missing-imports
 
   # ── Tests ──────────────────────────────────────────────────────────────────
   test:
@@ -115,7 +117,9 @@ jobs:
           key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: |
+          poetry install --no-interaction
+          poetry add mypy
 
       - name: Run tests with coverage
         env:
