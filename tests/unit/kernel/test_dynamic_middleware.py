@@ -45,6 +45,7 @@ async def test_dynamic_middleware_registration():
     supervisor._loader.has.return_value = True
     handler = AsyncMock()
     handler.call.return_value = {"status": "ok"}
+    handler._instance = None  # disable tenancy wrapping in _dispatch
     supervisor._loader.get.return_value = handler
 
     from xcore.kernel.runtime.middlewares import MiddlewarePipeline

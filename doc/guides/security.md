@@ -1,250 +1,286 @@
-# Sécurité
+# Security
 
-XCore implémente une sécurité en profondeur (defense in depth) à plusieurs couches.
+XCore implements **defense in depth** across six distinct layers.
 
----
+```mermaid
+flowchart TB
+    subgraph L1["① Manifest validation"]
+        A["JSON Schema check\nplugin.yaml structure"]
+    end
+    subgraph L2["② Plugin signing"]
+        B["HMAC-SHA256\nplugin.sig verification"]
+    end
+    subgraph L3["③ AST sandbox"]
+        C["Import whitelist scan\nbefore execution"]
+    end
+    subgraph L4["④ IPC access control"]
+        D["allowed_callers\nper-plugin deny-by-default"]
+    end
+    subgraph L5["⑤ Permission engine"]
+        E["resource / action grants\ndeclared in plugin.yaml"]
+    end
+    subgraph L6["⑥ Rate limiting"]
+        F["Per-plugin call quota\ncalls / period_seconds"]
+    end
 
-## 1. Moteur de Permissions
+    L1 --> L2 --> L3 --> L4 --> L5 --> L6
 
-Chaque plugin déclare ses accès dans `plugin.yaml`. Le `PermissionEngine` évalue les requêtes inter-plugins à chaque appel.
-
-### Déclaration des permissions
-
-```yaml
-# plugin.yaml
-permissions:
-  # Autoriser la lecture/écriture sur toutes les tables users
-  - resource: "db.users.*"
-    actions: ["read", "write"]
-    effect: allow
-
-  # Interdire l'accès aux données admin (priorité sur les règles suivantes)
-  - resource: "db.admin.*"
-    actions: ["*"]
-    effect: deny
-
-  # Cache en lecture/écriture
-  - resource: "cache.*"
-    actions: ["read", "write"]
-    effect: allow
-
-  # Autoriser uniquement l'écriture sur le filesystem temporaire
-  - resource: "fs.tmp.*"
-    actions: ["write"]
-    effect: allow
+    style L1 fill:#E3F2FD,stroke:#1976D2
+    style L2 fill:#E8F5E9,stroke:#388E3C
+    style L3 fill:#FFF3E0,stroke:#F57C00
+    style L4 fill:#FCE4EC,stroke:#C62828
+    style L5 fill:#F3E5F5,stroke:#7B1FA2
+    style L6 fill:#E0F2F1,stroke:#00695C
 ```
 
-### Règles d'évaluation
+---
 
-- Les règles sont évaluées **dans l'ordre** — première correspondance gagne.
-- Aucune règle correspondante → **deny** par défaut (fail-closed).
-- Les patterns `resource` supportent les globs (`*`, `?`, `[abc]`).
-- Le champ `actions` accepte `["*"]` pour toutes les actions.
+## ① Manifest validation
 
-### Performances
+Every `plugin.yaml` is validated against a JSON Schema at load time.
+Missing required fields (`name`, `version`) or unknown `execution_mode` values cause an immediate `ManifestValidationError`.
 
-Le moteur utilise un **cache LRU** par triplet `(plugin, resource, action)`. Latence mesurée : **113 µs** (avec cache) vs 152 µs (sans cache) pour 6 vérifications. Voir [Benchmarks](../reference/benchmarks.md).
+```yaml title="Valid manifest"
+name: my_plugin         # required
+version: "1.0.0"        # required
+execution_mode: trusted # trusted | sandboxed | legacy
+entry_point: src/main.py
+```
 
 ---
 
-## 2. Signature des plugins Trusted
+## ② Plugin signing
 
-En production, activer `strict_trusted: true` dans `xcore.yaml` force la vérification de la signature HMAC-SHA256 avant le chargement de tout plugin `trusted`.
+Signing ensures that plugin files have not been tampered with since the last authorized signature.
 
-```yaml
+```mermaid
+flowchart LR
+    Dev["Developer"] -- "sign_plugin(path, secret)" --> Sig["plugin.sig\n(HMAC-SHA256 over all source files)"]
+    Sig -- "committed to repo" --> Repo["git repository"]
+    Repo -- "xcore.boot()" --> Verify{"verify_plugin\n(secret)"}
+    Verify -- "✅ match" --> Load["Plugin loads"]
+    Verify -- "❌ mismatch" --> Block["PluginSignatureError\nboot aborted"]
+
+    style Load fill:#E8F5E9,stroke:#388E3C
+    style Block fill:#FFEBEE,stroke:#C62828
+```
+
+### Enable strict mode
+
+```yaml title="integration.yaml"
 plugins:
-  strict_trusted: true
-  secret_key: "${PLUGIN_SECRET_KEY}"   # clé HMAC partagée
+  secret_key: "your-hmac-secret"
+  strict_trusted: true       # reject unsigned TrustedBase plugins
 ```
 
-```bash
-# Signer un plugin avant déploiement
-poetry run xcore plugin sign plugins/mon_plugin --key "ma_clé"
+### Sign a plugin
 
-# Cela génère plugins/mon_plugin/plugin.sig
-# Vérifier
-poetry run xcore plugin verify plugins/mon_plugin --key "ma_clé"
-```
+=== "CLI"
 
-Un plugin `trusted` sans `plugin.sig` valide sera **refusé au chargement** si `strict_trusted: true`.
+    ```bash
+    # Sign
+    poetry run xcore plugin sign plugins/my_plugin --secret "your-hmac-secret"
+    # → creates plugins/my_plugin/plugin.sig
+
+    # Verify
+    poetry run xcore plugin verify plugins/my_plugin --secret "your-hmac-secret"
+    # → ✅ signature valid
+    ```
+
+=== "Python"
+
+    ```python
+    from xcore.kernel.security.signature import sign_plugin, verify_plugin
+
+    sign_plugin("plugins/my_plugin", secret="your-hmac-secret")
+
+    is_valid = verify_plugin("plugins/my_plugin", secret="your-hmac-secret")
+    # True / False
+    ```
 
 ---
 
-## 3. Sandbox multi-couches (plugins Sandboxed)
+## ③ AST sandbox
 
-Les plugins `sandboxed` s'exécutent dans un **processus OS séparé** avec trois niveaux de protection :
+Sandboxed plugins are scanned by an AST parser **before** the module is imported. Any `import` or `from X import` not on the whitelist causes an `ImportRestrictionError` at load time — the plugin never executes.
 
-### Couche 1 — Analyse statique AST
+```mermaid
+flowchart LR
+    SRC["src/main.py\n(source code)"] --> AST["ast.parse()"]
+    AST --> SCAN["Scan all Import nodes"]
+    SCAN --> CHECK{"In\nallowed_imports?"}
+    CHECK -- "✅ all ok" --> EXEC["importlib.import_module()"]
+    CHECK -- "❌ forbidden" --> ERR["ImportRestrictionError\nplugin rejected"]
 
-Avant toute exécution, l'`ASTScanner` parse l'arbre syntaxique du plugin et bloque :
-
-```python
-# BLOQUÉ par le scanner AST
-import os                 # ❌ module interdit
-import subprocess         # ❌ module interdit
-eval("code")              # ❌ builtin interdit
-exec("code")              # ❌ builtin interdit
-obj.__class__             # ❌ attribut dangereux
-obj.__globals__           # ❌ sandbox escape
-type.__subclasses__()     # ❌ sandbox escape
+    style EXEC fill:#E8F5E9,stroke:#388E3C
+    style ERR fill:#FFEBEE,stroke:#C62828
 ```
 
-Les modules autorisés se déclarent dans `allowed_imports` du manifeste :
+### Configure the global whitelist
 
-```yaml
+```yaml title="integration.yaml"
+security:
+  allowed_imports:            # everything a sandboxed plugin can import
+    - json
+    - math
+    - re
+    - datetime
+    - typing
+    - uuid
+    - decimal
+    - hashlib
+    - base64
+    - asyncio
+    - logging
+    - collections
+    - functools
+    - itertools
+
+  forbidden_imports:          # explicit deny — overrides allowed_imports
+    - os
+    - subprocess
+    - socket
+    - importlib
+```
+
+### Per-plugin extension
+
+```yaml title="plugin.yaml"
 allowed_imports:
-  - httpx
-  - pydantic
-  - json
-  - datetime
+  - statistics    # adds to the global list for this plugin only
+  - decimal
 ```
 
-### Couche 2 — Isolation processus (JSON-RPC 2.0)
-
-La communication kernel ↔ sandbox se fait exclusivement via **pipes stdin/stdout** en JSON. Aucun objet Python natif ne passe la frontière (pas de `pickle`).
-
-```
-Kernel                 Pipe (JSON)           Sandbox Worker
-  │                        │                       │
-  │── {"method":"call"} ──►│──────────────────────►│
-  │                        │                       │── exécute handler
-  │◄── {"result": ...} ───│◄──────────────────────│
-```
-
-### Couche 3 — Limites de ressources
-
-```yaml
-resources:
-  timeout_seconds: 10      # Kill si dépasse
-  max_memory_mb: 128       # Kill si RSS dépasse
-  rate_limit:
-    calls: 100
-    period_seconds: 60     # 429 si quota dépassé
-```
+!!! danger "No runtime escape"
+    The scan catches `import os`, `from os import path`, `__import__("os")`, and `importlib.import_module("os")` — all blocked at parse time, before any code runs.
 
 ---
 
-## 4. Authentification HTTP (AuthBackend)
+## ④ IPC access control
 
-XCore fournit un système d'authentification pluggable via l'`AuthBackend` protocol.
+Every plugin-to-plugin call passes through an **IPC auth check** before anything else in the middleware pipeline.
 
-### Implémenter un backend
+```mermaid
+flowchart LR
+    A["Plugin A\ncall_plugin('B', ...)"] --> CHECK{"B.allowed_callers\ncontains A?"}
+    CHECK -- "✅ yes" --> PIPELINE["Middleware pipeline\n(tracing → rate limit → permissions → retry)"]
+    CHECK -- "❌ no" --> DENY["PermissionError\n403 Forbidden"]
+    PIPELINE --> B["Plugin B\nhandle(action, payload)"]
 
-XCore ne fournit pas de bibliothèque JWT par défaut pour rester léger. Nous recommandons **PyJWT** (avec l'extension `crypto`) pour sa protection contre les attaques temporelles.
-
-```python
-# pip install "pyjwt[crypto]"
-import jwt
-from xcore.kernel.api.auth import AuthBackend, AuthPayload, register_auth_backend
-
-class JWTBackend:
-    async def extract_token(self, request) -> str | None:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            return auth[7:]
-        return None
-
-    async def decode_token(self, token: str) -> AuthPayload | None:
-        try:
-            # Toujours spécifier les algorithmes autorisés
-            payload = jwt.decode(token, SECRET, algorithms=["HS256"])
-            return AuthPayload(
-                sub=payload["sub"],
-                roles=payload.get("roles", []),
-                permissions=payload.get("permissions", []),
-            )
-        except jwt.InvalidTokenError:
-            return None
-
-    async def has_permission(self, payload: AuthPayload, permission: str) -> bool:
-        return permission in (payload.get("permissions") or [])
+    style DENY fill:#FFEBEE,stroke:#C62828
+    style PIPELINE fill:#E3F2FD,stroke:#1976D2
 ```
 
-> **Note de sécurité** : Évitez l'utilisation de `python-jose` ou `python-ecdsa` (vulnérables à l'attaque Minerva sur les courbes P-256). Préférez des bibliothèques basées sur OpenSSL comme `cryptography` (utilisée par PyJWT).
+### Configuration
 
-# Dans on_load() du plugin auth
-class Plugin(TrustedBase):
-    async def on_load(self):
-        register_auth_backend(JWTBackend())
-
-    async def on_unload(self):
-        from xcore.kernel.api.auth import unregister_auth_backend
-        unregister_auth_backend()
-```
-
-### Protéger des routes FastAPI
-
-```python
-from xcore.kernel.api.auth import get_current_user
-from fastapi import Depends
-
-@router.get("/profile")
-async def profile(user = Depends(get_current_user)):
-    return {"sub": user["sub"], "roles": user.get("roles", [])}
-```
-
-### RBAC déclaratif sur les routes plugins
-
-```python
-from xcore.sdk.decorators import route
-
-@route("/admin/users", method="GET", permissions=["admin"])
-async def list_all_users(self):
-    # Accessible uniquement si l'utilisateur a la permission "admin"
-    ...
-```
-
----
-
-## 5. Autorisation IPC (`allowed_callers`)
-
-Chaque plugin déclare dans `plugin.yaml` les plugins autorisés à l'appeler via IPC. Les appels HTTP directs ne sont jamais filtrés par cette règle.
-
-```yaml
-# plugins/inventory/plugin.yaml
-name: inventory
+```yaml title="plugin.yaml (target plugin)"
 allowed_callers:
-  - billing
-  - dashboard
+  - auth_plugin       # only these plugins may call this one
+  - billing_plugin
 ```
 
-**Règle deny-by-default :** liste vide ou absente = tout appel IPC refusé.
+| Value | Effect |
+|:------|:-------|
+| `[]` (empty list) | **All IPC calls blocked** — default for new plugins |
+| `["*"]` | All plugins allowed |
+| `["auth_plugin"]` | Only `auth_plugin` may call |
 
+Enable globally:
+
+```yaml title="integration.yaml"
+tenancy:
+  enforce_ipc: true
 ```
-Appel IPC billing → inventory  ✅  (billing dans allowed_callers)
-Appel IPC reporting → inventory ❌  (reporting absent de la liste)
-Appel HTTP → inventory          ✅  (toujours autorisé)
-```
-
-Le middleware `IPCAuthMiddleware` est le premier de la pipeline — il bloque avant Tracing, RateLimit et Permissions.
-
-La vérification est activée par `enforce_ipc: true` dans `integration.yaml` (défaut). Mettre `enforce_ipc: false` désactive la vérification globalement.
-
-Voir [Guide Multi-Tenancy](tenancy.md#autorisation-ipc) pour les exemples complets et la propagation automatique du `caller`.
 
 ---
 
-## 6. Validation des manifestes
+## ⑤ Permission engine
 
-Le `ManifestValidator` vérifie chaque manifeste au chargement :
+Plugins declare their resource/action grants in `plugin.yaml`. The permission engine checks every IPC call.
 
-- Champs requis (`name`, `version`)
-- `execution_mode` valide (`trusted` | `sandboxed`)
-- `framework_version` compatible avec la version installée
-- `allowed_imports` contient uniquement des noms de modules (pas de symboles)
-- `plugin.sig` présent si `strict_trusted: true`
+```yaml title="plugin.yaml"
+permissions:
+  - resource: "cache.*"       # glob — all keys in cache
+    actions: ["read", "write"]
+    effect: allow
+
+  - resource: "db.users"      # specific table
+    actions: ["read", "write"]
+    effect: allow
+
+  - resource: "db.admin"
+    actions: ["*"]
+    effect: deny              # explicit deny overrides any allow
+```
+
+### Access denied flow
+
+```mermaid
+flowchart LR
+    CALL["Plugin calls\ndb.admin:delete"] --> PE{"Permission\nengine"}
+    PE -- "resource: db.admin → deny" --> DENIED["PermissionDeniedError"]
+    PE -- "resource: db.users → allow" --> ALLOWED["Execute query"]
+
+    style DENIED fill:#FFEBEE,stroke:#C62828
+    style ALLOWED fill:#E8F5E9,stroke:#388E3C
+```
+
+---
+
+## ⑥ Rate limiting
+
+### Global default
+
+```yaml title="integration.yaml"
+security:
+  rate_limit_default:
+    calls: 200
+    period_seconds: 60   # 200 calls/min applied to every plugin
+```
+
+### Per-plugin override
+
+```yaml title="plugin.yaml"
+resources:
+  rate_limit:
+    calls: 50
+    period_seconds: 60   # this plugin: 50 calls/min
+```
+
+When the quota is exceeded, the call returns `{"status": "error", "code": "rate_limit_exceeded"}` without reaching the plugin.
+
+---
+
+## Production checklist
+
+```yaml title="integration.yaml"
+app:
+  env: production              # activates key validation at boot
+  secret_key: "${SECRET_KEY}"  # load from env — never hardcode
+  server_key: "${SERVER_KEY}"
+
+plugins:
+  secret_key: "${PLUGIN_SECRET_KEY}"
+  strict_trusted: true         # reject unsigned plugins
+```
 
 ```bash
-# Valider manuellement avant déploiement
-poetry run xcore plugin validate plugins/mon_plugin
+# Generate strong keys
+openssl rand -hex 32   # for secret_key and server_key
+openssl rand -hex 32   # for plugin secret_key
 ```
+
+!!! danger "Boot guard"
+    XCore **refuses to start** in `env: production` if any secret key matches the default value (`"change-me-in-production"`).
 
 ---
 
-## 7. Bonnes pratiques
+## Security audit
 
-- Utiliser `strict_trusted: true` en production et signer tous les plugins.
-- Privilegier `sandboxed` pour les plugins tiers ou non audités.
-- Appliquer le **principe du moindre privilège** : ne déclarer que les permissions réellement utilisées.
-- Ne jamais mettre `secret_key` en clair dans `xcore.yaml` — utiliser `"${SECRET_KEY}"` et `.env`.
-- Auditer régulièrement avec `poetry run bandit -r xcore/ plugins/`.
+```bash
+# Run Bandit static analysis (reports written to ./reports/)
+make auto-security
+
+# Direct invocation
+poetry run bandit -r xcore/ -f txt
+```

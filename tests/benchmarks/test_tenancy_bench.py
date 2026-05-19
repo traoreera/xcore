@@ -7,6 +7,7 @@ Suites :
   - wrap_services_for_tenant() : coût d'instanciation des wrappers
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -80,11 +81,7 @@ def test_cache_set_raw(benchmark, memory_backend):
     async def _set():
         await memory_backend.set("acme:key:1", {"v": 1})
 
-    benchmark(
-        lambda: pytest.importorskip("asyncio")
-        .get_event_loop()
-        .run_until_complete(_set())
-    )
+    benchmark(lambda: asyncio.run(_set()))
 
 
 @pytest.mark.benchmark(group="tenant-cache")
@@ -94,39 +91,29 @@ def test_cache_set_wrapped(benchmark, tenant_cache):
     async def _set():
         await tenant_cache.set("key:1", {"v": 1})
 
-    benchmark(
-        lambda: pytest.importorskip("asyncio")
-        .get_event_loop()
-        .run_until_complete(_set())
-    )
+    benchmark(lambda: asyncio.run(_set()))
 
 
 @pytest.mark.benchmark(group="tenant-cache")
 def test_cache_get_raw(benchmark, memory_backend):
     """GET brut — lecture clé déjà préfixée."""
-    import asyncio
-
-    asyncio.get_event_loop().run_until_complete(
-        memory_backend.set("acme:key:1", {"v": 1})
-    )
+    asyncio.run(memory_backend.set("acme:key:1", {"v": 1}))
 
     async def _get():
         return await memory_backend.get("acme:key:1")
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_get()))
+    benchmark(lambda: asyncio.run(_get()))
 
 
 @pytest.mark.benchmark(group="tenant-cache")
 def test_cache_get_wrapped(benchmark, tenant_cache):
     """GET via TenantAwareCache."""
-    import asyncio
-
-    asyncio.get_event_loop().run_until_complete(tenant_cache.set("key:1", {"v": 1}))
+    asyncio.run(tenant_cache.set("key:1", {"v": 1}))
 
     async def _get():
         return await tenant_cache.get("key:1")
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_get()))
+    benchmark(lambda: asyncio.run(_get()))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -137,53 +124,49 @@ def test_cache_get_wrapped(benchmark, tenant_cache):
 @pytest.mark.benchmark(group="ipc-auth")
 def test_ipc_http_direct(benchmark, ipc_mw_deny, next_ok):
     """HTTP direct (caller=None) — fast path, pas de vérification."""
-    import asyncio
 
     async def _call():
         return await ipc_mw_deny(
             "target", "act", {}, next_ok, handler=MagicMock(), caller=None
         )
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_call()))
+    benchmark(lambda: asyncio.run(_call()))
 
 
 @pytest.mark.benchmark(group="ipc-auth")
 def test_ipc_caller_allowed(benchmark, ipc_mw_allow, next_ok):
     """IPC autorisé — caller dans allowed_callers."""
-    import asyncio
 
     async def _call():
         return await ipc_mw_allow(
             "target", "act", {}, next_ok, handler=MagicMock(), caller="billing"
         )
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_call()))
+    benchmark(lambda: asyncio.run(_call()))
 
 
 @pytest.mark.benchmark(group="ipc-auth")
 def test_ipc_caller_denied(benchmark, ipc_mw_deny, next_ok):
     """IPC refusé — deny-by-default (liste vide)."""
-    import asyncio
 
     async def _call():
         return await ipc_mw_deny(
             "target", "act", {}, next_ok, handler=MagicMock(), caller="intruder"
         )
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_call()))
+    benchmark(lambda: asyncio.run(_call()))
 
 
 @pytest.mark.benchmark(group="ipc-auth")
 def test_ipc_enforce_off(benchmark, ipc_mw_off, next_ok):
     """IPC avec enforce=False — bypass complet."""
-    import asyncio
 
     async def _call():
         return await ipc_mw_off(
             "target", "act", {}, next_ok, handler=MagicMock(), caller="anyone"
         )
 
-    benchmark(lambda: asyncio.get_event_loop().run_until_complete(_call()))
+    benchmark(lambda: asyncio.run(_call()))
 
 
 # ─────────────────────────────────────────────────────────────

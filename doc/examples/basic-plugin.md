@@ -1,13 +1,13 @@
-# Exemple : Plugin de Base (Basic Plugin)
+# Example: Basic Plugin
 
-Cet exemple présente la structure minimale d'un plugin XCore fonctionnel en mode `trusted`.
+The minimal structure for a working XCore plugin in `trusted` mode.
 
 ---
 
-## 1. Structure du Répertoire
+## Directory Structure
 
-```text
-basic_plugin/
+```
+plugins/hello/
 ├── plugin.yaml
 └── src/
     └── main.py
@@ -15,74 +15,97 @@ basic_plugin/
 
 ---
 
-## 2. Le Manifeste (`plugin.yaml`)
+## `plugin.yaml`
 
 ```yaml
-name: basic_plugin
-version: 1.0.0
-author: XCore Team
-description: Un plugin d'exemple minimaliste
+name: hello
+version: "1.0.0"
+author: me
+description: A minimal greeting plugin
 execution_mode: trusted
 entry_point: src/main.py
-
-# Aucun service ou permission requis ici
 ```
 
 ---
 
-## 3. Le Code Source (`src/main.py`)
+## `src/main.py`
 
 ```python
-from xcore.sdk import TrustedBase, ok, error
+from xcore import TrustedBase
+from xcore.sdk.decorators import action
+from xcore.sdk.mixin.ipc import AutoDispatchMixin
+from xcore.kernel.api.contract import ok, error
 
-class Plugin(TrustedBase):
+class Plugin(AutoDispatchMixin, TrustedBase):
     """
-    Plugin de base démontrant l'implémentation de la méthode handle().
+    AutoDispatchMixin:
+        auto-routes handle("ping", {}) → self.ping({})
+
+    TrustedBase:
+        provides self.get_service(), self.call_plugin(), lifecycle hooks
     """
 
-    async def on_load(self) -> None:
-        """Appelé lors du chargement initial."""
-        print(f"✅ Plugin {self.ctx.name} v{self.ctx.version} chargé !")
+    @action("ping")
+    async def ping(self, payload: dict) -> dict:
+        return ok(pong=True)
 
-    async def handle(self, action: str, payload: dict) -> dict:
-        """
-        Point d'entrée pour les appels IPC (Inter-Process Communication).
-        """
-        if action == "ping":
-            return ok(message="pong")
-
-        if action == "echo":
-            # Retourne le payload reçu
-            return ok(echo=payload)
-
-        # En cas d'action inconnue, retourner une erreur standard
-        return error(f"Action '{action}' inconnue", code="unknown_action")
-
-    async def on_unload(self) -> None:
-        """Appelé avant le déchargement."""
-        print(f"👋 Plugin {self.ctx.name} déchargé.")
+    @action("greet")
+    async def greet(self, payload: dict) -> dict:
+        name = payload.get("name", "world")
+        if not isinstance(name, str):
+            return error("name must be a string", "invalid_input")
+        return ok(message=f"Hello, {name}!")
 ```
 
 ---
 
-## 4. Test de l'Exemple
-
-### Appel via cURL (IPC sur HTTP)
+## Test it
 
 ```bash
-curl -X POST http://localhost:8082/plugin/ipc/basic_plugin/ping \
-  -H "X-Plugin-Key: change-me-in-production" \
-  -d '{"payload": {}}'
+# Start the server
+make dev
 
-# Réponse :
-# {"status":"ok","plugin":"basic_plugin","action":"ping","result":{"status":"ok","message":"pong"}}
+# Call the ping action
+curl -X POST http://localhost:8000/app/hello/action \
+     -H "Content-Type: application/json" \
+     -d '{"action": "ping", "payload": {}}'
+# → {"status": "ok", "pong": true}
+
+# Call the greet action
+curl -X POST http://localhost:8000/app/hello/action \
+     -H "Content-Type: application/json" \
+     -d '{"action": "greet", "payload": {"name": "Dev"}}'
+# → {"status": "ok", "message": "Hello, Dev!"}
 ```
 
 ---
 
-## Ce que vous avez appris
+## Adding a cache
 
-✅ **Héritage** : Un plugin doit hériter de `TrustedBase`.
-✅ **Points d'entrée** : `on_load`, `on_unload` et `handle`.
-✅ **Helpers de réponse** : Utilisation de `ok()` et `error()`.
-✅ **Isolation** : Même un plugin minimaliste est isolé par son propre namespace.
+```yaml
+# plugin.yaml — add permission
+permissions:
+  - resource: "cache.*"
+    actions: ["read", "write"]
+    effect: allow
+```
+
+```python
+class Plugin(AutoDispatchMixin, TrustedBase):
+
+    async def on_load(self) -> None:
+        self.cache = self.get_service("cache")
+
+    @action("greet")
+    async def greet(self, payload: dict) -> dict:
+        name = payload.get("name", "world")
+        key = f"greet:{name}"
+
+        cached = await self.cache.get(key)
+        if cached:
+            return ok(message=cached, from_cache=True)
+
+        msg = f"Hello, {name}!"
+        await self.cache.set(key, msg, ttl=60)
+        return ok(message=msg)
+```

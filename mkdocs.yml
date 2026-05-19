@@ -92,54 +92,54 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Accueil: index.md
+  - Home: index.md
 
-  - Démarrage:
+  - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
 
   - Guides:
-      - Créer un Plugin: guides/creating-plugins.md
-      - Cree un Services: guides/creating-services.md
-      - Manifeste du plugin: guides/plugin-manifest.md
-      - Le multi-tennant: guides/tenancy.md
+      - Creating a Plugin: guides/creating-plugins.md
+      - Plugin Manifest: guides/plugin-manifest.md
+      - Multi-Tenancy: guides/tenancy.md
       - Services (DB, Cache, Scheduler, Celery): guides/services.md
       - Middlewares: guides/middlewares.md
-      - Événements & Hooks: guides/events.md
-      - Sécurité: guides/security.md
+      - Events & Hooks: guides/events.md
+      - Security: guides/security.md
       - Marketplace: guides/marketplace.md
       - Monitoring: guides/monitoring.md
-      - Scalabilité: guides/scaling.md
+      - Scaling: guides/scaling.md
       - Troubleshooting: guides/troubleshooting.md
 
-  - Référence:
+  - Reference:
       - SDK: reference/sdk.md
       - Configuration (integration.yaml): reference/configuration.md
       - CLI: reference/cli.md
       - API: reference/api.md
+      - Auto-generated API: api/README.md
       - Benchmarks: reference/benchmarks.md
 
   - Architecture:
-      - Vue d'ensemble: architecture/overview.md
-      - Décisions: architecture/decisions.md
+      - Overview: architecture/overview.md
+      - Design Decisions: architecture/decisions.md
 
-  - Déploiement:
+  - Deployment:
       - Guide: deployment/guide.md
 
-  - Développement:
-      - Tests: development/testing.md
-      - Contribuer: development/contributing.md
+  - Development:
+      - Testing: development/testing.md
+      - Contributing: development/contributing.md
 
-  - Exemples:
-      - Vue d'ensemble: examples/README.md
-      - Plugin basique: examples/basic-plugin.md
-      - Plugin complet: examples/complete-plugin.md
-      - Plugin Trusted: examples/trusted-plugin.md
-      - Plugin Sandboxed: examples/sandboxed-plugin.md
+  - Examples:
+      - Overview: examples/README.md
+      - Basic Plugin: examples/basic-plugin.md
+      - Complete Plugin: examples/complete-plugin.md
+      - Trusted Plugin: examples/trusted-plugin.md
+      - Sandboxed Plugin: examples/sandboxed-plugin.md
 
-  - Versions & Changelog:
-      - Historique des versions: versions.md
-      - Changelog complet: ./CHANGELOG.md
+  - Changelog: ./CHANGELOG.md
+
+  - Versions: versions.md
 
   - Vision: vision.md
 

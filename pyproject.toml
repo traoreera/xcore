@@ -7,9 +7,12 @@ authors = [
 ]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.12,<4.0"
 
 dependencies = [
+    # SDK (external)
+    "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
+
     # Web
     "fastapi[standard]>=0.135.1,<1.0.0",
     "uvicorn>=0.38.0,<1.0.0",

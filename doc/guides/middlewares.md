@@ -1,112 +1,59 @@
 # Middlewares
 
-xcore supporte le chargement automatique de middlewares ASGI déclarés dans `integration.yaml`.
+XCore supports automatic loading of ASGI middlewares declared in `integration.yaml`. Two built-in middlewares are included, and you can add your own.
 
 ---
 
-## Concept
-
-Un middleware intercepte chaque requête HTTP **avant** qu'elle atteigne les routes et **après** que la réponse est générée. xcore charge les middlewares au démarrage via `xcore.setup(app)`, avant que le serveur accepte des connexions.
-
----
-
-## Déclarer un middleware
-
-```yaml
-# integration.yaml
-middleware:
-  - name: mon_middleware
-    module: myapp.middlewares.auth:AuthMiddleware
-    config:
-      - name: secret
-        type: external
-        value: "${JWT_SECRET}"
-      - name: cache_getter
-        type: internal
-        value: cache        # clé du ServiceContainer
-```
-
-| Champ | Description |
-|:------|:------------|
-| `name` | Identifiant (logs uniquement) |
-| `module` | Chemin Python `package.module:ClassName` |
-| `config` | Liste de paramètres |
-
-### Types de paramètres
-
-| `type` | Comportement |
-|:-------|:-------------|
-| `external` | Valeur passée directement au constructeur |
-| `internal` | Callable `() → service` passé — service résolu paresseusement à chaque requête |
-
-> Les params `internal` sont paresseux : `setup()` est appelé avant `boot()`, donc les services ne sont pas encore disponibles. Le middleware reçoit un callable et doit appeler `mon_param()` dans `dispatch()`.
-
----
-
-## Écrire un middleware
-
-Tout middleware doit hériter de `BaseHTTPMiddleware` (Starlette).
-
-### Middleware simple (params externes)
-
-```python
-# myapp/middlewares/timing.py
-import time
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-
-class RequestTimingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
-        start = time.perf_counter()
-        response = await call_next(request)
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        response.headers["X-Process-Time"] = f"{elapsed_ms:.2f}ms"
-        return response
-```
+## Declaration in `integration.yaml`
 
 ```yaml
 middleware:
   - name: timing
-    module: myapp.middlewares.timing:RequestTimingMiddleware
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
+
+  - name: cache_header
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
+    config:
+      - name: header_prefix
+        type: external       # passed as a static value
+        value: "X-App"
+      - name: cache_getter
+        type: internal       # resolved lazily to a service at request time
+        value: cache
 ```
 
-### Middleware avec service interne
+Middlewares are registered on the FastAPI app during `xcore.setup(app)`, which must be called **before** uvicorn starts.
 
-```python
-# myapp/middlewares/cache_header.py
-from typing import Callable
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
+### Parameter types
 
-class CacheHeaderMiddleware(BaseHTTPMiddleware):
-    def __init__(
-        self,
-        app,
-        header_prefix: str = "X-App",
-        cache_getter: Callable | None = None,   # () → CacheService
-    ) -> None:
-        super().__init__(app)
-        self._prefix = header_prefix
-        self._cache_getter = cache_getter
+| `type` | Behavior |
+|:-------|:---------|
+| `external` | The `value` string is passed directly as a keyword argument |
+| `internal` | `value` is a service name; a callable `() → service` is passed — resolved at request time |
+| `events` | A callable `() → EventBus` is passed |
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
-        response.headers[f"{self._prefix}-OK"] = "true"
+---
 
-        if self._cache_getter is not None:
-            cache = self._cache_getter()          # résolution paresseuse ici
-            backend = getattr(getattr(cache, "_config", None), "backend", "unknown")
-            response.headers[f"{self._prefix}-Cache-Backend"] = backend
+## Built-in Middlewares
 
-        return response
+### `RequestTimingMiddleware`
+
+Adds an `X-Process-Time` header (in seconds) to every response.
+
+```yaml
+middleware:
+  - name: timing
+    module: xcore.kernel.api.middlewares.timing:RequestTimingMiddleware
 ```
+
+### `CacheHeaderMiddleware`
+
+Adds cache-related response headers. Configurable prefix and cache backend.
 
 ```yaml
 middleware:
   - name: cache_header
-    module: myapp.middlewares.cache_header:CacheHeaderMiddleware
+    module: xcore.kernel.api.middlewares.cache_header:CacheHeaderMiddleware
     config:
       - name: header_prefix
         type: external
@@ -118,45 +65,113 @@ middleware:
 
 ---
 
-## Enregistrement dans l'application
+## CORS
 
-```python
-# main.py
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from xcore import Xcore
+CORS is configured separately from the middleware list, in its own section:
 
-xcore = Xcore()
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await xcore.boot(app)
-    yield
-    await xcore.shutdown()
-
-app = FastAPI(lifespan=lifespan)
-xcore.setup(app)     # ← AVANT le démarrage, APRÈS FastAPI()
+```yaml
+cors:
+  allow_origins: ["*", "http://localhost:3000"]
+  allow_credentials: false
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
 ```
 
-> `xcore.setup(app)` doit être appelé après `FastAPI()` et avant que uvicorn démarre — jamais à l'intérieur du lifespan.
+XCore applies `starlette.middleware.cors.CORSMiddleware` with these settings in `main.py`.
 
 ---
 
-## Middlewares intégrés
+## Writing a Custom Middleware
 
-| Classe | Module | Description |
-|:-------|:-------|:------------|
-| `RequestTimingMiddleware` | `xcore.kernel.api.middlewares.timing` | Ajoute `X-Process-Time` à chaque réponse |
-| `CacheHeaderMiddleware` | `xcore.kernel.api.middlewares.cache_header` | Headers de diagnostic cache et timing |
+```python
+# myapp/middlewares/auth_check.py
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
----
+class ApiKeyMiddleware(BaseHTTPMiddleware):
 
-## Ordre d'exécution
+    def __init__(self, app, api_key: str = "") -> None:
+        super().__init__(app)
+        self._api_key = api_key
 
-Les middlewares sont appliqués dans l'**ordre inverse** de déclaration (comportement Starlette) : le dernier déclaré enveloppe en premier.
+    async def dispatch(self, request: Request, call_next) -> Response:
+        key = request.headers.get("X-API-Key")
+        if key != self._api_key:
+            from starlette.responses import JSONResponse
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+```
+
+Register it in `integration.yaml`:
 
 ```yaml
 middleware:
-  - name: auth       # enveloppe externe — vu en 2e
-  - name: timing     # enveloppe interne — vu en 1er (plus proche des routes)
+  - name: api_key
+    module: myapp.middlewares.auth_check:ApiKeyMiddleware
+    config:
+      - name: api_key
+        type: external
+        value: "${API_KEY}"
 ```
+
+---
+
+## Middleware Using a Service
+
+If your middleware needs access to a service (e.g., cache for rate limiting), use `type: internal`:
+
+```python
+class RateLimitMiddleware(BaseHTTPMiddleware):
+
+    def __init__(self, app, cache_getter=None) -> None:
+        super().__init__(app)
+        self._cache = cache_getter   # callable: () → CacheService
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        cache = self._cache()        # resolved at request time
+        key = f"rate:{request.client.host}"
+        count = await cache.get(key) or 0
+        if count > 100:
+            from starlette.responses import JSONResponse
+            return JSONResponse({"error": "Rate limit exceeded"}, status_code=429)
+        await cache.set(key, count + 1, ttl=60)
+        return await call_next(request)
+```
+
+```yaml
+middleware:
+  - name: rate_limit
+    module: myapp.middlewares.rate_limit:RateLimitMiddleware
+    config:
+      - name: cache_getter
+        type: internal
+        value: cache
+```
+
+---
+
+## Per-Plugin Middleware Pipeline
+
+In addition to global ASGI middlewares, every plugin call passes through a **kernel-level middleware pipeline** configured per plugin:
+
+```
+IPC Auth → Tracing → Rate Limit → Permissions → Retry → plugin.handle()
+```
+
+This pipeline is configured via `plugin.yaml` (permissions, rate limits, retry) and `integration.yaml` (global security defaults).
+
+---
+
+## Middleware Loading Order
+
+Middlewares are applied in **reverse declaration order** (standard Starlette behavior). The last declared middleware wraps the innermost layer.
+
+```yaml
+middleware:
+  - name: timing        # outermost — applied last
+  - name: cache_header  # innermost — applied first
+```
+
+!!! tip
+    Always put `timing` first so it measures the total request time including all other middlewares.

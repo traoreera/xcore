@@ -1,347 +1,370 @@
 # SDK Reference
 
+The XCore SDK (`xcore/sdk/`) provides decorators and base classes for plugin authors.
+
 ---
 
-## Classes principales
+## Plugin class hierarchy
 
-### `TrustedBase`
+```mermaid
+flowchart TB
+    BP["BasePlugin\n(Protocol — duck typing)\n──────────────────\nhandle(action, payload)\non_init / on_start / on_stop"]
+    TB["TrustedBase\n(ABC — full access)\n──────────────────\nget_service(name)\ncall_plugin(name, action, payload)\nget_router()\nadd_state()\nLifecycle hooks x6"]
+    AD["AutoDispatchMixin\n──────────────────\nauto-generates handle()\nfrom @action methods\naction_registry()"]
 
-Classe de base pour les plugins qui s'exécutent dans le processus principal.
+    BP --> TB
+    AD -. "mixed in" .-> TB
 
-```python
-from xcore.kernel.api.contract import TrustedBase
+    User["Your Plugin"] --> AD
+    User --> TB
 
-class Plugin(TrustedBase):
-    async def handle(self, action: str, payload: dict) -> dict: ...
-```
-
-**Attributs injectés par le framework :**
-
-| Attribut | Type | Description |
-|:---------|:-----|:------------|
-| `self.ctx` | `PluginContext` | Contexte complet (services, events, hooks, config) |
-
-**Méthodes :**
-
-| Méthode | Signature | Description |
-|:--------|:----------|:------------|
-| `get_service` | `(name: str) → Any` | Retourne un service du container (typé) |
-| `get_service_as` | `(name: str, type_: Type[T]) → T` | Variante avec type explicite |
-| `call_plugin` | `(plugin: str, action: str, payload: dict) → dict` | Appel inter-plugins |
-| `get_router` | `() → APIRouter \| None` | Surcharger pour exposer des routes HTTP |
-
-**Clés typées de `get_service` :**
-
-| Clé | Type retourné |
-|:----|:--------------|
-| `"db"` | `AsyncSQLAdapter` |
-| `"cache"` | `CacheService` |
-| `"scheduler"` | `SchedulerService` |
-| `"syncdb"` | `SQLAdapter` |
-| `"mongodb"` | `MongoDBAdapter` |
-| `"redisAdapter"` | `RedisAdapter` |
-
-**Hooks de cycle de vie (optionnels) :**
-
-```python
-async def on_init(self) -> None: ...    # avant injection du contexte
-async def on_load(self) -> None: ...    # après injection — services disponibles
-async def on_start(self) -> None: ...   # serveur prêt à recevoir
-async def on_reload(self) -> None: ...  # après hot-reload
-async def on_stop(self) -> None: ...    # avant arrêt
-async def on_unload(self) -> None: ...  # après déchargement
+    style BP fill:#E3F2FD,stroke:#1976D2
+    style TB fill:#E8F5E9,stroke:#388E3C
+    style AD fill:#FFF3E0,stroke:#F57C00
+    style User fill:#FCE4EC,stroke:#C62828
 ```
 
 ---
 
-### `BasePlugin` (Protocol)
+## `TrustedBase`
 
-Interface minimale duck-typing (pas d'héritage requis) :
-
-```python
-class BasePlugin(Protocol):
-    async def handle(self, action: str, payload: dict) -> dict: ...
-    async def on_init(self) -> None: ...
-    async def on_start(self) -> None: ...
-    async def on_stop(self) -> None: ...
-```
-
----
-
-### `AutoDispatchMixin`
-
-Génère automatiquement `handle()` en routant vers les méthodes `@action`.
+Abstract base class for trusted plugins. Provides full access to services, events, hooks, and the kernel context.
 
 ```python
-from xcore.sdk.decorators import AutoDispatchMixin, action
-
-class Plugin(AutoDispatchMixin, TrustedBase):
-
-    @action("greet")
-    async def greet(self, payload: dict) -> dict:
-        return ok(msg="hello")
-
-    # handle("greet", {}) → appelle self.greet({})
-    # handle("unknown", {}) → {"status":"error","code":"unknown_action"}
+from xcore import TrustedBase
 ```
 
----
+### Injected attributes
 
-### `RoutedPlugin`
-
-Génère automatiquement `get_router()` à partir des méthodes `@route`.
-
-```python
-from xcore.sdk.decorators import RoutedPlugin, route
-
-class Plugin(RoutedPlugin, AutoDispatchMixin, TrustedBase):
-
-    @route("/items", method="GET", tags=["items"])
-    async def list_items(self):
-        return []
-
-    @route("/items/{item_id}", method="DELETE",
-           permissions=["admin"])          # RBAC déclaratif
-    async def delete_item(self, item_id: int):
-        return {"deleted": item_id}
-
-    async def handle(self, action: str, payload: dict) -> dict:
-        return error("unknown", "unknown_action")
-```
-
----
-
-## Décorateurs
-
-### `@action(name: str)`
-
-Marque une méthode comme handler d'action. Utilisé par `AutoDispatchMixin`.
-
-```python
-@action("create_user")
-async def create_user(self, payload: dict) -> dict: ...
-```
-
----
-
-### `@validate_payload(schema, type_response="dict", unset=True)`
-
-Valide le payload avec Pydantic avant d'appeler le handler.
-
-| Paramètre | Type | Description |
+| Attribute | Type | Description |
 |:----------|:-----|:------------|
-| `schema` | `Type[BaseModel]` ou `dict` | Schéma de validation |
-| `type_response` | `"dict"` ou `"model"` | `"dict"` = `.model_dump()`, `"model"` = instance Pydantic |
-| `unset` | `bool` | `True` = exclure les champs non fournis du dict |
+| `self.ctx` | `PluginContext` | Full kernel context |
+| `self.ctx.services` | `ServiceContainer` | Service container |
+| `self.ctx.events` | `EventBus` | Async event bus |
+| `self.ctx.hooks` | `HookManager` | Before/after hooks |
+| `self.ctx.tenant_id` | `str` | Current request tenant |
+| `self.ctx.name` | `str` | This plugin's name |
+| `self.ctx.manifest` | `PluginManifest` | Parsed plugin.yaml |
 
-```python
-from pydantic import BaseModel
+### `get_service(name)` — typed overloads
 
-class OrderPayload(BaseModel):
-    product_id: int
-    quantity: int = 1
-    note: str | None = None
+```python title="All typed keys"
+self.db        = self.get_service("db")          # → AsyncSQLAdapter
+self.cache     = self.get_service("cache")       # → CacheService
+self.scheduler = self.get_service("scheduler")   # → SchedulerService
+self.worker    = self.get_service("worker")      # → WorkerService
+self.syncdb    = self.get_service("syncdb")      # → SQLAdapter
+self.mongo     = self.get_service("mongodb")     # → MongoDBAdapter
+self.redis     = self.get_service("redisAdapter")# → RedisAdapter
+self.analytics = self.get_service("analytics")  # → Any (named connection)
 
-@action("create_order")
-@validate_payload(OrderPayload, type_response="model")
-async def create_order(self, payload: OrderPayload) -> dict:
-    # payload est un OrderPayload typé
-    return ok(product=payload.product_id, qty=payload.quantity)
+# Explicit type for named connection (IDE-friendly)
+from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
+self.analytics = self.get_service_as("analytics", AsyncSQLAdapter)
 ```
 
-En cas d'erreur de validation, retourne automatiquement :
-```json
-{"status": "error", "msg": "Validation error", "code": "validation_error", "errors": [...]}
+### `call_plugin(plugin, action, payload)` — IPC
+
+```python
+result = await self.call_plugin(
+    "billing_plugin",        # target plugin name (from plugin.yaml)
+    "charge",                # action name
+    {"amount": 99, "currency": "USD"},
+)
+# result → {"status": "ok", "charge_id": "ch_xxx"}
+```
+
+!!! note "Tenant propagation"
+    `tenant_id` flows automatically through `call_plugin`. You don't need to forward it manually.
+
+### `get_router()` — HTTP routes
+
+```python
+def get_router(self):
+    from fastapi import APIRouter
+    router = APIRouter(prefix="/v1", tags=["my_plugin"])
+
+    @router.get("/status")
+    async def status():
+        return {"ok": True}
+
+    return router
+# Auto-mounted at /app/my_plugin/v1/status
+```
+
+### Lifecycle hooks
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> on_init: Plugin discovered
+    on_init --> on_load: Context injected
+    on_load --> on_start: Server ready
+    on_start --> on_reload: File changed
+    on_reload --> on_start
+    on_start --> on_stop: Shutdown
+    on_stop --> on_unload: Cleanup
+```
+
+```python
+async def on_init(self) -> None:
+    """Before context injection. No services yet."""
+
+async def on_load(self) -> None:
+    """Context injected. Services available. Primary setup hook."""
+    self.db = self.get_service("db")
+
+async def on_start(self) -> None:
+    """Server fully ready and accepting requests."""
+
+async def on_reload(self) -> None:
+    """Called after a hot-reload (source file changed)."""
+
+async def on_stop(self) -> None:
+    """Server is shutting down."""
+
+async def on_unload(self) -> None:
+    """Plugin removed. Release connections, clear state."""
 ```
 
 ---
 
-### `@schema(version, input, output, *, description, deprecated_fields, breaking_since, validate, type_response)`
+## `AutoDispatchMixin`
 
-Déclare le schéma versionné d'une action **et** applique automatiquement la validation Pydantic (source unique de vérité).
+Eliminates the need to write a `handle()` switch statement manually.
 
-| Paramètre | Type | Défaut | Description |
-|:----------|:-----|:-------|:------------|
-| `version` | string | — | Version du schéma (`"1.0"`, `"2.0"`) |
-| `input` | dict | `None` | Champs d'entrée : `{"field": type}` ou `{"field": (type, default)}`. `...` = obligatoire. |
-| `output` | dict | `None` | Champs de sortie (documentation uniquement) |
-| `description` | string | `""` | Description OpenAPI |
-| `deprecated_fields` | dict | `{}` | `{"old_field": "use new_field instead"}` |
-| `breaking_since` | string | `None` | Marque un breaking change depuis cette version |
-| `validate` | bool | `True` | Active la validation Pydantic automatique |
-| `type_response` | `"dict"` / `"model"` / `"_"` | `"_"` | Format du payload reçu par le handler |
+=== "Without AutoDispatchMixin"
+
+    ```python
+    class Plugin(TrustedBase):
+
+        async def handle(self, action: str, payload: dict) -> dict:
+            if action == "ping":
+                return await self._ping(payload)
+            elif action == "create_user":
+                return await self._create_user(payload)
+            elif action == "delete_user":
+                return await self._delete_user(payload)
+            else:
+                return {"status": "error", "msg": f"Unknown action: {action}"}
+
+        async def _ping(self, payload): ...
+        async def _create_user(self, payload): ...
+        async def _delete_user(self, payload): ...
+    ```
+
+=== "With AutoDispatchMixin ✅"
+
+    ```python
+    from xcore.sdk.mixin.ipc import AutoDispatchMixin
+    from xcore.sdk.decorators import action
+
+    class Plugin(AutoDispatchMixin, TrustedBase):
+
+        @action("ping")
+        async def ping(self, payload: dict) -> dict: ...
+
+        @action("create_user")
+        async def create_user(self, payload: dict) -> dict: ...
+
+        @action("delete_user")
+        async def delete_user(self, payload: dict) -> dict: ...
+
+        # handle() is auto-generated — unknown actions return:
+        # {"status": "error", "code": "unknown_action", "msg": "..."}
+    ```
+
+### `action_registry()`
+
+Returns the list of all declared actions with their schemas:
 
 ```python
-from xcore.sdk import action, schema, ok, error
-
-class Plugin(AutoDispatchMixin, TrustedBase):
-
-    @action("create_user")
-    @schema(
-        version="1.0",
-        input={
-            "email": (str, ...),        # obligatoire
-            "username": (str, ...),
-            "role": (str, "user"),      # optionnel avec défaut
-        },
-        output={"user_id": int, "created_at": str},
-        description="Crée un nouvel utilisateur",
-    )
-    async def create_user(self, payload: dict) -> dict:
-        # payload est déjà validé et typé
-        return ok(user_id=42, created_at="2024-01-01")
-
-    @action("update_user")
-    @schema(
-        version="2.0",
-        input={"user_id": (int, ...), "email": (str, None)},
-        deprecated_fields={"username": "use email instead"},
-        breaking_since="2.0",
-    )
-    async def update_user(self, payload: dict) -> dict: ...
-```
-
-En cas d'erreur de validation :
-```json
-{
-  "status": "error",
-  "code": "validation_error",
-  "errors": [{"field": "email", "msg": "field required"}]
-}
-```
-
-**Registre des schémas :**
-
-```bash
-# Exporter le schéma d'un plugin (JSON)
-xcore plugin validate plugins/my_plugin --export schemas.json
-
-# Détecter les breaking changes vs une version précédente
-xcore plugin validate plugins/my_plugin --check-breaking schemas_v1.json
+plugin.action_registry()
+# [
+#   {"action": "ping"},
+#   {"action": "create_user", "version": "1.0", "description": "Create a user."},
+# ]
 ```
 
 ---
 
-### `@require_service(*names: str)`
+## `@action`
 
-Vérifie que les services sont disponibles avant l'exécution.
+Maps an action string to a method. Used with `AutoDispatchMixin`.
 
 ```python
+from xcore.sdk.decorators import action
+
+@action("greet")
+async def greet(self, payload: dict) -> dict:
+    return ok(message=f"Hello {payload.get('name', 'world')}")
+
+# handle("greet", {"name": "Dev"}) → calls self.greet({"name": "Dev"})
+```
+
+---
+
+## `@schema`
+
+Registers a versioned payload schema with `SchemaRegistry`. Enables IPC validation, deprecation warnings, and API documentation.
+
+```python title="Full @schema example"
+from xcore.sdk.decorators import action, schema
+
+@action("create_user")
+@schema(
+    version="2.0",                          # (1)!
+    input={
+        "name":     (str, ...),             # (2)!
+        "email":    (str, ...),             # required
+        "role":     (str, "user"),          # (3)!
+        "username": (str, ""),              # (4)!
+    },
+    output={
+        "user_id":  (int, ...),
+        "name":     (str, ...),
+    },
+    deprecated_fields={                     # (5)!
+        "username": "Use 'name' instead — deprecated since v1.5",
+    },
+    breaking_since="2.0",                   # (6)!
+    description="Create a new user account.",
+    validate=True,                          # (7)!
+)
+async def create_user(self, payload: dict) -> dict:
+    ...
+```
+
+1. Schema version string — used for tracking and routing.
+2. `(type, ...)` → required field.
+3. `(type, default)` → optional field with a default value.
+4. Will trigger a deprecation warning if included in the payload.
+5. `{field_name: reason}` — logs `WARNING` when a deprecated field is present.
+6. Version at which this schema became a breaking change.
+7. Enable Pydantic input validation from the `input` schema.
+
+---
+
+## `@validate_payload`
+
+Validates the payload against a Pydantic model before the method is called.
+
+```python title="With validation"
+from pydantic import BaseModel, EmailStr
+from xcore.sdk.decorators import validate_payload
+
+class CreateUserPayload(BaseModel):
+    name: str
+    email: str
+    role: str = "user"
+
+@action("create_user")
+@validate_payload(CreateUserPayload)      # (1)!
+async def create_user(self, payload: CreateUserPayload) -> dict:
+    # payload is a fully validated Pydantic model here
+    return ok(name=payload.name)
+```
+
+1. On validation failure, returns `{"status": "error", "code": "validation_error", "msg": "..."}` — the method is never called.
+
+```mermaid
+flowchart LR
+    P["Raw payload\n(dict)"] --> V{"Pydantic\nvalidation"}
+    V -- "❌ fails" --> E["error('validation_error')"]
+    V -- "✅ ok" --> M["method(payload: Model)"]
+    M --> R["return ok(...)"]
+```
+
+---
+
+## `@require_service`
+
+Guards a method — raises `RuntimeError` at startup if the named service is not available in the container.
+
+```python
+from xcore.sdk.decorators import require_service
+
 @action("save")
-@require_service("db", "cache")
-async def save(self, payload: dict) -> dict: ...
+@require_service("db")        # (1)!
+async def save(self, payload: dict) -> dict:
+    async with self.db.session() as session:
+        ...
 ```
 
-Lève `KeyError` avec message clair si un service est absent.
+1. Checked when the plugin loads. If `"db"` is not in the `ServiceContainer`, the plugin fails to start with a clear error message.
 
 ---
 
-### `@route(path, method, *, tags, summary, status_code, response_model, dependencies, permissions, scopes)`
+## Response helpers
 
-Déclare une route HTTP FastAPI sur le plugin.
+```python
+from xcore.kernel.api.contract import ok, error
+```
 
-| Paramètre | Défaut | Description |
-|:----------|:-------|:------------|
-| `path` | — | Chemin relatif (ex : `"/items/{id}"`) |
-| `method` | `"GET"` | Verbe HTTP |
-| `tags` | `[]` | Tags OpenAPI |
-| `summary` | nom de la méthode | Description OpenAPI |
-| `status_code` | `200` | Code HTTP de succès |
-| `response_model` | `None` | Modèle Pydantic de réponse |
-| `dependencies` | `[]` | `Depends()` FastAPI par route |
-| `permissions` | `[]` | Permissions RBAC requises |
-| `scopes` | `[]` | OAuth2 scopes |
+=== "ok()"
+
+    ```python
+    # With keyword args
+    return ok(user_id=42, name="Alice")
+    # → {"status": "ok", "user_id": 42, "name": "Alice"}
+
+    # With a dict
+    return ok({"items": [1, 2, 3], "total": 3})
+    # → {"status": "ok", "items": [1, 2, 3], "total": 3}
+
+    # Empty success
+    return ok()
+    # → {"status": "ok"}
+    ```
+
+=== "error()"
+
+    ```python
+    # With code
+    return error("User not found", code="not_found")
+    # → {"status": "error", "msg": "User not found", "code": "not_found"}
+
+    # With extra fields
+    return error("Validation failed", code="invalid_input", field="email", value="bad")
+    # → {"status": "error", "msg": "...", "code": "invalid_input", "field": "email", "value": "bad"}
+    ```
 
 ---
 
-### `@trusted` / `@sandboxed`
+## `PluginManifest`
 
-Marqueurs informatifs — n'affectent pas l'exécution mais documentent l'intention.
+Parsed `plugin.yaml`. Available as `self.ctx.manifest` inside a plugin at runtime.
 
-```python
-@action("admin_action")
-@trusted
-async def admin_action(self, payload: dict) -> dict: ...
+```python title="Accessing manifest fields"
+async def on_load(self):
+    m = self.ctx.manifest
+
+    print(m.name)              # "my_plugin"
+    print(m.version)           # "1.0.0"
+    print(m.execution_mode)    # ExecutionMode.TRUSTED
+    print(m.allowed_callers)   # ["auth_plugin"]
+    print(m.permissions)       # [{"resource": "cache.*", ...}]
+    print(m.resources.rate_limit.calls)  # 200
+    print(m.extra)             # {"my_custom_key": "value"} — unknown yaml keys
 ```
 
 ---
 
-## Fonctions helpers
+## `VersionConstraint`
 
-### `ok(**kwargs) → dict`
-
-```python
-from xcore.kernel.api.contract import ok
-
-return ok(user={"id": 1}, created=True)
-# → {"status": "ok", "user": {"id": 1}, "created": True}
-```
-
-### `error(msg, code=None, **kwargs) → dict`
+Evaluates semver constraints from `requires:`.
 
 ```python
-from xcore.kernel.api.contract import error
+from xcore.sdk.plugin_base import VersionConstraint
 
-return error("Utilisateur introuvable", code="not_found", user_id=42)
-# → {"status": "error", "msg": "Utilisateur introuvable", "code": "not_found", "user_id": 42}
+vc = VersionConstraint(">=1.2,<2.0")
+vc.matches("1.5.0")   # True
+vc.matches("2.0.0")   # False
+vc.matches("1.1.9")   # False
+
+vc2 = VersionConstraint("^1.5")   # >=1.5, <2.0
+vc2.matches("1.9.0")  # True
+vc2.matches("2.0.0")  # False
 ```
 
----
-
-## PluginManifest (dataclass)
-
-Représentation typée du `plugin.yaml` parsé.
-
-```python
-@dataclass
-class PluginManifest:
-    name: str
-    version: str
-    plugin_dir: Path
-    author: str = "unknown"
-    description: str = ""
-    framework_version: str = ">=2.0"
-    entry_point: str = "src/main.py"
-    execution_mode: ExecutionMode = ExecutionMode.LEGACY
-    requires: list[PluginDependency] = field(default_factory=list)
-    allowed_imports: list[str] = field(default_factory=list)
-    permissions: list[dict] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
-    resources: ResourceConfig = field(default_factory=ResourceConfig)
-    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
-    filesystem: FilesystemConfig = field(default_factory=FilesystemConfig)
-    extra: dict[str, Any] = field(default_factory=dict)
-```
-
-### `ResourceConfig`
-
-```python
-@dataclass
-class ResourceConfig:
-    timeout_seconds: int = 10
-    max_memory_mb: int = 128
-    max_disk_mb: int = 50
-    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
-
-@dataclass
-class RateLimitConfig:
-    calls: int = 100
-    period_seconds: int = 60
-```
-
-### `PluginDependency`
-
-```python
-@dataclass
-class PluginDependency:
-    name: str
-    version_constraint: str = "*"  # "*" ou ">=1.0,<2.0"
-```
-
-Formats YAML supportés :
-```yaml
-requires:
-  - other_plugin                  # version="*"
-  - name: other_plugin
-    version: ">=2.0,<3.0"
-```
+Supported operators: `>=`, `<=`, `>`, `<`, `==`, `!=`, `^` (caret), `~` (tilde).

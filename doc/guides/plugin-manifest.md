@@ -1,300 +1,188 @@
-# Manifeste de Plugin (plugin.yaml)
+# Plugin Manifest (`plugin.yaml`)
 
-Chaque plugin est décrit par un `plugin.yaml` à la racine de son dossier. Ce fichier contrôle le mode d'exécution, les ressources, les permissions, la sécurité IPC et les métadonnées.
+Every plugin is described by a `plugin.yaml` at the root of its directory. This file controls execution mode, permissions, resources, IPC security, and metadata.
 
 ---
 
-## Structure complète
+## Full Reference
 
 ```yaml
-# ── Identité ──────────────────────────────────────────────────
-name: my_plugin              # [obligatoire] identifiant unique (snake_case)
-version: "1.0.0"             # [obligatoire] version semver
-author: "Team Backend"
-description: "Description courte du plugin"
-framework_version: ">=2.0"   # contrainte sur xcore (défaut: >=2.0)
+# ── Identity ──────────────────────────────────────────────────────────────
+name: my_plugin              # required — must be unique across all plugins
+version: "1.0.0"             # required — semver string
+author: "XCore Team"
+description: "What this plugin does"
+framework_version: ">=2.0"   # minimum XCore version required
 
-# ── Exécution ─────────────────────────────────────────────────
+# ── Execution ──────────────────────────────────────────────────────────────
 execution_mode: trusted      # trusted | sandboxed | legacy
-entry_point: src/main.py     # chemin relatif vers le fichier principal
+entry_point: src/main.py     # path relative to the plugin directory
 
-# ── Dépendances inter-plugins ─────────────────────────────────
+# ── Dependencies ───────────────────────────────────────────────────────────
 requires:
-  - billing                       # version quelconque
-  - name: crm
-    version: ">=1.2,<2.0"         # contrainte semver
+  - auth_plugin                        # any version
+  - name: database_helper
+    version: ">=1.2,<2.0"              # semver constraint
 
-# ── Autorisation IPC ──────────────────────────────────────────
-# Liste vide ou absente = deny-by-default (tout IPC refusé)
-allowed_callers:
-  - billing
-  - dashboard
-
-# ── Imports Python autorisés (mode sandboxed uniquement) ──────
-allowed_imports:
-  - json
-  - datetime
-  - re
-
-# ── Permissions (capabilities déclarées) ──────────────────────
+# ── Permissions (RBAC) ────────────────────────────────────────────────────
 permissions:
-  - action: read
-    resource: "db:orders"
-  - action: write
-    resource: "cache:sessions"
+  - resource: "cache.*"
+    actions: ["read", "write"]
+    effect: allow
+  - resource: "db.users"
+    actions: ["read"]
+    effect: allow
+  - resource: "db.admin"
+    actions: ["*"]
+    effect: deny
 
-# ── Variables d'environnement ─────────────────────────────────
+# ── IPC Access Control ────────────────────────────────────────────────────
+# deny-by-default: empty list blocks all IPC callers
+# ["*"] to allow all plugins
+allowed_callers:
+  - auth_plugin
+  - billing_plugin
+
+# ── Environment ───────────────────────────────────────────────────────────
 env:
-  API_KEY: "${MY_API_KEY}"    # substitution depuis l'OS
-  BASE_URL: "https://api.example.com"
+  API_KEY: "${EXTERNAL_API_KEY}"   # ${VAR} substitution supported
+  TIMEOUT: "30"
 
-# ── Limites de ressources ─────────────────────────────────────
+# ── Sandboxed import whitelist (extends global security.allowed_imports) ──
+allowed_imports:
+  - statistics
+  - decimal
+
+# ── Resource limits ───────────────────────────────────────────────────────
 resources:
-  timeout_seconds: 10
-  max_memory_mb: 128
-  max_disk_mb: 50
+  timeout_seconds: 10          # max time for a single handle() call
+  max_memory_mb: 128           # RSS memory cap (sandboxed only)
+  max_disk_mb: 50              # disk I/O cap (sandboxed only)
   rate_limit:
-    calls: 100
+    calls: 200                 # max handle() calls
     period_seconds: 60
 
-# ── Runtime ───────────────────────────────────────────────────
+# ── Runtime options ───────────────────────────────────────────────────────
 runtime:
   health_check:
     enabled: true
     interval_seconds: 30
     timeout_seconds: 3
   retry:
-    max_attempts: 1
-    backoff_seconds: 0.0
+    max_attempts: 3
+    backoff_seconds: 1.0
 
-# ── Filesystem (mode sandboxed) ───────────────────────────────
+# ── Filesystem access (sandboxed only) ────────────────────────────────────
 filesystem:
-  allowed_paths:
-    - "data/"
-  denied_paths:
-    - "src/"
+  allowed_paths: ["data/"]
+  denied_paths: ["src/"]
 
-# ── Configuration arbitraire ─────────────────────────────────
-# Tout champ inconnu est accessible via self.manifest.extra
-low_stock_threshold: 10
-feature_flags:
-  enable_beta: true
+# ── Arbitrary extra config (available as self.ctx.manifest.extra) ─────────
+my_feature_flag: true
+api_endpoint: "https://api.example.com"
 ```
 
 ---
 
-## Champs obligatoires
+## Required Fields
 
-| Champ | Type | Description |
+| Field | Type | Description |
 |:------|:-----|:------------|
-| `name` | string | Identifiant unique (snake_case). Utilisé dans les appels IPC et le registry. |
-| `version` | string | Version semver (`"1.0.0"`). |
+| `name` | `str` | Unique plugin identifier (snake_case) |
+| `version` | `str` | Semver version string |
 
 ---
 
-## Modes d'exécution
+## Execution Modes
 
-### `trusted`
-
-Accès complet au kernel, aux services et à l'API FastAPI. Peut appeler d'autres plugins via IPC.
-
-**Requis :** un fichier `plugin.sig` valide.
-
-```bash
-xcore plugin sign plugins/my_plugin --key "votre_secret_key"
-```
-
-### `sandboxed`
-
-Le code source est analysé par AST avant chargement. Seuls les imports listés dans `allowed_imports` (et `security.allowed_imports` dans `integration.yaml`) sont autorisés. S'exécute dans un sous-processus OS isolé.
-
-```yaml
-execution_mode: sandboxed
-allowed_imports:
-  - json
-  - datetime
-  - re
-```
-
-### `legacy`
-
-Compatibilité descendante — comportement `trusted` sans vérification de signature. À éviter en production.
+| Mode | Process | Imports | Sig required |
+|:-----|:--------|:--------|:-------------|
+| `trusted` | Main FastAPI process | Unrestricted | When `strict_trusted: true` |
+| `sandboxed` | Isolated OS subprocess | AST whitelist | No |
+| `legacy` | Main process | Unrestricted | No |
 
 ---
 
-## Dépendances (`requires`)
+## Dependencies
 
 ```yaml
 requires:
-  - billing                    # n'importe quelle version
-  - name: analytics
-    version: ">=2.0,<3.0"
-  - name: crm
-    version: "^1.5.0"          # >=1.5.0,<2.0.0
-  - name: reports
-    version: "~1.2.0"          # >=1.2.0,<1.3.0
+  - other_plugin              # any version — shorthand
+  - name: other_plugin
+    version: "*"              # explicit — any version
+  - name: other_plugin
+    version: ">=2.0,<3.0"    # semver range
+  - name: other_plugin
+    version: "^1.5"           # ^1.5 := >=1.5, <2.0
+  - name: other_plugin
+    version: "~1.5.0"         # ~1.5.0 := >=1.5.0, <1.6.0
 ```
 
-Opérateurs supportés : `>=`, `<=`, `>`, `<`, `==`, `!=`, `^`, `~`.
-
-xcore vérifie les dépendances au boot et refuse le chargement si une dépendance est absente ou incompatible.
+XCore resolves a dependency DAG and loads plugins in topological order.
 
 ---
 
-## Autorisation IPC (`allowed_callers`)
+## Permissions
 
 ```yaml
-# Seuls billing et dashboard peuvent appeler ce plugin via IPC
+permissions:
+  - resource: "cache.*"           # glob pattern
+    actions: ["read", "write"]    # specific actions
+    effect: allow
+
+  - resource: "db.*"
+    actions: ["*"]                # all actions
+    effect: allow
+
+  - resource: "db.admin"
+    actions: ["delete"]
+    effect: deny                  # deny-by-default: explicit deny
+```
+
+**Resource naming convention:** `service.collection` or `service.*` for all collections.
+
+---
+
+## IPC Access Control
+
+```yaml
 allowed_callers:
-  - billing
-  - dashboard
+  - auth_plugin        # only these plugins may call this plugin via IPC
+  - billing_plugin
 ```
 
-**Règle deny-by-default :** si `allowed_callers` est absent ou vide, tout appel IPC est refusé. Les appels HTTP directs ne sont jamais filtrés.
+| Value | Effect |
+|:------|:-------|
+| `[]` (empty) | All IPC calls blocked |
+| `["*"]` | All plugins allowed |
+| `["plugin_a", "plugin_b"]` | Only named plugins allowed |
 
-```yaml
-# Zéro IPC autorisé — accès HTTP uniquement
-allowed_callers: []
-```
-
-La vérification est active quand `enforce_ipc: true` dans `integration.yaml` (défaut).
-
-Voir [Multi-Tenancy](tenancy.md#autorisation-ipc) pour le fonctionnement complet.
+Enforcement is enabled globally with `tenancy.enforce_ipc: true`.
 
 ---
 
-## Rate limiting (`resources.rate_limit`)
+## Rate Limits
+
+Overrides the global default set in `integration.yaml → security.rate_limit_default`:
 
 ```yaml
 resources:
-  rate_limit:
-    calls: 500
-    period_seconds: 60
-```
-
-Si non déclaré, la valeur `security.rate_limit_default` de `integration.yaml` s'applique (défaut : 200 appels / 60 s).
-
----
-
-## Variables d'environnement (`env`)
-
-```yaml
-env:
-  DATABASE_URL: "${DATABASE_URL}"   # variable OS requise
-  STATIC: "valeur-fixe"
-```
-
-Accessibles dans le plugin :
-
-```python
-url = self.manifest.env["DATABASE_URL"]
-```
-
----
-
-## Configuration personnalisée (`extra`)
-
-Tout champ non reconnu par xcore est stocké dans `manifest.extra` :
-
-```yaml
-# plugin.yaml
-webhook_url: "https://hooks.example.com/xyz"
-max_retries: 5
-```
-
-```python
-url = self.manifest.extra["webhook_url"]
-retries = self.manifest.extra["max_retries"]
-```
-
----
-
-## Exemples
-
-### Plugin Trusted minimal
-
-```yaml
-name: billing
-version: "1.0.0"
-execution_mode: trusted
-entry_point: src/main.py
-allowed_callers:
-  - dashboard
-```
-
-### Plugin Sandboxed
-
-```yaml
-name: pdf_renderer
-version: "0.3.0"
-execution_mode: sandboxed
-entry_point: src/main.py
-allowed_imports:
-  - json
-  - base64
-  - re
-resources:
-  timeout_seconds: 5
   rate_limit:
     calls: 50
-    period_seconds: 60
-```
-
-### Plugin complet
-
-```yaml
-name: inventory
-version: "2.1.0"
-author: "Backend Team"
-description: "Gestion du stock produits"
-execution_mode: trusted
-entry_point: src/main.py
-
-requires:
-  - name: billing
-    version: ">=1.0"
-  - notifications
-
-allowed_callers:
-  - billing
-  - dashboard
-
-permissions:
-  - action: read
-    resource: "db:products"
-  - action: write
-    resource: "db:stock"
-
-env:
-  WAREHOUSE_API: "${WAREHOUSE_URL}"
-
-resources:
-  timeout_seconds: 15
-  max_memory_mb: 256
-  rate_limit:
-    calls: 500
-    period_seconds: 60
-
-runtime:
-  health_check:
-    enabled: true
-    interval_seconds: 60
-  retry:
-    max_attempts: 3
-    backoff_seconds: 0.5
-
-low_stock_threshold: 10
+    period_seconds: 60   # 50 calls per minute
 ```
 
 ---
 
-## Structure du dossier
+## Extra Fields
 
-```
-plugins/my_plugin/
-├── plugin.yaml      ← manifeste (ce fichier)
-├── plugin.sig       ← signature HMAC (obligatoire si execution_mode: trusted)
-└── src/
-    ├── __init__.py
-    └── main.py
+Any unrecognized keys are collected into `manifest.extra` and accessible at runtime:
+
+```python
+# plugin.yaml
+my_api_url: "https://api.example.com"
+
+# src/main.py
+async def on_load(self):
+    self.api_url = self.ctx.manifest.extra.get("my_api_url")
 ```

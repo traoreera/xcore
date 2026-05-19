@@ -20,7 +20,7 @@ import os
 import re
 from pathlib import Path
 
-from xcore.sdk.plugin_base import PluginDependency
+from sdk.plugin_base import PluginDependency
 
 from .section import (
     DEFAULT_ALLOWED,

@@ -146,7 +146,8 @@ services:
 
     # Modules Python contenant les tâches @task() à charger au démarrage
     # Exemple : modules: [myapp.tasks.emails, myapp.tasks.reports]
-    modules: []
+    modules:
+      - app.task.emails
 
   # ── Extensions ────────────────────────────────────────────────
   extensions:

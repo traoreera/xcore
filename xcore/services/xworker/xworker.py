@@ -33,7 +33,11 @@ def _bootstrap() -> Any:
         cfg = ConfigLoader.load(None)
         wcfg = cfg.services.xworker
         if wcfg and wcfg.enabled:
-            return build_app(wcfg)
+            app = build_app(wcfg)
+            set_app(
+                app
+            )  # rend _app disponible pour le décorateur @task lors de l'include
+            return app
     except Exception:
         pass
     return None

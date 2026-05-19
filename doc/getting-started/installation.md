@@ -1,32 +1,39 @@
 # Installation
 
-## Prérequis
+## Prerequisites
 
-- **Python 3.11+**
-- **Poetry 2.x** ou **uv**
-- **Redis 7+** (optionnel — requis uniquement si `cache.backend: redis` ou `scheduler.backend: redis`)
-- **PostgreSQL 15+** / **MySQL 8+** (optionnel — SQLite fonctionne sans installation)
+| Requirement | Version | Notes |
+|:------------|:--------|:------|
+| Python | 3.11+ | Required |
+| Poetry | 2.x | Recommended package manager |
+| uv | any | Alternative to Poetry |
+| Redis | 7+ | Required only when `cache.backend: redis` or `scheduler.backend: redis` or `xworker` is enabled |
+| PostgreSQL | 15+ | Optional — SQLite works without any extra setup |
+| MySQL | 8+ | Optional |
 
 ---
 
-## Depuis le dépôt source
+## From Source
 
 ```bash
 git clone https://github.com/traoreera/xcore
 cd xcore
 
-# Avec Poetry (recommandé)
-poetry install
+# With Poetry (recommended)
+poetry install --with dev,docs
 
-# Ou avec uv
+# With uv
 uv sync
 ```
 
-### Lancer le serveur de développement
+### Start the development server
 
 ```bash
-# Via Poetry
-poetry run uvicorn main:app --reload --port 8000
+# Via make (recommended)
+make dev
+
+# Via Poetry directly
+poetry run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 # Via uv
 uv run uvicorn main:app --reload --port 8000
@@ -34,53 +41,82 @@ uv run uvicorn main:app --reload --port 8000
 
 ---
 
-## En tant que dépendance (uv)
+## As a Dependency
 
 ```bash
+# uv
 uv add "xcore @ git+https://github.com/traoreera/xcore"
+
+# Poetry
+poetry add "xcore @ git+https://github.com/traoreera/xcore"
 ```
 
 ---
 
-## Variables d'environnement
+## Environment Variables
 
-XCore charge automatiquement un fichier `.env` à la racine du projet si `app.dotenv` est configuré dans `xcore.yaml`.
-Toute clé de configuration peut être surchargée via une variable d'environnement au format :
+XCore can override any config key via environment variables using the pattern:
 
 ```
-XCORE__<SECTION>__<CLE>=valeur
+XCORE__<SECTION>__<KEY>=value
 ```
 
-Exemples :
+Examples:
 
 ```bash
 XCORE__APP__DEBUG=true
+XCORE__APP__ENV=production
 XCORE__SERVICES__CACHE__BACKEND=redis
 XCORE__SERVICES__CACHE__URL=redis://localhost:6379/0
+XCORE__SERVICES__DATABASES__DB__URL=postgresql+asyncpg://user:pass@host/db
+```
+
+To load a `.env` file automatically, set `app.dotenv` in `integration.yaml`:
+
+```yaml
+app:
+  dotenv: "./.env"
 ```
 
 ---
 
-## Structure minimale d'un projet
+## Minimal Project Structure
 
 ```
-mon-projet/
-├── xcore.yaml          # Configuration principale
-├── main.py             # Point d'entrée FastAPI
-└── plugins/
-    └── mon_plugin/
-        ├── plugin.yaml
-        └── src/
-            └── main.py
+my-project/
+├── integration.yaml    # Main configuration
+├── main.py             # FastAPI entry point
+├── plugins/
+│   └── hello/
+│       ├── plugin.yaml
+│       └── src/
+│           └── main.py
+└── log/
+    └── app.log         # Written automatically
 ```
 
 ---
 
-## Vérifier l'installation
+## Verify the Installation
 
 ```bash
 poetry run xcore --version
-# xcore v2.2.0
+# xcore v2.1.3
+
+poetry run xcore plugin list
+# Lists all discovered plugins
 ```
 
-> **Minimalisme** : Depuis la v2.2.0, XCore est livré avec un noyau ultra-léger. Les bibliothèques tierces comme `psutil`, `markdown` ou `pillow` sont désormais optionnelles ou limitées aux groupes de développement/doc.
+---
+
+## Optional Extras
+
+| Feature | Extra | Install command |
+|:--------|:------|:----------------|
+| Celery task queue | `celery[redis]` | `poetry add "celery[redis]"` |
+| MongoDB | `motor` | `poetry add motor` |
+| Redis cache with hiredis | `hiredis` | `poetry add hiredis` |
+| OpenTelemetry tracing | `opentelemetry-sdk` | `poetry add opentelemetry-sdk` |
+
+!!! note "Lean core"
+    XCore ships with a minimal core. Heavy optional libraries (psutil, markdown, etc.) are only needed if you use the relevant features.

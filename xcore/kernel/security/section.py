@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from xcore.sdk.plugin_base import PluginDependency
+from sdk.plugin_base import PluginDependency
 
 FORBIDDEN_BUILTINS = {
     "eval",

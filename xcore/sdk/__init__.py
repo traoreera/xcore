@@ -1,50 +1,88 @@
 """
-sdk/ — Kit de développement pour les auteurs de plugins xcore.
+xcore/sdk — Compatibility shim.
 
-Import recommandé dans un plugin :
-    from xcore.sdk import TrustedBase, sandboxed, ok, error
-    from xcore.sdk import PluginManifest
+All SDK functionality now lives in the xcoresdk package:
+    https://github.com/xcore-team/xcoreSDK
+
+Plugin authors can import directly from xcoresdk:
+    from sdk import TrustedBase, action, ok, error
+
+Or continue using the xcore.sdk namespace (backward-compatible):
+    from xcore.sdk import TrustedBase, action, ok, error
 """
 
-from ..kernel.api.auth import (
-    get_auth_backend,
-    register_auth_backend,
-    unregister_auth_backend,
-)
-from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
-from ..kernel.api.rbac import (
+from sdk import (
+    AuthBackend,
+    AuthPayload,
+    AutoDispatchMixin,
+    AutoMixin,
+    BaseAsyncRepository,
+    BaseMongoRepository,
+    BasePlugin,
+    BaseRedisRepository,
+    BaseSyncRepository,
+    Event,
+    EventMixin,
+    ExecutionMode,
+    HookMixin,
+    HookResult,
+    ObservabilityMixin,
+    PermissionDenied,
+    PluginManifest,
+    PluginState,
     RBACChecker,
-    get_current_user,
+    ResourceConfig,
+    RoutedPlugin,
+    RouterRegistry,
+    RuntimeConfig,
+    ScheduledMixin,
+    TrustedBase,
+    action,
+    cached,
+    counted,
+    cron,
+    error,
+    get_auth_backend,
+    get_logger,
+    has_auth_backend,
+    health_check,
+    interval,
+    invalidate,
+    ok,
+    on_event,
+    on_hook,
+    register_auth_backend,
     require_permission,
     require_role,
-)
-from ..services.xworker import WorkerService, task, task_registry
-from .adapter.asyncsql import BaseAsyncRepository
-from .adapter.syncsql import BaseSyncRepository
-from .decorators import (
-    RoutedPlugin,
-    action,
     require_service,
     route,
     sandboxed,
-    schema,
+    timed,
+    traced,
     trusted,
+    unregister_auth_backend,
     validate_payload,
 )
-from .mixin.ipc import AutoDispatchMixin
-from .plugin_base import PluginManifest, ResourceConfig, RuntimeConfig
-from .routers import RouterRegistry
+from sdk.decorators import schema
+
+from ..services.xworker import WorkerService, task, task_registry
 
 __all__ = [
+    # Kernel contracts
     "TrustedBase",
     "BasePlugin",
     "ok",
     "error",
     "ExecutionMode",
+    "PermissionDenied",
+    "PluginState",
+    # Manifest
     "PluginManifest",
     "ResourceConfig",
     "RuntimeConfig",
+    # Core decorators
     "action",
+    "schema",
     "sandboxed",
     "trusted",
     "require_service",
@@ -52,19 +90,47 @@ __all__ = [
     "route",
     "RoutedPlugin",
     "AutoDispatchMixin",
-    "BaseAsyncRepository",
-    "BaseSyncRepository",
+    "AutoMixin",
+    "RouterRegistry",
+    # RBAC
     "RBACChecker",
     "require_permission",
     "require_role",
-    "WorkerService",
-    "task_registry",
-    "task",
+    # Auth
+    "AuthBackend",
+    "AuthPayload",
     "register_auth_backend",
     "unregister_auth_backend",
     "get_auth_backend",
-    "RouterRegistry",
-    "get_current_user",
-    "scheamas",
-    "schema",
+    "has_auth_backend",
+    # DB adapters
+    "BaseAsyncRepository",
+    "BaseSyncRepository",
+    "BaseMongoRepository",
+    "BaseRedisRepository",
+    # Events & Hooks
+    "on_event",
+    "on_hook",
+    "EventMixin",
+    "HookMixin",
+    "Event",
+    "HookResult",
+    # Observability
+    "get_logger",
+    "traced",
+    "counted",
+    "timed",
+    "health_check",
+    "ObservabilityMixin",
+    # Scheduler
+    "cron",
+    "interval",
+    "ScheduledMixin",
+    # Cache
+    "cached",
+    "invalidate",
+    # Worker (xcore services)
+    "WorkerService",
+    "task",
+    "task_registry",
 ]
