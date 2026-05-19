@@ -12,6 +12,8 @@ requires-python = ">=3.12,<4.0"
 dependencies = [
     # SDK (external)
     "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
+    # external cli
+    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
 
     # Web
     "fastapi[standard]>=0.135.1,<1.0.0",
@@ -41,9 +43,6 @@ dependencies = [
     "rich>=14.0.0,<15.0.0",
     "celery>=5.6.3,<6.0.0",
 ]
-
-[project.scripts]
-xcore = "xcore.cli.cli:main"
 
 # ── Build system ──────────────────────────────────────────────────────────────
 
