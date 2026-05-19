@@ -1,123 +1,152 @@
-# Exemple : Plugin en Bac à sable (Sandboxed Plugin)
+# Example: Sandboxed Plugin
 
-Le mode `sandboxed` est conçu pour les plugins tiers ou dont vous ne maîtrisez pas le code source. Il garantit une isolation de sécurité maximale.
-
----
-
-## 1. Caractéristiques du mode Sandboxed
-
-- **Processus Isolé** : S'exécute dans un sous-processus Python distinct.
-- **FS Guard** : Accès au système de fichiers restreint (défaut: uniquement `data/`).
-- **AST Scan** : Code analysé à la recherche d'imports dangereux (`os`, `sys`, `subprocess`).
-- **Ctypes Blocked** : Accès aux bibliothèques C natives (`libc`, `ctypes`) désactivé.
-- **Communication IPC** : Échange de données via JSON-RPC uniquement.
+A `sandboxed` plugin runs in a separate OS process with restricted imports. It is suitable for third-party code or any logic you want to isolate from the main process.
 
 ---
 
-## 2. Le Manifeste (`plugin.yaml`)
+## Directory Structure
+
+```
+plugins/calculator/
+├── plugin.yaml
+└── src/
+    └── main.py
+```
+
+---
+
+## `plugin.yaml`
 
 ```yaml
-name: risky_calculator
-version: 1.0.0
-author: Third Party Dev
-description: Un plugin de calcul qui peut traiter des données locales
+name: calculator
+version: "1.0.0"
+description: "Safe math computations in an isolated process"
 execution_mode: sandboxed
 entry_point: src/main.py
 
-# Politique de sécurité du système de fichiers
-filesystem:
-  allowed_paths: ["data/"]      # Seul ce dossier est accessible
-  denied_paths: ["src/", "../"] # Blocage explicite des sources et parents
+# Extra imports beyond the global allowed_imports whitelist
+allowed_imports:
+  - statistics
+  - decimal
 
-# Limites de ressources matérielles
 resources:
-  max_memory_mb: 64             # RAM maximale avant crash (64 Mo)
-  timeout_seconds: 5            # Temps de réponse maximal par appel (5 s)
+  timeout_seconds: 5
+  max_memory_mb: 64
+  rate_limit:
+    calls: 500
+    period_seconds: 60
+
+filesystem:
+  allowed_paths: ["data/"]
+  denied_paths: ["src/"]
 ```
 
 ---
 
-## 3. Le Code Source (`src/main.py`)
+## `src/main.py`
 
 ```python
+import math
 import json
-from pathlib import Path
-from xcore.sdk import TrustedBase, ok, error
+import statistics
+from decimal import Decimal, InvalidOperation
 
-class Plugin(TrustedBase):
+from xcore.kernel.api.contract import ok, error
+
+class Plugin:
     """
-    Plugin Sandboxed démontrant l'isolation FS.
+    Sandboxed plugin — no TrustedBase, no service access.
+    Only handle() is required.
+    Allowed imports: whatever is in the global whitelist + allowed_imports in plugin.yaml.
     """
 
-    async def on_load(self) -> None:
-        """Accès sécurisé au dossier data/."""
-        self.data_dir = Path("data")
-        self.data_dir.mkdir(exist_ok=True)
-        print("✅ Plugin Sandboxed démarré dans son processus isolé.")
+    _config: dict   # injected from plugin.yaml (the `extra` fields)
 
     async def handle(self, action: str, payload: dict) -> dict:
-        """
-        Point d'entrée pour les appels IPC.
-        """
-        if action == "save_result":
-            # Sauvegarde autorisée dans le dossier data/
-            result_file = self.data_dir / "last_result.json"
-            result_file.write_text(json.dumps(payload))
-            return ok(msg="Résultat sauvegardé dans le bac à sable.")
+        handlers = {
+            "add":      self._add,
+            "sqrt":     self._sqrt,
+            "stats":    self._stats,
+            "evaluate": self._evaluate,
+        }
+        handler = handlers.get(action)
+        if handler is None:
+            return error(f"Unknown action: {action}", "unknown_action")
+        try:
+            return await handler(payload)
+        except Exception as exc:
+            return error(str(exc), "computation_error")
 
-        if action == "read_secrets":
-            # TENTATIVE DE VIOLATION : Lecture hors de data/
-            try:
-                # Tentative d'accès au fichier de config framework (BLOQUÉ par FS Guard)
-                with open("../../xcore.yaml", "r") as f:
-                    content = f.read()
-                return ok(content=content)
-            except PermissionError as e:
-                # Retourne l'erreur de violation sans crasher le framework
-                return error(str(e), code="security_violation")
+    async def _add(self, payload: dict) -> dict:
+        a = Decimal(str(payload.get("a", 0)))
+        b = Decimal(str(payload.get("b", 0)))
+        return ok(result=str(a + b))
 
-        if action == "execute_os":
-            # TENTATIVE DE VIOLATION : Import de module interdit
-            try:
-                import os # BLOQUÉ par l'Import Hook
-                return ok(msg=f"OS : {os.name}")
-            except (PermissionError, ImportError) as e:
-                return error(str(e), code="security_violation")
+    async def _sqrt(self, payload: dict) -> dict:
+        value = float(payload.get("value", 0))
+        if value < 0:
+            return error("Cannot take square root of a negative number", "domain_error")
+        return ok(result=math.sqrt(value))
 
-        return ok(status="running")
+    async def _stats(self, payload: dict) -> dict:
+        data = payload.get("data", [])
+        if not data:
+            return error("data list is required", "missing_field")
+        if not all(isinstance(x, (int, float)) for x in data):
+            return error("All values must be numbers", "invalid_input")
+        return ok(
+            mean=statistics.mean(data),
+            median=statistics.median(data),
+            stdev=statistics.stdev(data) if len(data) > 1 else 0,
+        )
+
+    async def _evaluate(self, payload: dict) -> dict:
+        # Safe expression evaluator using only math functions
+        expr = payload.get("expression", "")
+        allowed_names = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
+        try:
+            result = eval(expr, {"__builtins__": {}}, allowed_names)  # noqa: S307
+            return ok(result=result)
+        except Exception as exc:
+            return error(f"Evaluation error: {exc}", "eval_error")
+
+    # Optional lifecycle hooks
+    async def on_init(self) -> None: ...
+    async def on_start(self) -> None: ...
+    async def on_stop(self) -> None: ...
 ```
 
 ---
 
-## 4. Test de l'Exemple
-
-### Appel d'une action autorisée
+## Test it
 
 ```bash
-curl -X POST http://localhost:8082/plugin/ipc/risky_calculator/save_result \
-  -H "X-Plugin-Key: change-me-in-production" \
-  -d '{"payload": {"score": 100}}'
+# Square root
+curl -X POST http://localhost:8000/app/calculator/action \
+     -H "Content-Type: application/json" \
+     -d '{"action": "sqrt", "payload": {"value": 144}}'
+# → {"status": "ok", "result": 12.0}
 
-# Réponse :
-# {"status":"ok","plugin":"risky_calculator","action":"save_result","result":{"status":"ok","msg":"Résultat sauvegardé..."}}
-```
-
-### Appel d'une action bloquée (Tentative de violation)
-
-```bash
-curl -X POST http://localhost:8082/plugin/ipc/risky_calculator/read_secrets \
-  -H "X-Plugin-Key: change-me-in-production" \
-  -d '{"payload": {}}'
-
-# Réponse :
-# {"status":"error","plugin":"risky_calculator","action":"read_secrets","result":{"status":"error","msg":"[sandbox] open('../../xcore.yaml') interdit dans le sandbox","code":"security_violation"}}
+# Statistics
+curl -X POST http://localhost:8000/app/calculator/action \
+     -H "Content-Type: application/json" \
+     -d '{"action": "stats", "payload": {"data": [1, 2, 3, 4, 5]}}'
+# → {"status": "ok", "mean": 3.0, "median": 3, "stdev": 1.58}
 ```
 
 ---
 
-## Points Clés de l'Exemple
+## Key Differences from Trusted
 
-✅ **Isolation totale** : Les erreurs de sécurité ne propagent pas de crash au Noyau.
-✅ **FS Guard** : Blocage dynamique des accès fichiers non autorisés.
-✅ **Import Hook** : Blocage des modules système Python critiques.
-✅ **Communication IPC** : Le plugin reçoit uniquement les données JSON dont il a besoin.
+| | Trusted | Sandboxed |
+|:--|:--------|:---------|
+| Process | Main FastAPI process | Isolated OS subprocess |
+| Service access | Full (`get_service()`) | None |
+| Import restriction | None | AST whitelist |
+| IPC ability | `call_plugin()` | No |
+| HTTP routes | `get_router()` | No |
+| Performance | Low overhead | ~10ms IPC round-trip |
+| Use case | Internal features | Third-party / untrusted code |
+
+!!! warning "No `import os`"
+    Even if `os` is not in `forbidden_imports`, any import not explicitly in `allowed_imports` is blocked. The AST scanner runs **before** the module loads — there is no runtime escape.

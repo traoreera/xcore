@@ -1,109 +1,101 @@
 # XCore Framework
 
-**XCore** est un framework Python de niveau production, conçu pour construire des applications modulaires, extensibles et sécurisées. Basé sur **FastAPI** et **asyncio**, il suit une architecture **Modular Monolith** où chaque fonctionnalité est encapsulée dans des plugins isolés.
+**XCore** is a production-grade Python framework for building modular, extensible, and secure applications. Built on **FastAPI** and **asyncio**, it follows a **Modular Monolith** architecture where each feature lives in an isolated plugin with its own lifecycle, permissions, and resource limits.
 
 ---
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch:{ .lg .middle } **Haute Performance**
+-   :material-rocket-launch:{ .lg .middle } **High Performance**
 
-    Construit sur FastAPI et asyncio pour un débit maximal avec un overhead minimal.
+    Built on FastAPI and asyncio for maximum throughput with minimal overhead.
 
--   :material-shield-lock:{ .lg .middle } **Sécurité par Design**
+-   :material-shield-lock:{ .lg .middle } **Security by Design**
 
-    Sandbox multi-couche, validation AST, et moteur de permissions granulaire.
+    Multi-layer sandbox, AST validation, per-plugin capability grants, and IPC access control.
 
--   :material-puzzle-outline:{ .lg .middle } **Architecture Plugin-First**
+-   :material-puzzle-outline:{ .lg .middle } **Plugin-First Architecture**
 
-    Tout est un plugin. Chargement, déchargement et rechargement à chaud sans downtime.
+    Everything is a plugin. Load, unload, and hot-reload without downtime.
 
--   :material-database:{ .lg .middle } **Services Intégrés**
+-   :material-database:{ .lg .middle } **Integrated Services**
 
-    Bases SQL/NoSQL, cache Redis, et scheduling de tâches inclus.
+    SQL/NoSQL databases, Redis cache, APScheduler, and Celery task queues — all pre-wired.
 
--   :material-lightning-bolt:{ .lg .middle } **Événements & Hooks**
+-   :material-lightning-bolt:{ .lg .middle } **Events & Hooks**
 
-    Système de messagerie asynchrone pour un couplage lâche entre composants.
+    Async event bus for loose coupling between components.
 
--   :material-scale-balance:{ .lg .middle } **Isolation Garantie**
+-   :material-office-building:{ .lg .middle } **Native Multi-Tenancy**
 
-    Plugins trusted (processus principal) ou sandboxed (processus OS isolé).
+    Automatic cache, database, and scheduler isolation per tenant with one config flag.
 
 </div>
 
 ---
 
-## Pourquoi XCore ?
+## Why XCore?
 
-Les applications modernes oscillent entre deux extrêmes : le **monolithe rigide** difficile à maintenir et les **microservices complexes** à orchestrer. XCore propose une troisième voie : le **Monolithe Modulaire**.
+Modern applications oscillate between two extremes: **rigid monoliths** that are hard to maintain and **distributed microservices** that are expensive to operate. XCore offers a third path: the **Modular Monolith**.
 
 ```mermaid
 flowchart LR
-    subgraph Traduction["Spectre des Architectures"]
+    subgraph Spectrum["Architecture Spectrum"]
         direction LR
-        M[Monolithe<br/>Rigide] <--> MM[**Monolithe Modulaire**<br/>XCore] <--> MS[Microservices<br/>Complexes]
+        M[Rigid<br/>Monolith] <--> MM[**Modular Monolith**<br/>XCore] <--> MS[Microservices<br/>Complexity]
     end
-
     style MM fill:#4CAF50,color:#fff,stroke:#2E7D32
     style M fill:#FFC107,color:#000
     style MS fill:#FFC107,color:#000
 ```
 
-### Les Avantages du Modular Monolith
-
-| Aspect | Monolithe Classique | XCore (Modular Monolith) | Microservices |
-| :--- | :--- | :--- | :--- |
-| **Déploiement** | Unique, risqué | Unique, plugins isolés | Multiple, complexe |
-| **Isolation** | Aucune | Sandbox par plugin | Processus/network |
-| **Scalabilité** | Verticale | Plugins scalables | Horizontale |
-| **Complexité** | Faible | Moyenne | Élevée |
-| **Temps de dev** | Rapide | Rapide | Lent |
+| Aspect | Classic Monolith | XCore (Modular Monolith) | Microservices |
+|:-------|:----------------|:------------------------|:-------------|
+| **Deployment** | Single, risky | Single, plugins isolated | Multiple, complex |
+| **Isolation** | None | Sandbox per plugin | Process / network |
+| **Scalability** | Vertical | Per-plugin via Celery | Horizontal |
+| **Complexity** | Low | Medium | High |
+| **Dev velocity** | Fast | Fast | Slow |
 
 ---
 
-## Architecture en un Coup d'Œil
+## Architecture at a Glance
 
 ```mermaid
 flowchart TB
-    subgraph App["Application FastAPI"]
-        FA[Routes HTTP]
+    subgraph App["FastAPI Application"]
+        FA[HTTP Routes]
     end
 
-    subgraph Kernel["XCore Kernel (Orchestrateur)"]
+    subgraph Kernel["XCore Kernel"]
         direction TB
-        X[Xcore Engine<br/>Point d'entrée]
-        SC[Service Container<br/>DB, Cache, Scheduler]
-        PS[Plugin Supervisor<br/>Cycle de vie]
-        EB[Event Bus<br/>Messagerie async]
-        PE[Permission Engine<br/>Contrôle d'accès]
+        X[Xcore Engine<br/>Entry point]
+        SC[ServiceContainer<br/>DB · Cache · Scheduler · Worker]
+        PS[PluginSupervisor<br/>Lifecycle]
+        EB[EventBus<br/>Async messaging]
+        PE[PermissionEngine<br/>Access control]
+        TM[TenantMiddleware<br/>Multi-tenancy]
     end
 
-    subgraph Plugins["Écosystème Plugins"]
+    subgraph Plugins["Plugin Ecosystem"]
         direction LR
-        TP[Plugins Trusted<br/>Processus principal]
-        SP[Plugins Sandboxed<br/>Processus isolé]
+        TP[Trusted Plugins<br/>Main process]
+        SP[Sandboxed Plugins<br/>Isolated OS process]
     end
 
-    subgraph Services["Services Partagés"]
-        DB[(Base de données<br/>SQL/NoSQL)]
-        CACHE[(Cache<br/>Redis/Memory)]
+    subgraph Services["Shared Services"]
+        DB[(Database<br/>SQL / NoSQL)]
+        CACHE[(Cache<br/>Redis / Memory)]
         SCHED[Scheduler<br/>APScheduler]
+        WORKER[Worker<br/>Celery]
     end
 
     FA --> X
-    X --> SC
-    X --> PS
-    X --> EB
-    X --> PE
-
+    X --> SC & PS & EB & PE & TM
     SC --> Services
-    PS --> TP
-    PS --> SP
-
-    EB -.->|Événements| TP
-    EB -.->|Événements| SP
-    PE -.->|Permissions| PS
+    PS --> TP & SP
+    EB -.->|Events| TP & SP
+    PE -.->|Grants| PS
 
     style Kernel fill:#E3F2FD,stroke:#1976D2
     style Plugins fill:#FFF3E0,stroke:#F57C00
@@ -112,151 +104,81 @@ flowchart TB
 
 ---
 
-## Comment XCore Fonctionne
-
-### 1. Initialisation (Boot Sequence)
+## Boot Sequence
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Développeur
+    participant Dev as Developer
     participant App as FastAPI
     participant Kernel as XCore Engine
-    participant Services as Services
+    participant Svc as Services
     participant Loader as PluginLoader
     participant P as Plugins
 
-    Dev->>App: Lance l'application
+    Dev->>App: Start application
     App->>Kernel: boot(app)
 
-    Note over Kernel: 1. Configuration
-    Kernel->>Kernel: Charge xcore.yaml + .env
-
+    Note over Kernel: 1. Config (integration.yaml + env)
     Note over Kernel: 2. Services
-    Kernel->>Services: Initialise DB, Cache, Scheduler
-    Services-->>Kernel: Services prêts
+    Kernel->>Svc: Init DB, Cache, Scheduler, Worker
+    Svc-->>Kernel: Ready
 
     Note over Kernel: 3. Plugins
-    Kernel->>Loader: Découvre les plugins
-    Loader->>Loader: Build DAG de dépendances
-    Loader->>Loader: Tri topologique
+    Kernel->>Loader: Discover plugins
+    Loader->>Loader: Resolve dependency DAG
 
-    loop Chargement par vagues
-        Loader->>P: Load (Trusted/Sandboxed)
+    loop Wave-based loading
+        Loader->>P: Load (Trusted / Sandboxed)
         P-->>Loader: Ready
     end
 
-    Kernel->>App: Monte les routes plugins
-    App-->>Dev: Serveur prêt !
-```
-
-### 2. Cycle de Vie d'un Plugin
-
-```mermaid
-stateDiagram-v2
-    [*] --> UNLOADED: Plugin découvert
-
-    UNLOADED --> LOADING: supervisor.load()
-    LOADING --> READY: on_load() ✅
-    LOADING --> FAILED: Erreur ❌
-
-    READY --> RELOADING: supervisor.reload()
-    RELOADING --> READY: Mise à jour ✅
-    RELOADING --> FAILED: Échec ❌
-
-    READY --> UNLOADED: supervisor.unload()
-    FAILED --> UNLOADED: Cleanup
-    FAILED --> RELOADING: Retry
-
-    note right of READY
-        Plugin opérationnel
-        Routes montées
-        Événements abonnés
-    end note
-
-    note right of FAILED
-        Erreur de syntaxe
-        Dépendance manquante
-        Permission refusée
-    end note
-```
-
-### 3. Communication Inter-Plugins
-
-Quand le **Plugin A** appelle le **Plugin B**, l'appel transite par le **Supervisor** qui applique un pipeline de sécurité :
-
-```mermaid
-flowchart LR
-    subgraph PluginA["Plugin A (Appelant)"]
-        A[Code: ctx.plugins.call]
-    end
-
-    subgraph Supervisor["Pipeline Supervisor"]
-        direction TB
-        M1[📍 Tracing<br/>Span]
-        M2[🛑 Rate Limit<br/>Quota]
-        M3[🔐 Permissions<br/>Audit]
-        M4[🔄 Retry<br/>Logic]
-    end
-
-    subgraph PluginB["Plugin B (Cible)"]
-        B[Handler @action]
-    end
-
-    A -- "call()" --> M1
-    M1 --> M2
-    M2 --> M3
-    M3 --> M4
-    M4 -- "exécute" --> B
-    B -- "résultat" --> A
-
-    style Supervisor fill:#FFEBEE,stroke:#C62828
-    style M3 fill:#C62828,color:#fff
+    Kernel->>App: Mount plugin routes
+    App-->>Dev: Server ready!
 ```
 
 ---
 
-## Démarrage Rapide
+## Quick Start
 
-### Étape 1 : Installation
+### 1. Install
 
 ```bash
-# Depuis les sources
 git clone https://github.com/traoreera/xcore
 cd xcore
 poetry install
 ```
 
-### Étape 2 : Configuration
-
-Créez un fichier `xcore.yaml` :
+### 2. Configure — `integration.yaml`
 
 ```yaml
 app:
-  name: "Mon Application"
+  name: "my-app"
   debug: true
-  plugin_prefix: "/plugin"
+  secret_key: "change-me-in-production"
+  plugin_prefix: "/app"
+
+plugins:
+  directory: ./plugins
+  secret_key: "change-me-in-production"
 
 services:
   databases:
     db:
       type: sqlasync
-      url: "sqlite+aiosqlite:///./app.db"
-
+      url: sqlite+aiosqlite:///./app.db
   cache:
     backend: memory
     ttl: 300
-
-  scheduler:
-    enabled: false
 ```
 
-### Étape 3 : Point d'Entrée
+### 3. Entry point — `main.py`
 
 ```python
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from xcore import Xcore
-xcore = Xcore(config_path="xcore.yaml")
+
+xcore = Xcore(config_path="integration.yaml")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -264,86 +186,63 @@ async def lifespan(app: FastAPI):
     yield
     await xcore.shutdown()
 
-app = FastAPI(title="Mon App XCore", lifespan=lifespan)
+app = FastAPI(**xcore._config.app.fastapi.to_dict(), lifespan=lifespan)
+xcore.setup(app)   # register middlewares before startup
 ```
 
-### Étape 4 : Premier Plugin
+### 4. First plugin
 
 ```
 plugins/hello/
 ├── plugin.yaml
-└── src/
-    └── main.py
+└── src/main.py
 ```
 
-**plugin.yaml** :
 ```yaml
+# plugin.yaml
 name: hello
 version: "1.0.0"
 execution_mode: trusted
 entry_point: src/main.py
 ```
 
-**src/main.py** :
 ```python
-from xcore.sdk import TrustedBase, AutoDispatchMixin, action, ok
+# src/main.py
+from xcore import TrustedBase
+from xcore.sdk.decorators import action
+from xcore.sdk.mixin.ipc import AutoDispatchMixin
+from xcore.kernel.api.contract import ok
 
 class Plugin(AutoDispatchMixin, TrustedBase):
 
-    @action("greet")
-    async def greet(self, payload: dict):
-        name = payload.get("name", "Monde")
-        return ok(message=f"Bonjour, {name} !")
+    @action("ping")
+    async def ping(self, payload: dict) -> dict:
+        return ok(pong=True)
 ```
 
-### Étape 5 : Lancer et tester
+### 5. Run
 
 ```bash
-# Démarrer l'application
 poetry run uvicorn main:app --reload
-```
-
-Dans un second terminal :
-
-```bash
-# Vérifier les plugins détectés
 poetry run xcore plugin list
-
-# Appeler l'action greet via l'API IPC
-curl -X POST http://127.0.0.1:8000/plugin/ipc/hello/greet \
-  -H "Content-Type: application/json" \
-  -H "X-Plugin-Key: change-me-in-production" \
-  -d '{"payload":{"name":"Développeur"}}'
 ```
 
 ---
 
-## Parcours de Documentation
+## Documentation Map
 
-| 📚 Section | Description |
-| :--- | :--- |
-| [🚀 Installation](getting-started/installation.md) | Configurer l'environnement de développement |
-| [⚡ Quick Start](getting-started/quickstart.md) | Créer votre premier plugin en 5 minutes |
-| [🧩 Créer un Plugin](guides/creating-plugins.md) | Guide complet du développement de plugins |
-| [🏗️ Architecture](architecture/overview.md) | Comprendre les internals du framework |
-| [🛡️ Sécurité](guides/security.md) | Sandbox, permissions et isolation |
-| [📡 Événements](guides/events.md) | Système de messagerie et hooks |
-| [🔧 Services](guides/services.md) | Utiliser DB, Cache, Scheduler et XWorker (Celery) |
-| [🔀 Middlewares](guides/middlewares.md) | Déclarer et écrire des middlewares ASGI |
-| [📖 SDK Reference](reference/sdk.md) | API complète du SDK |
-
----
-
-## Ressources Supplémentaires
-
--   [Exemples de code](examples/README.md) - Plugins de base à avancés
--   [CLI Reference](reference/cli.md) - Commandes de gestion
--   [Troubleshooting](guides/troubleshooting.md) - Résolution de problèmes
--   [Contributing](development/contributing.md) - Guide de contribution
--   [Vision & Évolution](vision.md) - Roadmap et directions futures du framework
-
----
-
-<p align="center">
-  <b>XCore Framework</b> — Construit avec ❤️ par l'équipe XCore
-</p>
+| Section | Description |
+|:--------|:-----------|
+| [Installation](getting-started/installation.md) | Set up your development environment |
+| [Quick Start](getting-started/quickstart.md) | Build your first plugin in 5 minutes |
+| [Creating a Plugin](guides/creating-plugins.md) | Full plugin development guide |
+| [Plugin Manifest](guides/plugin-manifest.md) | Complete `plugin.yaml` reference |
+| [Services](guides/services.md) | DB, Cache, Scheduler, and Celery |
+| [Multi-Tenancy](guides/tenancy.md) | Tenant isolation across all services |
+| [Middlewares](guides/middlewares.md) | ASGI middleware pipeline |
+| [Events & Hooks](guides/events.md) | Async messaging between components |
+| [Security](guides/security.md) | Sandbox, plugin signing, IPC control |
+| [SDK Reference](reference/sdk.md) | `@action`, `@schema`, `AutoDispatchMixin` |
+| [Configuration](reference/configuration.md) | All `integration.yaml` options |
+| [CLI](reference/cli.md) | Command-line interface |
+| [Architecture](architecture/overview.md) | Internals deep dive |

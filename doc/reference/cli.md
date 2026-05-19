@@ -1,240 +1,89 @@
 # CLI Reference
 
-Le CLI `xcore` expose des commandes pour gérer les plugins, le sandbox, le marketplace, les services et les processus worker.
+The `xcore` CLI exposes commands for managing plugins, the sandbox, marketplace, services, and worker processes.
 
 ```bash
-xcore --help
-xcore --version
+poetry run xcore --help
+poetry run xcore <command> --help
 ```
 
 ---
 
-## `xcore plugin`
-
-### `list`
+## Plugin Commands
 
 ```bash
-xcore plugin list
+xcore plugin list                          # List all discovered plugins and their status
+xcore plugin info <name>                   # Show details for a specific plugin
+xcore plugin reload <name>                 # Hot-reload a plugin
+xcore plugin load <name>                   # Load a new plugin at runtime
+xcore plugin unload <name>                 # Unload a running plugin
+xcore plugin sign <path> --secret <key>    # Sign a plugin (creates plugin.sig)
+xcore plugin verify <path> --secret <key>  # Verify a plugin signature
+xcore plugin health                        # Validate all plugin manifests + AST
 ```
 
-### `info <name>`
+### `plugin list` output
 
-```bash
-xcore plugin info mon_plugin
 ```
-
-### `load <name>`
-
-```bash
-xcore plugin load mon_plugin [--host 127.0.0.1] [--port 8000] [--key <api_key>]
-```
-
-### `reload <name>`
-
-```bash
-xcore plugin reload mon_plugin
-```
-
-### `install <name>`
-
-```bash
-xcore plugin install auth_plugin                          # marketplace (défaut)
-xcore plugin install mon_plugin --source zip --url <url>  # archive zip
-xcore plugin install mon_plugin --source git --url <url>  # dépôt git
-```
-
-### `remove <name>`
-
-```bash
-xcore plugin remove mon_plugin
-```
-
-### `sign <path>`
-
-```bash
-xcore plugin sign plugins/mon_plugin --key "ma_cle_secrete"
-```
-
-### `verify <path>`
-
-```bash
-xcore plugin verify plugins/mon_plugin --key "ma_cle_secrete"
-```
-
-### `validate <path>`
-
-```bash
-xcore plugin validate plugins/mon_plugin
-```
-
-### `health`
-
-```bash
-xcore plugin health
+NAME            VERSION  MODE       STATUS
+auth_plugin     1.2.0    trusted    READY
+billing_plugin  0.9.1    trusted    READY
+analytics       1.0.0    sandboxed  READY
 ```
 
 ---
 
-## `xcore sandbox`
-
-### `run <name>`
+## Worker Commands (Celery)
 
 ```bash
-xcore sandbox run mon_plugin
+xcore worker start celery                  # Start a Celery worker
+xcore worker start celery --concurrency 8  # Start with custom concurrency
+xcore worker beat                          # Start Celery beat (periodic tasks)
+xcore worker inspect                       # Inspect active workers and their tasks
 ```
 
-### `limits <name>`
+The worker reads configuration from `integration.yaml → services.xworker`. The Celery app bootstraps at module import time so `celery -A xcore.services.xworker.xworker worker` also works.
+
+---
+
+## Sandbox Commands
 
 ```bash
-xcore sandbox limits mon_plugin
-```
-
-### `network <name>`
-
-```bash
-xcore sandbox network mon_plugin
-```
-
-### `fs <name>`
-
-```bash
-xcore sandbox fs mon_plugin
+xcore sandbox scan <path>                  # AST-scan a plugin for forbidden imports
+xcore sandbox test <name>                  # Run a sandboxed plugin in test mode
 ```
 
 ---
 
-## `xcore marketplace`
+## Marketplace Commands
 
 ```bash
-xcore marketplace list
-xcore marketplace trending
-xcore marketplace search "authentication"
-xcore marketplace show auth_plugin
-xcore marketplace rate auth_plugin --score 5
+xcore marketplace search <query>           # Search for plugins on the marketplace
+xcore marketplace install <plugin>         # Download and install a plugin
+xcore marketplace info <plugin>            # Show marketplace plugin details
 ```
 
 ---
 
-## `xcore services status`
+## Make Targets
 
-```bash
-xcore services status
-xcore services status --json
-```
+The project `makefile` provides shorthand targets for common tasks:
 
----
-
-## `xcore health`
-
-```bash
-xcore health
-xcore health --json
-```
-
----
-
-## `xcore worker`
-
-Gère les processus FastAPI (uvicorn) et Celery en arrière-plan avec fichiers PID et logs séparés.
-
-### `start [api|celery|all]`
-
-Lance un ou plusieurs processus. Cible par défaut : `all`.
-
-```bash
-xcore worker start                      # API + Celery (foreground)
-xcore worker start --detach             # arrière-plan, PIDs dans .xcore/pids/
-xcore worker start api --reload         # API seule en dev
-xcore worker start celery -Q default,emails -c 4
-xcore worker start --host 0.0.0.0 --port 8080
-```
-
-| Option | Description |
-|:-------|:------------|
-| `--detach / -d` | Lance en arrière-plan |
-| `--loglevel / -l` | Niveau de log (`debug`…`critical`) |
-| `--app` | App ASGI (`main:app`) |
-| `--host` | Adresse d'écoute (défaut: `integration.yaml → server.host`) |
-| `--port / -p` | Port (défaut: `integration.yaml → server.port`) |
-| `--workers / -w` | Workers uvicorn |
-| `--reload` | Auto-reload uvicorn |
-| `--queues / -Q` | Files Celery (défaut: `integration.yaml → xworker.queues`) |
-| `--concurrency / -c` | Concurrence Celery (défaut: `integration.yaml → xworker.concurrency`) |
-| `--hostname / -n` | Nom du worker Celery (ex: `worker1@%h`) |
-
-### `stop [api|celery|all]`
-
-```bash
-xcore worker stop              # arrête tout
-xcore worker stop api
-xcore worker stop celery
-```
-
-### `status`
-
-```bash
-xcore worker status
-xcore worker status --json
-```
-
-Affiche un tableau avec PID, état et chemin de log pour chaque processus.
-
-### `logs [api|celery|all]`
-
-```bash
-xcore worker logs                      # 50 dernières lignes de tout
-xcore worker logs api -n 100
-xcore worker logs celery --follow      # tail -f en temps réel
-```
-
-| Option | Description |
-|:-------|:------------|
-| `--lines / -n` | Nombre de lignes (défaut: 50) |
-| `--follow / -f` | Suit en temps réel (cible unique uniquement) |
-
-### `inspect`
-
-Liste les tâches Celery enregistrées et les workers actifs.
-
-```bash
-xcore worker inspect
-```
-
-### `purge [queue]`
-
-Vide une file d'attente Celery.
-
-```bash
-xcore worker purge              # vide la file "default"
-xcore worker purge emails
-```
-
-### `beat`
-
-Lance le scheduler Celery Beat.
-
-```bash
-xcore worker beat
-xcore worker beat --detach
-xcore worker beat --schedule /tmp/beat-schedule
-```
-
-### Fichiers générés
-
-| Fichier | Description |
-|:--------|:------------|
-| `.xcore/pids/api.pid` | PID du processus uvicorn |
-| `.xcore/pids/celery.pid` | PID du worker Celery |
-| `.xcore/pids/beat.pid` | PID de Celery Beat |
-| `log/api.log` | Logs uvicorn |
-| `log/celery.log` | Logs Celery worker |
-| `log/beat.log` | Logs Celery Beat |
-
----
-
-## Options globales
-
-| Option | Description |
-|:-------|:------------|
-| `--config <path>` | Chemin vers `integration.yaml` (défaut : auto-détection) |
-| `--version` | Affiche la version (`xcore v2.1.3`) |
+| Target | Description |
+|:-------|:-----------|
+| `make dev` | Start with auto-reload (port 8000) |
+| `make st` | Start in production mode |
+| `make test` | Run the full test suite with coverage |
+| `make benchmark` | Run performance benchmarks |
+| `make lint-fix` | Auto-format with black, isort, autopep8, autoflake |
+| `make lint-check` | Check formatting without modifying files |
+| `make auto-security` | Run Bandit audit (output in `./reports/`) |
+| `make clean` | Remove `__pycache__` and `.pyc` files |
+| `make build` | clean + install + lint-fix |
+| `make build-prod` | build + test + security-check |
+| `make logs-live` | Tail `log/app.log` in real time |
+| `make logs-error` | Show ERROR entries from the log |
+| `make logs-search TERM="..."` | Search the log file |
+| `make logs-stats` | Count log entries by level |
+| `make add-plugin PLUGIN_NAME=x PLUGIN_REPO=url` | Clone a plugin from git |
+| `make rm-plugin PLUGIN_NAME=x` | Remove a plugin directory |

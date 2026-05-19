@@ -1,118 +1,220 @@
-# Exemple : Plugin de Confiance (Trusted Plugin)
+# Example: Trusted Plugin
 
-Le mode `trusted` est conçu pour les plugins internes qui ont un accès total au système et aux services partagés.
-
----
-
-## 1. Caractéristiques du mode Trusted
-
-- **Processus Partagé** : S'exécute dans le même processus que le Noyau (Kernel).
-- **Accès Direct** : Peut manipuler les instances de services (`db`, `cache`, `scheduler`) directement.
-- **Routage HTTP** : Peut exposer des routers FastAPI personnalisés.
-- **Performance** : Pas d'overhead de communication IPC.
-- **Signature Requise** : En production, les plugins Trusted doivent être signés pour être chargés (`strict_trusted: true`).
+A full-featured `trusted` plugin with database access, HTTP routes, IPC, and a Celery task.
 
 ---
 
-## 2. Le Manifeste (`plugin.yaml`)
+## Directory Structure
+
+```
+plugins/users/
+├── plugin.yaml
+├── plugin.sig          # sign with: xcore plugin sign plugins/users
+└── src/
+    └── main.py
+```
+
+---
+
+## `plugin.yaml`
 
 ```yaml
-name: core_auth
-version: 2.1.0
-author: XCore Internal Team
-description: Service d'authentification central du framework
+name: users
+version: "2.0.0"
+author: "XCore Team"
+description: "User management plugin"
 execution_mode: trusted
 entry_point: src/main.py
+framework_version: ">=2.0"
 
-# Déclarer les services requis pour l'initialisation
 requires:
-  - database_service
-  - cache_service
+  - name: auth_plugin
+    version: ">=1.0"
 
-# Permissions RBAC
 permissions:
   - resource: "db.users"
+    actions: ["read", "write", "delete"]
+    effect: allow
+  - resource: "cache.*"
     actions: ["read", "write"]
     effect: allow
-  - resource: "cache.auth_tokens"
-    actions: ["write"]
-    effect: allow
+
+allowed_callers:
+  - auth_plugin
+  - dashboard_plugin
+
+resources:
+  rate_limit:
+    calls: 100
+    period_seconds: 60
 ```
 
 ---
 
-## 3. Le Code Source (`src/main.py`)
+## `src/main.py`
 
 ```python
-from xcore.sdk import (
-    TrustedBase,
-    AutoDispatchMixin,
-    action,
-    ok,
-    error,
-    require_service
-)
-import bcrypt
+from __future__ import annotations
+
+from xcore import TrustedBase
+from xcore.sdk.decorators import action, schema, validate_payload
+from xcore.sdk.mixin.ipc import AutoDispatchMixin
+from xcore.kernel.api.contract import ok, error
+from pydantic import BaseModel, EmailStr
+
+# ── Payload models ────────────────────────────────────────────────────────
+
+class CreateUserPayload(BaseModel):
+    name: str
+    email: str
+    role: str = "user"
+
+class GetUserPayload(BaseModel):
+    user_id: int
+
+# ── Plugin ────────────────────────────────────────────────────────────────
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    """
-    Plugin Trusted gérant l'authentification.
-    """
+
+    # ── Lifecycle ──────────────────────────────────────────────────────────
 
     async def on_load(self) -> None:
-        """Accès direct aux services."""
-        self.db = self.get_service("db")
-        self.cache = self.get_service("cache")
-        self.logger.info("Service d'authentification prêt.")
+        self.db     = self.get_service("db")
+        self.cache  = self.get_service("cache")
+        self.worker = self.get_service("worker")
+        self.logger = self.ctx.get_logger("users")
 
-    @action("register")
-    @require_service("db")
-    async def register_user(self, payload: dict) -> dict:
-        """
-        Action Trusted pour enregistrer un nouvel utilisateur.
-        Accès total aux API Python (ex: bcrypt).
-        """
-        username = payload.get("username")
-        password = payload.get("password")
+    # ── Actions ────────────────────────────────────────────────────────────
 
-        if not username or not password:
-            return error("Paramètres manquants")
-
-        # Hashage du mot de passe (CPU intensif)
-        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-        # Insertion directe en DB
+    @action("create")
+    @schema(
+        "1.0",
+        input={"name": (str, ...), "email": (str, ...), "role": (str, "user")},
+        output={"user_id": (int, ...), "name": (str, ...)},
+        description="Create a new user account.",
+    )
+    @validate_payload(CreateUserPayload)
+    async def create_user(self, payload: CreateUserPayload) -> dict:
         async with self.db.session() as session:
-            # Imaginons que nous utilisons une fonction helper ici
-            # user_id = await create_db_user(session, username, hashed)
-            pass
+            # Check for duplicate email
+            from sqlalchemy import select, text
+            exists = await session.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": payload.email},
+            )
+            if exists.fetchone():
+                return error("Email already in use", "duplicate_email")
 
-        return ok(username=username, status="registered")
+            # Insert user
+            result = await session.execute(
+                text("INSERT INTO users (name, email, role) VALUES (:n, :e, :r) RETURNING id"),
+                {"n": payload.name, "e": payload.email, "r": payload.role},
+            )
+            user_id = result.scalar_one()
+            await session.commit()
 
-    @action("validate_token")
-    @require_service("cache")
-    async def validate_token(self, payload: dict) -> dict:
-        """
-        Vérification rapide d'un token dans le cache partagé.
-        """
-        token = payload.get("token")
-        if not token:
-            return error("Token manquant")
+        # Dispatch welcome email via Celery
+        self.worker.send("app.tasks.emails.send_welcome", user_id, payload.email, queue="emails")
 
-        # Lecture directe du cache Redis partagé
-        user_data = await self.cache.get(f"auth:token:{token}")
+        # Publish event for other plugins
+        await self.ctx.events.publish("user.created", {"user_id": user_id, "email": payload.email})
 
-        if user_data:
-            return ok(valid=True, user=user_data)
+        self.logger.info("User created: id=%d email=%s", user_id, payload.email)
+        return ok(user_id=user_id, name=payload.name)
 
-        return ok(valid=False)
+    @action("get")
+    @validate_payload(GetUserPayload)
+    async def get_user(self, payload: GetUserPayload) -> dict:
+        cache_key = f"user:{payload.user_id}"
+
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return ok(**cached)
+
+        async with self.db.session() as session:
+            from sqlalchemy import text
+            row = await session.execute(
+                text("SELECT id, name, email, role FROM users WHERE id = :id"),
+                {"id": payload.user_id},
+            )
+            user = row.fetchone()
+
+        if not user:
+            return error("User not found", "not_found")
+
+        data = {"user_id": user.id, "name": user.name, "email": user.email, "role": user.role}
+        await self.cache.set(cache_key, data, ttl=300)
+        return ok(**data)
+
+    @action("delete")
+    async def delete_user(self, payload: dict) -> dict:
+        user_id = payload.get("user_id")
+        if not user_id:
+            return error("user_id required", "missing_field")
+
+        async with self.db.session() as session:
+            from sqlalchemy import text
+            await session.execute(
+                text("DELETE FROM users WHERE id = :id"), {"id": user_id}
+            )
+            await session.commit()
+
+        await self.cache.delete(f"user:{user_id}")
+        await self.ctx.events.publish("user.deleted", {"user_id": user_id})
+        return ok(deleted=True)
+
+    # ── IPC ────────────────────────────────────────────────────────────────
+
+    @action("notify_auth")
+    async def notify_auth(self, payload: dict) -> dict:
+        """Call auth_plugin to register a new session after user creation."""
+        return await self.call_plugin("auth_plugin", "create_session", {
+            "user_id": payload["user_id"],
+            "role": payload.get("role", "user"),
+        })
+
+    # ── HTTP routes ────────────────────────────────────────────────────────
+
+    def get_router(self):
+        from fastapi import APIRouter, HTTPException
+
+        router = APIRouter(prefix="/v1", tags=["users"])
+
+        @router.get("/{user_id}")
+        async def get_user_http(user_id: int):
+            result = await self.get_user({"user_id": user_id})
+            if result.get("status") == "error":
+                raise HTTPException(status_code=404, detail=result["msg"])
+            return result
+
+        @router.post("/")
+        async def create_user_http(body: CreateUserPayload):
+            result = await self.create_user(body)
+            if result.get("status") == "error":
+                raise HTTPException(status_code=400, detail=result["msg"])
+            return result
+
+        return router
 ```
 
 ---
 
-## 4. Points Clés de l'Exemple
+## Sign the plugin
 
-✅ **Accès Full-Stack** : Accès à toutes les bibliothèques Python (`bcrypt`, `psycopg2`, etc.).
-✅ **Services Partagés** : Utilisation intensive du cache et de la base de données sans latence.
-✅ **Hautes Performances** : Idéal pour les fonctions de sécurité, d'authentification ou de traitement d'image.
-✅ **Sécurité de Chargement** : Ce plugin doit être déposé dans le dossier `./plugins` par l'administrateur système.
+```bash
+poetry run xcore plugin sign plugins/users --secret "your-hmac-secret"
+```
+
+---
+
+## Test
+
+```bash
+# Create a user
+curl -X POST http://localhost:8000/app/users/action \
+     -H "Content-Type: application/json" \
+     -d '{"action": "create", "payload": {"name": "Alice", "email": "alice@example.com"}}'
+
+# Get via HTTP route
+curl http://localhost:8000/app/users/v1/1
+```

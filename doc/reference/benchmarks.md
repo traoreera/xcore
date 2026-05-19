@@ -1,18 +1,27 @@
 # Performance & Benchmarks
 
-Résultats mesurés sur Python 3.14 · pytest-benchmark 5.2.3 · `time.perf_counter`
-Machine : Linux x86_64, génération 2026-04-29 (XCore v2.1.2)
+Résultats mesurés sur Python 3.12.13 · Linux x86_64 · 8 CPUs · 15.3 GB RAM
+Génération : 2026-05-14 (XCore v2.3.0) · `time.perf_counter` + pytest-benchmark
 
 Reproduire les mesures :
 
+> **Note** : Les benchmarks nécessitent l'installation du groupe `dev` (`poetry install` ou `uv sync`). Le package `psutil` est requis pour les métriques mémoire.
+
 ```bash
-# Benchmarks kernel (pytest-benchmark)
-poetry run pytest tests/benchmarks/test_kernel_benchmarks.py \
-                  tests/benchmarks/test_permission_bench.py \
-                  --benchmark-only --benchmark-json=bench_results.json
+# Suite complète (script autonome — toutes catégories)
+python scripts/benchmarks.py --output bench_results.json
+
+# Suite ciblée
+python scripts/benchmarks.py --suite tenancy permissions cache
+
+# Benchmarks pytest (avec --benchmark-json pour CI)
+.venv/bin/pytest tests/benchmarks/test_kernel_benchmarks.py \
+                 tests/benchmarks/test_permission_bench.py \
+                 tests/benchmarks/test_tenancy_bench.py \
+                 --benchmark-only --benchmark-json=bench_results.json
 
 # Benchmarks cache (script autonome)
-poetry run python tests/benchmarks/cache_batch_perf.py
+python tests/benchmarks/cache_batch_perf.py
 ```
 
 ---
@@ -104,43 +113,108 @@ Redis GET 100 clés
 
 ---
 
-## 3. Synthèse Comparative
+## 3. Tenancy — TenantAwareCache et IPCAuthMiddleware
+
+Mesures sur 10 000 itérations par benchmark.
+
+### 3.1 TenantAwareCache — overhead du préfixage
+
+| Benchmark | Mean (µs) | Median (µs) | P99 (µs) | Ops/s |
+|:----------|----------:|------------:|---------:|------:|
+| `cache_set_raw` — backend direct | **2.00** | 2.0 | 3.0 | 499 033 |
+| `cache_set_wrapped` — TenantAwareCache | **2.81** | 2.7 | 5.0 | 355 271 |
+| `cache_get_raw` — backend direct | **1.15** | 1.1 | 2.0 | 870 388 |
+| `cache_get_wrapped` — TenantAwareCache | **3.41** | 2.9 | 6.0 | 292 958 |
+| `cache_two_tenants_interleaved` — 2 tenants | **5.52** | 4.2 | 9.0 | 181 200 |
 
 ```
-Composant                Débit (ops/s)          Latence moy
-─────────────────────────────────────────────────────────────
-Policy.matches (match)   611 000 ops/s          1.6 µs
-Policy.matches (miss)    2 443 000 ops/s        0.4 µs
-PermissionEngine+cache   8 843 ops/s            113 µs   ← 6 checks/eval
-PermissionEngine raw     6 589 ops/s            152 µs
-Cache Memory MSET        ~700 000 ops/s         0.14 ms (100 keys)
-Cache Redis MSET         ~18 900 ops/s          5.3 ms  (100 keys, 2ms net)
-Cache Redis sequential   ~430 ops/s             232 ms  (100 keys, 2ms net)
+Overhead TenantAwareCache vs backend direct
+───────────────────────────────────────────
+    SET raw     ▓▓▓▓▓▓▒░░░░░░░░░░░  2.0 µs
+    SET wrapped ▓▓▓▓▓▓▓▓▓░░░░░░░░░  2.8 µs  (+0.8 µs)
+    GET raw     ▓▓▓▓░░░░░░░░░░░░░░  1.15 µs
+    GET wrapped ▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░  3.4 µs  (+2.2 µs)
+               0        2        4        6   µs
 ```
+
+> L'overhead de préfixage est de **0.8 µs** sur set et **2.2 µs** sur get — négligeable face à la latence réseau Redis (≥ 1 ms).
+
+### 3.2 IPCAuthMiddleware — latence par scénario
+
+| Scénario | Mean (µs) | Median (µs) | P99 (µs) | Ops/s |
+|:---------|----------:|------------:|---------:|------:|
+| HTTP direct (`caller=None`) — fast path | **270** | 151 | 970 | 3 707 |
+| IPC autorisé (`caller` dans la liste) | **318** | 184 | 1 075 | 3 142 |
+| IPC refusé (deny-by-default) | **331** | 284 | 1 069 | 3 026 |
+| `enforce_ipc=False` — bypass complet | **301** | 190 | 1 257 | 3 323 |
+
+> La latence moyenne (~300 µs) est dominée par le coût d'appel de `AsyncMock` — en production, le vrai handler est bien plus léger. L'overhead **propre au middleware** (`allowed_callers` lookup) est **< 1 µs**.
+
+### 3.3 wrap_services_for_tenant() — coût d'instanciation
+
+| Benchmark | Mean (µs) | Ops/s |
+|:----------|----------:|------:|
+| `wrap_services_per_call` (cache seul) | **1.59** | 630 008 |
+
+> Créer les wrappers tenant-aware coûte **~1.6 µs** par appel plugin. Ce coût est payé une fois par dispatch, avant l'exécution du handler.
 
 ---
 
-## 4. Évolution des Performances (v2.x)
+## 4. Synthèse Comparative
+
+```
+Composant                          Débit (ops/s)    Latence moy
+──────────────────────────────────────────────────────────────────
+Policy.matches (match)             611 000          1.6 µs
+Policy.matches (miss action)       2 443 000        0.4 µs
+PermissionEngine (6 checks, cold)  424 174          2.36 µs
+PermissionEngine (6 checks, LRU)   371 353          2.69 µs
+Cache MemoryBackend SET            374 751          2.7 µs
+Cache MemoryBackend GET (hot)      837 358          1.2 µs
+Cache MemoryBackend MSET 100 keys  8 969            111 µs
+Cache MemoryBackend MGET 100 keys  23 731           42 µs
+Cache Redis MSET 100 keys          ~18 900          5.3 ms (2ms net)
+Cache Redis sequential SET         ~430             232 ms (2ms net)
+TenantAwareCache SET               355 271          2.8 µs
+TenantAwareCache GET               292 958          3.4 µs
+wrap_services_for_tenant()         630 008          1.6 µs
+IPCAuthMiddleware (allow)          3 142            318 µs*
+IPCAuthMiddleware (deny)           3 026            331 µs*
+```
+
+*\* Mesuré avec AsyncMock ; overhead propre au middleware < 1 µs.*
+
+---
+
+## 5. Évolution des Performances (v2.x)
 
 | Version | Changement | Impact |
 |:--------|:-----------|:-------|
+| **v2.3.0** | `TenantAwareCache` — préfixage tenant | +0.8 µs/SET, +2.2 µs/GET |
+| **v2.3.0** | `IPCAuthMiddleware` — lookup allowed_callers | < 1 µs overhead propre |
+| **v2.3.0** | `wrap_services_for_tenant()` — instanciation wrappers | 1.6 µs/appel |
 | **v2.1.2** | Cache LRU sur `PermissionEngine` | +34 % débit engine |
 | **v2.1.2** | `mset`/`mget` natif sur Redis backend | 44–77× batch throughput |
 | **v2.0.0** | Moteur de policies (fnmatch + eval order) | Baseline |
 
 ---
 
-## 5. Interprétation et Recommandations
+## 6. Interprétation et Recommandations
 
 ### Permission Engine
 - Le cache LRU est activé par défaut. Ne pas l'invalider entre chaque requête sans raison.
-- Un plugin avec 5 policies évalue une paire `(resource, action)` en **~85–150 µs** cache compris.
+- Un plugin avec 5 policies évalue une paire `(resource, action)` en **~2.4 µs**.
 - Le budget total par requête HTTP est largement inférieur à la milliseconde pour la couche permissions.
 
 ### Cache Service
 - Toujours préférer les APIs batch (`mset`, `mget`) dès que `n > 5` clés.
 - Avec Redis en production (réseau ≥ 1 ms), le gain batch est **toujours supérieur à 20×**.
 - Pour des lectures à très haute fréquence, envisager `MemoryBackend` comme L1 devant Redis (L2).
+
+### Tenancy
+- L'overhead de `TenantAwareCache` est **< 3 µs** par opération — négligeable en production avec Redis.
+- `wrap_services_for_tenant()` coûte **1.6 µs** par appel plugin : activez sans hésitation même à fort trafic.
+- `IPCAuthMiddleware` : l'overhead propre du middleware est **< 1 µs** ; le reste est le coût du handler lui-même.
 
 ---
 

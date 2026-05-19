@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import BaseModel
 
-from xcore.sdk.decorators import (
+from xcore.sdk import (
     AutoDispatchMixin,
     RoutedPlugin,
     action,

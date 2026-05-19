@@ -63,7 +63,16 @@ def build_app(cfg: "WorkerConfig") -> Any:
         broker_connection_retry_on_startup=cfg.broker_connection_retry_on_startup,
         task_default_queue=cfg.task_default_queue,
         task_queues=queues,
+        include=list(cfg.modules),
     )
+
+    # Enregistre les tâches @task() après que `include` les a importées
+    from celery.signals import worker_ready
+
+    @worker_ready.connect(weak=False)
+    def _on_worker_ready(sender, **kwargs):
+        register_pending_tasks(_app_instance)
+
     return _app_instance
 
 
@@ -102,7 +111,7 @@ def task(
     def decorator(fn: Callable) -> Callable:
         task_name = name or fn.__qualname__
 
-        fn._celery_task_meta = {  # type: ignore[attr-defined]
+        meta = {
             "name": task_name,
             "queue": queue,
             "bind": bind,
@@ -111,12 +120,30 @@ def task(
             "celery_kwargs": celery_kwargs,
         }
 
+        fn._celery_task_meta = meta  # type: ignore[attr-defined]
+
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             return fn(*args, **kwargs)
 
-        wrapper._celery_task_meta = fn._celery_task_meta  # type: ignore[attr-defined]
+        wrapper._celery_task_meta = meta  # type: ignore[attr-defined]
         _pending_tasks.append(wrapper)
+
+        # Si l'app Celery est déjà initialisée (import via `include` au démarrage
+        # du worker), on enregistre directement — sinon register_pending_tasks()
+        # le fera plus tard.
+        if _app is not None:
+            registered = _app.task(
+                wrapper,
+                name=task_name,
+                bind=bind,
+                max_retries=max_retries,
+                default_retry_delay=default_retry_delay,
+                **celery_kwargs,
+            )
+            task_registry[task_name] = registered
+            logger.debug("Tâche enregistrée immédiatement : %s", task_name)
+
         return wrapper
 
     return decorator

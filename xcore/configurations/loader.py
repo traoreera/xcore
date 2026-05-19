@@ -17,6 +17,7 @@ from .helper import _resolve
 from .sections import (
     AppConfig,
     CacheConfig,
+    CORSConfig,
     DatabaseConfig,
     LoggingConfig,
     MarketplaceConfig,
@@ -27,6 +28,7 @@ from .sections import (
     SchedulerConfig,
     SecurityConfig,
     ServicesConfig,
+    TenancyConfig,
     TracingConfig,
     WorkerConfig,
     XcoreConfig,
@@ -138,6 +140,8 @@ class ConfigLoader:
             security=cls._parse_security(raw.get("security", {})),
             marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
             middleware=cls._parse_middleware(raw.get("middleware", {})),
+            tenancy=cls._parse_tenancy(raw.get("tenancy", {})),
+            cors=cls._parse_cors(raw.get("cors", {})),
             raw=raw,
         )
 
@@ -235,6 +239,12 @@ class ConfigLoader:
             )
         return result
 
+    # parser cors
+
+    @classmethod
+    def _parse_cors(cls, d: dict) -> CORSConfig:
+        return CORSConfig.from_dict(d)
+
     @classmethod
     def _parse_services(cls, d: dict) -> ServicesConfig:
         dbs: dict[str, DatabaseConfig] = {
@@ -326,6 +336,19 @@ class ConfigLoader:
             api_key=d.get("api_key", ""),
             timeout=d.get("timeout", 10),
             cache_ttl=d.get("cache_ttl", 300),
+        )
+
+    @staticmethod
+    def _parse_tenancy(d: dict) -> TenancyConfig:
+        return TenancyConfig(
+            enabled=d.get("enabled", False),
+            header=d.get("header", "X-Tenant-ID"),
+            subdomain=d.get("subdomain", False),
+            default_tenant=d.get("default_tenant", "default"),
+            isolate_cache=d.get("isolate_cache", True),
+            isolate_db=d.get("isolate_db", True),
+            isolate_scheduler=d.get("isolate_scheduler", False),
+            enforce_ipc=d.get("enforce_ipc", True),
         )
 
 
