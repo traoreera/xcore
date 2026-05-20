@@ -13,7 +13,7 @@ dependencies = [
     # SDK (external)
     "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
     # external cli
-    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
+    #"xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
 
     # Web
     "fastapi[standard]>=0.135.1,<1.0.0",
