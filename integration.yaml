@@ -45,7 +45,7 @@ plugins:
   directory: ./app
 
   # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
-  secret_key: "12345"
+  secret_key: "67e192bc581337d646cda6051e5fb9e1f66b1bfaf00db37f5aa1c508fc21ebe6"
 
   # true = refuse tout plugin Trusted non signé
   strict_trusted: false
@@ -164,6 +164,13 @@ services:
         timeout: 10
         max_retries: 3
         queue_size: 100
+
+marketplace:
+  url: "https://api.xcorehub.dev/app/marketplace/" # "https://marketplace.xcore.dev"
+  #api_url: "https://api.xcorehub.dev"
+  api_key: null
+  timeout: 10
+  cache_ttl: 300
 
 # ── Observabilité ─────────────────────────────────────────────
 observability:
