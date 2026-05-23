@@ -159,6 +159,7 @@ class CacheConfig:
 class SchedulerConfig:
     enabled: bool = True
     backend: str = "memory"  # memory | redis | database
+    url: str = "redis://localhost:6379/0"
     timezone: str = "UTC"
     jobs: list[dict[str, Any]] = field(default_factory=list)
 
@@ -330,8 +331,3 @@ class XcoreConfig:
     raw: dict[str, Any] = field(default_factory=dict)
     middleware: list[MiddlewareConfig] = field(default_factory=list)
     cors: CORSConfig = field(default_factory=CORSConfig)
-    cors_allow_credentials: bool = True
-    cors_max_age: int = 3600
-    cors_expose_headers: list[str] = field(default_factory=list)
-    cors_redirect_status: int = 307
-    cors_preflight_continue: bool = False

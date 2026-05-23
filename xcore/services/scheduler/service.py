@@ -73,9 +73,17 @@ class SchedulerService(BaseService):
         # Backend Redis si configuré
         if self._config.backend == "redis":
             try:
+                from urllib.parse import urlparse
+
                 from apscheduler.jobstores.redis import RedisJobStore
 
-                jobstores["default"] = RedisJobStore()
+                parsed = urlparse(self._config.url)
+                jobstores["default"] = RedisJobStore(
+                    host=parsed.hostname or "localhost",
+                    port=parsed.port or 6379,
+                    db=int(parsed.path.lstrip("/") or 0),
+                    password=parsed.password or None,
+                )
             except ImportError:
                 logger.warning("apscheduler[redis] not install — fallback memory")
 
