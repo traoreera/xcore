@@ -1,248 +1,97 @@
-# XCore Framework
+---
+title: Introduction
+description: Overview of the Xcore Framework — the plugin-first orchestration engine for FastAPI.
+icon: material/presentation-play
+---
 
-**XCore** is a production-grade Python framework for building modular, extensible, and secure applications. Built on **FastAPI** and **asyncio**, it follows a **Modular Monolith** architecture where each feature lives in an isolated plugin with its own lifecycle, permissions, and resource limits.
+# Introduction
+
+**Xcore v2.1.2** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
+
+At its core, Xcore follows a **"minimal core"** philosophy: the framework provides the infrastructure (runtime, services, security, observability), while all business logic and features reside in independent, hot-reloadable **plugins**.
+
+### Why Xcore?
+
+Modern backend development often faces the trade-off between the speed of a monolith and the scalability of microservices. Xcore offers a third path: **Modular Monoliths with Plugin Isolation**.
+
+- **Extensibility**: Add or update features without touching the core system.
+- **Security**: Run third-party or experimental code in a sandboxed subprocess with strict resource limits and AST-based scanning.
+- **Integrated Services**: Native support for SQL, NoSQL, Redis, Caching, and Scheduling, all injected automatically into your plugins.
+- **Production Ready**: Built-in multi-tenancy, structured logging, OpenTelemetry tracing, and Prometheus metrics.
 
 ---
 
-<div class="grid cards" markdown>
+### Core Architecture
 
--   :material-rocket-launch:{ .lg .middle } **High Performance**
-
-    Built on FastAPI and asyncio for maximum throughput with minimal overhead.
-
--   :material-shield-lock:{ .lg .middle } **Security by Design**
-
-    Multi-layer sandbox, AST validation, per-plugin capability grants, and IPC access control.
-
--   :material-puzzle-outline:{ .lg .middle } **Plugin-First Architecture**
-
-    Everything is a plugin. Load, unload, and hot-reload without downtime.
-
--   :material-database:{ .lg .middle } **Integrated Services**
-
-    SQL/NoSQL databases, Redis cache, APScheduler, and Celery task queues — all pre-wired.
-
--   :material-lightning-bolt:{ .lg .middle } **Events & Hooks**
-
-    Async event bus for loose coupling between components.
-
--   :material-office-building:{ .lg .middle } **Native Multi-Tenancy**
-
-    Automatic cache, database, and scheduler isolation per tenant with one config flag.
-
-</div>
-
----
-
-## Why XCore?
-
-Modern applications oscillate between two extremes: **rigid monoliths** that are hard to maintain and **distributed microservices** that are expensive to operate. XCore offers a third path: the **Modular Monolith**.
-
-```mermaid
-flowchart LR
-    subgraph Spectrum["Architecture Spectrum"]
-        direction LR
-        M[Rigid<br/>Monolith] <--> MM[**Modular Monolith**<br/>XCore] <--> MS[Microservices<br/>Complexity]
-    end
-    style MM fill:#4CAF50,color:#fff,stroke:#2E7D32
-    style M fill:#FFC107,color:#000
-    style MS fill:#FFC107,color:#000
-```
-
-| Aspect | Classic Monolith | XCore (Modular Monolith) | Microservices |
-|:-------|:----------------|:------------------------|:-------------|
-| **Deployment** | Single, risky | Single, plugins isolated | Multiple, complex |
-| **Isolation** | None | Sandbox per plugin | Process / network |
-| **Scalability** | Vertical | Per-plugin via Celery | Horizontal |
-| **Complexity** | Low | Medium | High |
-| **Dev velocity** | Fast | Fast | Slow |
-
----
-
-## Architecture at a Glance
+Xcore acts as the orchestrator between your FastAPI application, shared services, and your plugin ecosystem.
 
 ```mermaid
 flowchart TB
     subgraph App["FastAPI Application"]
-        FA[HTTP Routes]
+        F[FastAPI Instance]
     end
 
-    subgraph Kernel["XCore Kernel"]
-        direction TB
-        X[Xcore Engine<br/>Entry point]
-        SC[ServiceContainer<br/>DB · Cache · Scheduler · Worker]
-        PS[PluginSupervisor<br/>Lifecycle]
-        EB[EventBus<br/>Async messaging]
-        PE[PermissionEngine<br/>Access control]
-        TM[TenantMiddleware<br/>Multi-tenancy]
+    subgraph Core["Xcore Kernel"]
+        X[Orchestrator]
+        PS[Plugin Supervisor]
+        SC[Service Container]
+        EB[Event Bus]
+        HM[Hook Manager]
     end
 
     subgraph Plugins["Plugin Ecosystem"]
-        direction LR
-        TP[Trusted Plugins<br/>Main process]
-        SP[Sandboxed Plugins<br/>Isolated OS process]
+        T[Trusted Plugins]
+        S[Sandboxed Plugins]
     end
 
-    subgraph Services["Shared Services"]
-        DB[(Database<br/>SQL / NoSQL)]
-        CACHE[(Cache<br/>Redis / Memory)]
-        SCHED[Scheduler<br/>APScheduler]
-        WORKER[Worker<br/>Celery]
-    end
-
-    FA --> X
-    X --> SC & PS & EB & PE & TM
-    SC --> Services
-    PS --> TP & SP
-    EB -.->|Events| TP & SP
-    PE -.->|Grants| PS
-
-    style Kernel fill:#E3F2FD,stroke:#1976D2
-    style Plugins fill:#FFF3E0,stroke:#F57C00
-    style Services fill:#E8F5E9,stroke:#388E3C
+    F <--> X
+    X --> PS
+    X --> SC
+    X --> EB
+    X --> HM
+    PS --> T
+    PS --> S
+    SC --> DB[(Database)]
+    SC --> RD[(Redis)]
 ```
+
+### Key Components
+
+`Xcore` Orchestrator
+:   The main entry point. It manages the boot sequence, initializes services, and attaches the plugin management API to your FastAPI application.
+
+Plugin Supervisor
+:   Handles the lifecycle (load, boot, shutdown, reload) of all plugins. It ensures that dependencies are resolved in the correct order using a Directed Acyclic Graph (DAG).
+
+Service Container
+:   A unified registry for shared resources like Databases (SQLAlchemy, MongoDB), Caching (Redis), and background task workers.
+
+Execution Modes
+:   **Trusted Mode**: Plugins run in the main process with full access to the system. Recommended for core features.
+    **Sandboxed Mode**: Plugins run in isolated subprocesses with restricted imports, filesystem guards, and CPU/Memory limits. Ideal for untrusted or experimental code.
 
 ---
 
-## Boot Sequence
+### Target Audience
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant App as FastAPI
-    participant Kernel as XCore Engine
-    participant Svc as Services
-    participant Loader as PluginLoader
-    participant P as Plugins
+**Application Developers**
+:   Use Xcore to build stable, scalable backends by composing existing plugins and managing shared services.
 
-    Dev->>App: Start application
-    App->>Kernel: boot(app)
-
-    Note over Kernel: 1. Config (integration.yaml + env)
-    Note over Kernel: 2. Services
-    Kernel->>Svc: Init DB, Cache, Scheduler, Worker
-    Svc-->>Kernel: Ready
-
-    Note over Kernel: 3. Plugins
-    Kernel->>Loader: Discover plugins
-    Loader->>Loader: Resolve dependency DAG
-
-    loop Wave-based loading
-        Loader->>P: Load (Trusted / Sandboxed)
-        P-->>Loader: Ready
-    end
-
-    Kernel->>App: Mount plugin routes
-    App-->>Dev: Server ready!
-```
+**Plugin Developers**
+:   Create modular extensions that can be shared across multiple Xcore projects. You can choose to be **Trusted** (high performance, full access) or **Sandboxed** (safe, restricted).
 
 ---
 
-## Quick Start
+### See Also
 
-### 1. Install
+[Installation & Setup](./installation.md)
+:   Get Xcore installed in your environment.
 
-```bash
-git clone https://github.com/traoreera/xcore
-cd xcore
-poetry install
-```
+[Quickstart](./quickstart.md)
+:   Get Xcore up and running in less than 5 minutes.
 
-### 2. Configure — `integration.yaml`
+[Core Architecture](../kernel/kernel.md)
+:   Deep dive into the Kernel, Supervisor, and Lifecycle management.
 
-```yaml
-app:
-  name: "my-app"
-  debug: true
-  secret_key: "change-me-in-production"
-  plugin_prefix: "/app"
-
-plugins:
-  directory: ./plugins
-  secret_key: "change-me-in-production"
-
-services:
-  databases:
-    db:
-      type: sqlasync
-      url: sqlite+aiosqlite:///./app.db
-  cache:
-    backend: memory
-    ttl: 300
-```
-
-### 3. Entry point — `main.py`
-
-```python
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from xcore import Xcore
-
-xcore = Xcore(config_path="integration.yaml")
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await xcore.boot(app)
-    yield
-    await xcore.shutdown()
-
-app = FastAPI(**xcore._config.app.fastapi.to_dict(), lifespan=lifespan)
-xcore.setup(app)   # register middlewares before startup
-```
-
-### 4. First plugin
-
-```
-plugins/hello/
-├── plugin.yaml
-└── src/main.py
-```
-
-```yaml
-# plugin.yaml
-name: hello
-version: "1.0.0"
-execution_mode: trusted
-entry_point: src/main.py
-```
-
-```python
-# src/main.py
-from xcore import TrustedBase
-from xcore.sdk.decorators import action
-from xcore.sdk.mixin.ipc import AutoDispatchMixin
-from xcore.kernel.api.contract import ok
-
-class Plugin(AutoDispatchMixin, TrustedBase):
-
-    @action("ping")
-    async def ping(self, payload: dict) -> dict:
-        return ok(pong=True)
-```
-
-### 5. Run
-
-```bash
-poetry run uvicorn main:app --reload
-poetry run xcore plugin list
-```
-
----
-
-## Documentation Map
-
-| Section | Description |
-|:--------|:-----------|
-| [Installation](getting-started/installation.md) | Set up your development environment |
-| [Quick Start](getting-started/quickstart.md) | Build your first plugin in 5 minutes |
-| [Creating a Plugin](guides/creating-plugins.md) | Full plugin development guide |
-| [Plugin Manifest](guides/plugin-manifest.md) | Complete `plugin.yaml` reference |
-| [Services](guides/services.md) | DB, Cache, Scheduler, and Celery |
-| [Multi-Tenancy](guides/tenancy.md) | Tenant isolation across all services |
-| [Middlewares](guides/middlewares.md) | ASGI middleware pipeline |
-| [Events & Hooks](guides/events.md) | Async messaging between components |
-| [Security](guides/security.md) | Sandbox, plugin signing, IPC control |
-| [SDK Reference](reference/sdk.md) | `@action`, `@schema`, `AutoDispatchMixin` |
-| [Configuration](reference/configuration.md) | All `integration.yaml` options |
-| [CLI](reference/cli.md) | Command-line interface |
-| [Architecture](architecture/overview.md) | Internals deep dive |
+[Plugin Development](../plugins/plugin-anatomy.md)
+:   Learn how to build your first plugin.

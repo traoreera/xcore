@@ -257,6 +257,13 @@ class ConfigLoader:
                 echo=cfg.get("echo", False),
                 database=cfg.get("database"),
                 max_connections=cfg.get("max_connections"),
+                pool_pre_ping=cfg.get("pool_pre_ping", True),
+                pool_recycle=cfg.get("pool_recycle", 1800),
+                pool_timeout=cfg.get("pool_timeout", 30),
+                pool_reset_on_return=cfg.get("pool_reset_on_return", "rollback"),
+                connect_args=cfg.get("connect_args", {}),
+                isolation_level=cfg.get("isolation_level"),
+                execution_options=cfg.get("execution_options", {}),
             )
             for name, cfg in d.get("databases", {}).items()
         }

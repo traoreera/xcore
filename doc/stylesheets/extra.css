@@ -1,0 +1,57 @@
+:root {
+  /* Mascot Primary Color: #00C896 */
+  --md-primary-fg-color: #00C896;
+  --md-primary-fg-color--light: #33d3ab;
+  --md-primary-fg-color--dark: #00a07a;
+
+  --md-accent-fg-color: #00C896;
+  --md-accent-fg-color--transparent: rgba(0, 200, 150, 0.1);
+}
+
+/* Custom header branding */
+.md-header {
+  background-color: var(--md-primary-fg-color);
+}
+
+/* Adjusting tabs and navigation active states */
+.md-tabs {
+  background-color: var(--md-primary-fg-color);
+}
+
+.md-nav__link--active {
+  color: var(--md-primary-fg-color) !important;
+}
+
+/* Admonition border colors */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--md-primary-fg-color);
+}
+
+.md-typeset .admonition.tip > .admonition-title,
+.md-typeset .admonition.tip > summary,
+.md-typeset details.tip > .admonition-title,
+.md-typeset details.tip > summary {
+  background-color: var(--md-accent-fg-color--transparent);
+  border-left-color: var(--md-primary-fg-color);
+}
+
+/* Buttons */
+.md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+}
+
+.md-button--primary:hover {
+  background-color: var(--md-primary-fg-color--dark);
+  border-color: var(--md-primary-fg-color--dark);
+}
+
+/* Code highlighting tweak for better contrast with the green */
+.md-typeset code {
+  background-color: #f8f8f8;
+}
+
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: #1e2124;
+}
