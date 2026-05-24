@@ -1,8 +1,5 @@
 """
-_utils.py — Normalisation des connect_args selon le driver SQL.
-
-Chaque driver DBAPI a ses propres paramètres de connexion acceptés.
-Passer un argument inconnu lève une TypeError au connect().
+_utils.py — Normalisation des connect_args et isolation_level selon le driver SQL.
 """
 
 from __future__ import annotations
@@ -11,9 +8,7 @@ import logging
 
 logger = logging.getLogger("xcore.services.database")
 
-# Paramètres valides par driver (ceux qu'on expose dans xcore.yaml)
 _VALID_CONNECT_ARGS: dict[str, set[str]] = {
-    # aiomysql / pymysql / mysqlclient
     "aiomysql": {
         "connect_timeout",
         "charset",
@@ -35,7 +30,6 @@ _VALID_CONNECT_ARGS: dict[str, set[str]] = {
         "ssl_cert",
         "ssl_key",
     },
-    # asyncpg / psycopg2 / psycopg3
     "asyncpg": {
         "timeout",
         "command_timeout",
@@ -51,41 +45,92 @@ _VALID_CONNECT_ARGS: dict[str, set[str]] = {
         "sslrootcert",
         "application_name",
     },
-    "psycopg": {  # psycopg3
+    "psycopg": {
         "connect_timeout",
         "options",
         "sslmode",
         "application_name",
     },
-    # aiosqlite / sqlite
     "aiosqlite": {"timeout", "check_same_thread", "uri"},
     "pysqlite": {"timeout", "check_same_thread", "uri"},
 }
 
+# Isolation levels valides par famille de BDD
+_VALID_ISOLATION_LEVELS: dict[str, set[str]] = {
+    "sqlite": {"READ UNCOMMITTED", "SERIALIZABLE", "AUTOCOMMIT"},
+    "mysql": {
+        "READ UNCOMMITTED",
+        "READ COMMITTED",
+        "REPEATABLE READ",
+        "SERIALIZABLE",
+        "AUTOCOMMIT",
+    },
+    "postgresql": {
+        "READ UNCOMMITTED",
+        "READ COMMITTED",
+        "REPEATABLE READ",
+        "SERIALIZABLE",
+        "AUTOCOMMIT",
+    },
+}
 
-def _detect_driver(url: str) -> str:
-    """Détecte le driver depuis l'URL SQLAlchemy."""
+
+def detect_driver(url: str) -> str:
+    """
+    Détecte le driver depuis l'URL SQLAlchemy.
+    Ex: 'mysql+aiomysql://...' → 'aiomysql'
+        'sqlite+aiosqlite://...' → 'aiosqlite'
+        'postgresql+asyncpg://...' → 'asyncpg'
+    """
     url_lower = url.lower()
-    for driver in _VALID_CONNECT_ARGS:
+
+    # Ordre important : tester les drivers spécifiques avant les génériques
+    driver_tokens = [
+        "aiomysql",
+        "pymysql",
+        "asyncpg",
+        "aiosqlite",
+        "psycopg2",
+        "psycopg",
+        "pysqlite",
+        "mysqlconnector",
+        "cymysql",
+    ]
+    for driver in driver_tokens:
         if driver in url_lower:
             return driver
-    # Fallback : on ne filtre pas
+
+    return ""
+
+
+def detect_db_family(url: str) -> str:
+    """
+    Détecte la famille de BDD pour la validation de l'isolation_level.
+    Ex: 'mysql+aiomysql://...' → 'mysql'
+    """
+    url_lower = url.lower()
+    if url_lower.startswith("sqlite"):
+        return "sqlite"
+    if url_lower.startswith("mysql") or url_lower.startswith("mariadb"):
+        return "mysql"
+    if url_lower.startswith("postgresql") or url_lower.startswith("postgres"):
+        return "postgresql"
     return ""
 
 
 def sanitize_connect_args(url: str, connect_args: dict) -> dict:
     """
-    Filtre connect_args pour ne garder que les clés valides pour le driver.
-    Log un warning pour chaque clé ignorée.
+    Filtre connect_args pour ne garder que les clés valides pour le driver détecté.
+    Log un warning pour chaque clé ignorée, sans planter.
     """
     if not connect_args:
         return {}
 
-    driver = _detect_driver(url)
+    driver = detect_driver(url)
     valid = _VALID_CONNECT_ARGS.get(driver)
 
-    if valid is None:
-        # Driver inconnu → on passe tout et on laisse le driver lever l'erreur
+    if not valid:
+        # Driver inconnu → on passe tout tel quel
         return connect_args
 
     filtered = {}
@@ -99,3 +144,28 @@ def sanitize_connect_args(url: str, connect_args: dict) -> dict:
             )
 
     return filtered
+
+
+def sanitize_isolation_level(url: str, isolation_level: str | None) -> str | None:
+    """
+    Valide l'isolation_level selon la famille de BDD.
+    Retourne None (ignoré silencieusement) si incompatible.
+    """
+    if not isolation_level:
+        return None
+
+    family = detect_db_family(url)
+    valid = _VALID_ISOLATION_LEVELS.get(family)
+
+    if not valid:
+        return isolation_level  # famille inconnue → on laisse passer
+
+    level_upper = isolation_level.upper()
+    if level_upper not in valid:
+        logger.warning(
+            f"isolation_level '{isolation_level}' ignoré pour '{family}' "
+            f"(non supporté). Niveaux valides : {sorted(valid)}"
+        )
+        return None
+
+    return level_upper

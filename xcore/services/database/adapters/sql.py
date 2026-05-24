@@ -8,6 +8,8 @@ import logging
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Generator
 
+from ._utils import sanitize_connect_args, sanitize_isolation_level
+
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
 
@@ -55,8 +57,6 @@ class SQLAdapter:
         except ImportError as e:
             raise ImportError("sqlalchemy non installé — pip install sqlalchemy") from e
 
-        from ._utils import sanitize_connect_args  # ← import local
-
         engine_kwargs: dict[str, Any] = {
             "echo": self._echo,
             "pool_pre_ping": self._pool_pre_ping,
@@ -75,8 +75,9 @@ class SQLAdapter:
             if sanitized:
                 engine_kwargs["connect_args"] = sanitized
 
-        if self._isolation_level:
-            engine_kwargs["isolation_level"] = self._isolation_level
+        safe_isolation = sanitize_isolation_level(self.url, self._isolation_level)
+        if safe_isolation:
+            engine_kwargs["isolation_level"] = safe_isolation
 
         self._engine = create_engine(self.url, **engine_kwargs)
 
