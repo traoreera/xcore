@@ -41,9 +41,6 @@ node_modules/
 docs/
 test.py
 
-.claude
-
-CLAUDE.md
 _build
 site
 plugins

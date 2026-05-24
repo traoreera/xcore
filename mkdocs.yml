@@ -1,148 +1,163 @@
-site_name: XCore Framework
-site_description: Framework d'orchestration plugin-first sur FastAPI — v2.1.3
-site_author: Eliezer Traore
-site_url: https://xcore.readthedocs.io
-
+site_name: Xcore Framework
+site_description: Plugin-first backend framework built on FastAPI
+site_url: https://docs.xcore.dev
+repo_url: https://github.com/traoreera/xcore
+repo_name: traoreera/xcore
+edit_uri: edit/main/docs/
 docs_dir: doc
 site_dir: docs
-
 theme:
   name: material
+  custom_dir: docs/overrides
+  language: en
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
+    - scheme: default
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: indigo
-      accent: indigo
+    - scheme: slate
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
-    - navigation.top
+    - navigation.path
     - navigation.indexes
+    - navigation.top
     - navigation.footer
+    - toc.follow
+    - toc.integrate
     - search.suggest
     - search.highlight
     - search.share
     - content.code.copy
+    - content.code.select
     - content.code.annotate
     - content.tabs.link
-    - toc.follow
+    - content.tooltips
+    - content.action.edit
+
+extra_css:
+  - stylesheets/extra.css
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/traoreera/xcore
-  version:
-    provider: mike
-  analytics:
-    feedback:
-      title: Cette page vous a-t-elle été utile ?
-      ratings:
-        - icon: material/thumb-up-outline
-          name: Oui
-          data: 1
-          note: Merci pour votre retour !
-        - icon: material/thumb-down-outline
-          name: Non
-          data: 0
-          note: Merci — nous allons améliorer cette page.
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/xcore/
+    - icon: fontawesome/solid/paper-plane
+      link: https://t.me/xcore_framework
+
+copyright: |
+  Copyright &copy; 2026 XCore Team &mdash;
+  Built with <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">Material for MkDocs</a>
+
+nav:
+  - Introduction: index.md
+  - Getting Started:
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+  - Core Architecture:
+      - Kernel & Lifecycle: kernel/kernel.md
+      - Execution Modes: kernel/execution-modes.md
+      - Plugin Context: kernel/context.md
+  - Plugin Development:
+      - Development Guide: plugins/development-guide.md
+      - Plugin Anatomy: plugins/plugin-anatomy.md
+      - Trusted Plugins: plugins/trusted-plugins.md
+      - Sandboxed Plugins: plugins/sandboxed-plugins.md
+      - Events & Hooks: plugins/events-hooks.md
+      - Permissions & Policies: plugins/permissions.md
+  - Services:
+      - Overview: services/services.md
+      - Database: services/database.md
+      - Cache: services/cache.md
+      - Scheduler: services/scheduler.md
+      - XWorker: services/xworker.md
+      - Custom Services: services/custom-services.md
+  - Advanced Features:
+      - Multi-Tenancy: advanced/multi-tenancy.md
+      - Plugin Registry: advanced/registry.md
+      - Middleware Pipeline: advanced/middleware.md
+      - Middleware Internals: advanced/middleware-internals.md
+  - Reference:
+      - Xcore Configuration: reference/xcore-config.md
+  - Examples:
+      - Overview: examples/overview.md
+      - User Management: examples/auth-example.md
+      - Secure Sandbox: examples/sandbox-example.md
+      - Multi-Tenant Analytics: examples/tenancy-example.md
+      - Scheduled Syncer: examples/scheduler-example.md
+  - Security & Sandboxing: security/security.md
+  - Observability: observability/observability.md
+  - CLI Reference: cli/cli.md
+  - Best Practices: best-practices.md
 
 plugins:
-  - search
-  - minify:
-      minify_html: true
+  - search:
+      lang: en
+  - autorefs
   - mkdocstrings:
       handlers:
         python:
-          paths: [..]
           options:
-            docstring_style: google
             show_source: true
+            show_root_heading: true
+            show_signature_annotations: true
+            separate_signature: true
+            merge_init_into_class: true
 
 markdown_extensions:
+  - abbr
   - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  - tables
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.critic
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-  - pymdownx.highlight:
-      anchor_linenums: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
+      combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
-  - toc:
-      permalink: true
-
-nav:
-  - Home: index.md
-
-  - Getting Started:
-      - Installation: getting-started/installation.md
-      - Quick Start: getting-started/quickstart.md
-
-  - Guides:
-      - Creating a Plugin: guides/creating-plugins.md
-      - Plugin Manifest: guides/plugin-manifest.md
-      - Multi-Tenancy: guides/tenancy.md
-      - Services (DB, Cache, Scheduler, Celery): guides/services.md
-      - Middlewares: guides/middlewares.md
-      - Events & Hooks: guides/events.md
-      - Security: guides/security.md
-      - Marketplace: guides/marketplace.md
-      - Monitoring: guides/monitoring.md
-      - Scaling: guides/scaling.md
-      - Troubleshooting: guides/troubleshooting.md
-
-  - Reference:
-      - SDK: reference/sdk.md
-      - Configuration (integration.yaml): reference/configuration.md
-      - CLI: reference/cli.md
-      - API: reference/api.md
-      - Auto-generated API: api/README.md
-      - Benchmarks: reference/benchmarks.md
-
-  - Architecture:
-      - Overview: architecture/overview.md
-      - Design Decisions: architecture/decisions.md
-
-  - Deployment:
-      - Guide: deployment/guide.md
-
-  - Development:
-      - Testing: development/testing.md
-      - Contributing: development/contributing.md
-
-  - Examples:
-      - Overview: examples/README.md
-      - Basic Plugin: examples/basic-plugin.md
-      - Complete Plugin: examples/complete-plugin.md
-      - Trusted Plugin: examples/trusted-plugin.md
-      - Sandboxed Plugin: examples/sandboxed-plugin.md
-
-  - Changelog: ./CHANGELOG.md
-
-  - Versions: versions.md
-
-  - Vision: vision.md
-
-copyright: >
-  Copyright &copy; 2026 <a href="https://github.com/traoreera">Eliezer Traore</a>
-  — XCore Framework v2.1.3 — Licence MIT
+  - pymdownx.tilde
