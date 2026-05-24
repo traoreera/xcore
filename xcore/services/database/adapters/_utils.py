@@ -8,6 +8,20 @@ import logging
 
 logger = logging.getLogger("xcore.services.database")
 
+
+# Drivers pour lesquels pool_pre_ping est incompatible
+# → on désactive et on compense avec pool_recycle + event listener
+_PRE_PING_BROKEN = {"aiomysql", "cymysql"}
+
+
+def is_pre_ping_safe(url: str) -> bool:
+    """
+    pool_pre_ping=True est incompatible avec aiomysql (ping() signature différente).
+    Pour ces drivers on retourne False → compensation via pool_recycle + event.
+    """
+    return detect_driver(url) not in _PRE_PING_BROKEN
+
+
 _VALID_CONNECT_ARGS: dict[str, set[str]] = {
     "aiomysql": {
         "connect_timeout",
