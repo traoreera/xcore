@@ -103,8 +103,33 @@ class DatabaseConfig:
     pool_size: int = 5
     max_overflow: int = 10
     echo: bool = False
-    database: str | None = None  # MongoDB
-    max_connections: int | None = None  # Redis
+    database: str | None = None
+    max_connections: int | None = None
+
+    # ── Pool & fiabilité ──────────────────────────────────────
+    pool_pre_ping: bool = True
+    # Recycle la connexion avant que MySQL/MariaDB ne la coupe
+    # Règle : pool_recycle < wait_timeout BDD (SHOW VARIABLES LIKE 'wait_timeout')
+    pool_recycle: int = 1800
+    # Timeout d'acquisition d'une connexion depuis le pool
+    pool_timeout: int = 30
+    # Que faire quand une connexion retourne au pool
+    # "rollback" (défaut, sûr) | "commit" | "none" (perf max, risqué)
+    pool_reset_on_return: str = "rollback"
+
+    # ── Timeouts driver-level ─────────────────────────────────
+    # Passés directement au driver (aiomysql, asyncpg, psycopg2…)
+    # Exemple MySQL : {"connect_timeout": 10, "read_timeout": 30, "write_timeout": 30}
+    # Exemple PostgreSQL asyncpg : {"command_timeout": 30, "timeout": 10}
+    connect_args: dict = field(default_factory=dict)
+
+    # ── Isolation & comportement transactionnel ───────────────
+    # "READ COMMITTED" | "REPEATABLE READ" | "SERIALIZABLE" | "AUTOCOMMIT"
+    isolation_level: str | None = None
+
+    # ── Options d'exécution SQLAlchemy ────────────────────────
+    # Ex: {"compiled_cache": None} pour désactiver le cache de requêtes
+    execution_options: dict = field(default_factory=dict)
 
 
 @dataclass
