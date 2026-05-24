@@ -8,6 +8,8 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
+from ._utils import detect_driver, sanitize_connect_args, sanitize_isolation_level
+
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
 
@@ -15,23 +17,6 @@ logger = logging.getLogger("xcore.services.database.async_sql")
 
 
 class AsyncSQLAdapter:
-    """
-    Adaptateur SQLAlchemy async — optimisé production.
-
-    Paramètres pool configurables depuis xcore.yaml :
-        pool_pre_ping        → détecte les connexions mortes avant usage (crucial MySQL)
-        pool_recycle         → renouvelle avant le wait_timeout serveur
-        pool_timeout         → timeout d'acquisition depuis le pool
-        pool_reset_on_return → comportement au retour au pool (rollback/commit/none)
-        connect_args         → timeouts driver-level (connect_timeout, read_timeout…)
-        isolation_level      → niveau d'isolation transactionnel
-        execution_options    → options SQLAlchemy par session
-
-    Usage:
-        async with adapter.session() as session:
-            result = await session.execute(text("SELECT * FROM users"))
-    """
-
     def __init__(self, name: str, cfg: "DatabaseConfig") -> None:
         self.name = name
         self.url = cfg.url
@@ -55,8 +40,6 @@ class AsyncSQLAdapter:
                 "sqlalchemy[asyncio] non installé — pip install sqlalchemy[asyncio]"
             ) from e
 
-        from ._utils import sanitize_connect_args  # ← import local
-
         engine_kwargs: dict[str, Any] = {
             "echo": self._echo,
             "pool_pre_ping": self._pool_pre_ping,
@@ -69,12 +52,14 @@ class AsyncSQLAdapter:
             if sanitized:
                 engine_kwargs["connect_args"] = sanitized
 
-        if self._isolation_level:
-            engine_kwargs["isolation_level"] = self._isolation_level
+        safe_isolation = sanitize_isolation_level(self.url, self._isolation_level)
+        if safe_isolation:
+            engine_kwargs["isolation_level"] = safe_isolation
 
         if self.url.startswith("sqlite"):
             engine_kwargs.pop("pool_timeout", None)
             engine_kwargs.pop("pool_recycle", None)
+            engine_kwargs.pop("pool_pre_ping", None)
 
         self._engine = create_async_engine(self.url, **engine_kwargs)
 
@@ -90,9 +75,10 @@ class AsyncSQLAdapter:
         async with self._engine.connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
+        driver = detect_driver(self.url)
         logger.info(
             f"[{self.name}] AsyncSQL connecté "
-            f"(driver={_detect_driver(self.url)}, pre_ping={self._pool_pre_ping}, "
+            f"(driver={driver}, pre_ping={self._pool_pre_ping}, "
             f"recycle={self._pool_recycle}s)"
         )
 
@@ -100,6 +86,8 @@ class AsyncSQLAdapter:
         if self._engine:
             await self._engine.dispose()
             self._engine = None
+            self._AsyncSession = None
+            logger.info(f"[{self.name}] AsyncSQL déconnecté")
 
     @asynccontextmanager
     async def session(self) -> AsyncGenerator:
@@ -112,8 +100,6 @@ class AsyncSQLAdapter:
                 yield sess
                 await sess.commit()
             except Exception:
-                # Le rollback peut échouer si la connexion est morte (MySQL wait_timeout).
-                # On l'absorbe pour laisser remonter l'exception originale proprement.
                 try:
                     await sess.rollback()
                 except Exception as rollback_err:
