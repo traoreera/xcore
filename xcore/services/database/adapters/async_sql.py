@@ -55,6 +55,8 @@ class AsyncSQLAdapter:
                 "sqlalchemy[asyncio] non installé — pip install sqlalchemy[asyncio]"
             ) from e
 
+        from ._utils import sanitize_connect_args  # ← import local
+
         engine_kwargs: dict[str, Any] = {
             "echo": self._echo,
             "pool_pre_ping": self._pool_pre_ping,
@@ -62,45 +64,36 @@ class AsyncSQLAdapter:
             "pool_timeout": self._pool_timeout,
         }
 
-        # connect_args : timeouts driver-level
         if self._connect_args:
-            engine_kwargs["connect_args"] = self._connect_args
+            sanitized = sanitize_connect_args(self.url, self._connect_args)
+            if sanitized:
+                engine_kwargs["connect_args"] = sanitized
 
-        # isolation_level au niveau moteur si spécifié
         if self._isolation_level:
             engine_kwargs["isolation_level"] = self._isolation_level
 
-        # SQLite n'a pas de pool configurable (utilise StaticPool)
         if self.url.startswith("sqlite"):
             engine_kwargs.pop("pool_timeout", None)
             engine_kwargs.pop("pool_recycle", None)
 
         self._engine = create_async_engine(self.url, **engine_kwargs)
 
-        # pool_reset_on_return sur le pool sous-jacent
         if not self.url.startswith("sqlite"):
             self._engine.sync_engine.pool._reset_on_return = self._pool_reset_on_return
 
-        session_kwargs: dict[str, Any] = {
-            "bind": self._engine,
-            "class_": AsyncSession,
-            "expire_on_commit": False,
-        }
-        if self._execution_options:
-            session_kwargs["sync_session_class"] = None  # laisse SQLAlchemy gérer
+        self._AsyncSession = sessionmaker(
+            bind=self._engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
 
-        self._AsyncSession = sessionmaker(**session_kwargs)
-
-        # Vérification de la connexion au démarrage
         async with self._engine.connect() as conn:
-            if self._execution_options:
-                await conn.execution_options(**self._execution_options)
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
         logger.info(
             f"[{self.name}] AsyncSQL connecté "
-            f"(pre_ping={self._pool_pre_ping}, recycle={self._pool_recycle}s, "
-            f"reset={self._pool_reset_on_return})"
+            f"(driver={_detect_driver(self.url)}, pre_ping={self._pool_pre_ping}, "
+            f"recycle={self._pool_recycle}s)"
         )
 
     async def disconnect(self) -> None:

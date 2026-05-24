@@ -50,10 +50,12 @@ class SQLAdapter:
 
     async def connect(self) -> None:
         try:
-            from sqlalchemy import create_engine, event
+            from sqlalchemy import create_engine
             from sqlalchemy.orm import sessionmaker
         except ImportError as e:
             raise ImportError("sqlalchemy non installé — pip install sqlalchemy") from e
+
+        from ._utils import sanitize_connect_args  # ← import local
 
         engine_kwargs: dict[str, Any] = {
             "echo": self._echo,
@@ -62,7 +64,6 @@ class SQLAdapter:
             "pool_reset_on_return": self._pool_reset_on_return,
         }
 
-        # SQLite utilise StaticPool — certains params ne s'appliquent pas
         is_sqlite = self.url.startswith("sqlite")
         if not is_sqlite:
             engine_kwargs["pool_size"] = self._pool_size
@@ -70,7 +71,9 @@ class SQLAdapter:
             engine_kwargs["pool_timeout"] = self._pool_timeout
 
         if self._connect_args:
-            engine_kwargs["connect_args"] = self._connect_args
+            sanitized = sanitize_connect_args(self.url, self._connect_args)
+            if sanitized:
+                engine_kwargs["connect_args"] = sanitized
 
         if self._isolation_level:
             engine_kwargs["isolation_level"] = self._isolation_level
@@ -82,14 +85,12 @@ class SQLAdapter:
 
         self._Session = sessionmaker(bind=self._engine)
 
-        # Test de connexion
         with self._engine.connect() as conn:
             conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
         logger.info(
             f"[{self.name}] SQL connecté "
-            f"(pre_ping={self._pool_pre_ping}, recycle={self._pool_recycle}s, "
-            f"pool_size={self._pool_size})"
+            f"(pre_ping={self._pool_pre_ping}, recycle={self._pool_recycle}s)"
         )
 
     async def disconnect(self) -> None:
