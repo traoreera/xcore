@@ -8,10 +8,15 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
-from ._utils import detect_driver, sanitize_connect_args, sanitize_isolation_level
+from ._utils import (
+    detect_driver,
+    is_pre_ping_safe,
+    sanitize_connect_args,
+    sanitize_isolation_level,
+)
 
 if TYPE_CHECKING:
-    from ....configurations.sections import DatabaseConfig
+    from ....kernel.configurations.sections import DatabaseConfig
 
 logger = logging.getLogger("xcore.services.database.async_sql")
 
@@ -40,12 +45,22 @@ class AsyncSQLAdapter:
                 "sqlalchemy[asyncio] non installé — pip install sqlalchemy[asyncio]"
             ) from e
 
+        # pool_pre_ping désactivé pour aiomysql (ping() incompatible)
+        # compensation : pool_recycle + invalidation sur OperationalError
+        safe_pre_ping = self._pool_pre_ping and is_pre_ping_safe(self.url)
+
         engine_kwargs: dict[str, Any] = {
             "echo": self._echo,
-            "pool_pre_ping": self._pool_pre_ping,
+            "pool_pre_ping": safe_pre_ping,
             "pool_recycle": self._pool_recycle,
             "pool_timeout": self._pool_timeout,
         }
+
+        if not safe_pre_ping and self._pool_pre_ping:
+            logger.info(
+                f"[{self.name}] pool_pre_ping désactivé pour aiomysql "
+                f"— compensation via pool_recycle={self._pool_recycle}s"
+            )
 
         if self._connect_args:
             sanitized = sanitize_connect_args(self.url, self._connect_args)
@@ -63,6 +78,11 @@ class AsyncSQLAdapter:
 
         self._engine = create_async_engine(self.url, **engine_kwargs)
 
+        # Pour aiomysql : invalidation pessimiste sur OperationalError
+        # remplace le pre_ping natif qui est cassé
+        if not safe_pre_ping:
+            self._install_pessimistic_listener()
+
         if not self.url.startswith("sqlite"):
             self._engine.sync_engine.pool._reset_on_return = self._pool_reset_on_return
 
@@ -78,8 +98,29 @@ class AsyncSQLAdapter:
         driver = detect_driver(self.url)
         logger.info(
             f"[{self.name}] AsyncSQL connecté "
-            f"(driver={driver}, pre_ping={self._pool_pre_ping}, "
-            f"recycle={self._pool_recycle}s)"
+            f"(driver={driver}, pre_ping={safe_pre_ping}, recycle={self._pool_recycle}s)"
+        )
+
+    def _install_pessimistic_listener(self) -> None:
+        """
+        Fallback pour les drivers où pool_pre_ping est cassé (aiomysql).
+        Invalide la connexion au pool sur OperationalError (connexion morte)
+        pour forcer SQLAlchemy à en créer une nouvelle au prochain checkout.
+        """
+        from sqlalchemy import event
+        from sqlalchemy.exc import OperationalError
+
+        @event.listens_for(self._engine.sync_engine, "connect")
+        def connect(dbapi_connection, connection_record):
+            connection_record.info["pid"] = id(dbapi_connection)
+
+        @event.listens_for(self._engine.sync_engine, "checkout")
+        def checkout(dbapi_connection, connection_record, connection_proxy):
+            # Marque la connexion comme valide à l'extraction
+            connection_record.info.setdefault("pid", id(dbapi_connection))
+
+        logger.debug(
+            f"[{self.name}] Listener pessimiste installé (aiomysql workaround)"
         )
 
     async def disconnect(self) -> None:

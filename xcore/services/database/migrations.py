@@ -46,7 +46,14 @@ class MigrationRunner:
         return cfg
 
     def _is_async(self) -> bool:
-        return "+asyncpg" in self.db_url or "+aiosqlite" in self.db_url
+        """Détecte si l'URL utilise un driver async."""
+        async_markers = (
+            "+asyncpg",
+            "+aiosqlite",
+            "+aiomysql",
+            "+asyncmy",
+        )
+        return any(marker in self.db_url for marker in async_markers)
 
     async def init(self, autogenerate: bool = True, message: str = "init") -> None:
         """
