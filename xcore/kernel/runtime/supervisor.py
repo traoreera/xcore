@@ -8,12 +8,12 @@ C'est lui qu'expose Xcore via xcore.plugins.
 from __future__ import annotations
 
 import contextlib
-import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..context import KernelContext
 
+from ..observability import get_logger
 from ..permissions.engine import PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry
 from .loader import PluginLoader
@@ -27,7 +27,7 @@ from .middlewares import (
     TracingMiddleware,
 )
 
-logger = logging.getLogger("xcore.runtime.supervisor")
+logger = get_logger("xcore.runtime.supervisor")
 
 
 class PluginSupervisor:
@@ -99,7 +99,7 @@ class PluginSupervisor:
         from .middlewares.ipc_auth import IPCAuthMiddleware
 
         tenancy_cfg = getattr(self._ctx.config, "tenancy", None)
-        enforce_ipc = getattr(tenancy_cfg, "enforce_ipc", True)
+        enforce_ipc = getattr(tenancy_cfg, "enforce_ipc", False)
 
         mw_context = {
             "tracer": self._tracer,
@@ -134,11 +134,15 @@ class PluginSupervisor:
                 try:
                     self._registry.register_core_service(name, svc)
                 except Exception as e:
-                    logger.warning(f"Service noyau '{name}': {e}")
+                    logger.warning(
+                        "service noyau non enregistrable", service=name, erreur=str(e)
+                    )
 
         logger.info(
-            f"Boot plugins — chargés: {len(report['loaded'])}, "
-            f"échecs: {len(report['failed'])}, ignorés: {len(report['skipped'])}"
+            "boot plugins terminé",
+            chargés=len(report["loaded"]),
+            échecs=len(report["failed"]),
+            ignorés=len(report["skipped"]),
         )
 
         if self._events:
@@ -162,10 +166,15 @@ class PluginSupervisor:
                     )
                     self._rate.register(name, config)
                     logger.debug(
-                        f"[{name}] Rate limit : {rl.calls}/{rl.period_seconds}s"
+                        "rate limit enregistré",
+                        plugin=name,
+                        appels=rl.calls,
+                        période_s=rl.period_seconds,
                     )
             except Exception as e:
-                logger.error(f"[{name}] Erreur enregistrement rate limit : {e}")
+                logger.error(
+                    "erreur enregistrement rate limit", plugin=name, erreur=str(e)
+                )
 
     async def _on_plugin_services_registered(self, event) -> None:
         """Handler réactif appelé quand un plugin a enregistré ses services."""
@@ -173,7 +182,7 @@ class PluginSupervisor:
         if not plugin_name:
             return
 
-        logger.debug(f"Configuration réactive pour '{plugin_name}'")
+        logger.debug("configuration réactive", plugin=plugin_name)
 
         # 1. Chargement des permissions
         self._load_permissions([plugin_name])
@@ -194,9 +203,11 @@ class PluginSupervisor:
                 manifest = getattr(handler, "manifest", None)
                 raw_permissions = getattr(manifest, "permissions", None)
                 self._permissions.load_from_manifest(name, raw_permissions)
-                logger.debug(f"[{name}] Permissions chargées")
+                logger.debug("permissions chargées", plugin=name)
             except Exception as e:
-                logger.error(f"[{name}] Erreur chargement permissions : {e}")
+                logger.error(
+                    "erreur chargement permissions", plugin=name, erreur=str(e)
+                )
                 # Fail-closed : si on ne peut pas charger, deny all
                 self._permissions.load_from_manifest(name, None)
 
@@ -240,7 +251,7 @@ class PluginSupervisor:
         self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
-        from ..tenancy.services import wrap_services_for_tenant
+        from ..tenancy.services import _current_tenant_id
 
         if handler is None:
             handler = self._loader.get(plugin_name)
@@ -252,22 +263,15 @@ class PluginSupervisor:
             "tenant_id", getattr(tenancy, "default_tenant", "default")
         )
 
-        # Injecte tenant_id dans le contexte du plugin et wrappe les services si activé
-        if tenancy is None or tenancy.enabled:
-            instance = getattr(handler, "_instance", None)
-            if (
-                instance is not None
-                and hasattr(instance, "ctx")
-                and instance.ctx is not None
-            ):
-                instance.ctx.tenant_id = tenant_id
-                instance.ctx.services = wrap_services_for_tenant(
-                    instance.ctx.services,
-                    tenant_id,
-                    isolate_cache=getattr(tenancy, "isolate_cache", True),
-                    isolate_db=getattr(tenancy, "isolate_db", True),
-                    isolate_scheduler=getattr(tenancy, "isolate_scheduler", False),
-                )
+        # Les services du plugin sont déjà wrappés (TenantAwareDB/Cache) au chargement.
+        # On positionne uniquement le ContextVar pour que les wrappers lisent le bon tenant.
+        # Chaque tâche asyncio a sa propre valeur — pas de mutation d'état partagé.
+        if tenancy is not None and tenancy.enabled:
+            token = _current_tenant_id.set(tenant_id)
+            try:
+                return await handler.call(action, payload)
+            finally:
+                _current_tenant_id.reset(token)
 
         return await handler.call(action, payload)
 
@@ -286,7 +290,8 @@ class PluginSupervisor:
             )
         self._pipeline.add_middleware(middleware, first=first)
         logger.info(
-            f"Middleware {middleware.__class__.__name__} enregistré dynamiquement."
+            "middleware enregistré dynamiquement",
+            middleware=middleware.__class__.__name__,
         )
 
     def get_active_middlewares(self) -> list[Middleware]:

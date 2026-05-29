@@ -306,6 +306,7 @@ class ConfigLoader:
         return ObservabilityConfig(
             logging=LoggingConfig(
                 level=lg.get("level", "INFO"),
+                output=lg.get("output", "text"),
                 format=lg.get(
                     "format", "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
                 ),

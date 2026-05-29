@@ -87,6 +87,7 @@ services:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
     timezone: Europe/Paris
+    pickle_protocol: 5
 
     # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
     #jobs:
@@ -107,7 +108,7 @@ services:
   # Lancer le beat     : xcore worker beat
   # Inspecter          : xcore worker inspect
   xworker:
-    enabled: true
+    enabled: false
 
     # Nom de l'app Celery (affiché dans les logs et Flower)
     name: my-app
@@ -150,20 +151,6 @@ services:
       - app.task.emails
 
   # ── Extensions ────────────────────────────────────────────────
-  extensions:
-    email:
-      module: extensions.email.service:EmailService
-      config:
-        smtp_host: smtp.gmail.com
-        smtp_port: 587
-        smtp_user: ${SMTP_USER}
-        smtp_password: ${SMTP_PASSWORD}
-        from_address: noreply@example.com
-        from_name: "Mon Application"
-        use_tls: true
-        timeout: 10
-        max_retries: 3
-        queue_size: 100
 
 marketplace:
   url: "https://api.xcorehub.dev/app/marketplace/" # "https://marketplace.xcore.dev"
@@ -180,7 +167,7 @@ observability:
     file: log/app.log
     max_bytes: 52428800 # 50 MB par fichier
     backup_count: 10 # 10 fichiers de rotation = 500 MB max
-
+    output: text
   metrics:
     enabled: true
     backend: prometheus # memory | prometheus | statsd

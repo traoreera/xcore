@@ -222,6 +222,8 @@ class PluginConfig:
 @dataclass
 class LoggingConfig:
     level: str = "INFO"
+    output: str = "text"  # "text" | "json"
+    # ignoré si output=text|json
     format: str = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     file: str | None = None
     max_bytes: int = 10_485_760

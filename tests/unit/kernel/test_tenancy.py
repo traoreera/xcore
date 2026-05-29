@@ -198,7 +198,7 @@ class TestTenantAwareScheduler:
         sched, backend = self._make()
         sched.add_job(lambda: None, id="cleanup")
         backend.add_job.assert_called_once()
-        assert backend.add_job.call_args.kwargs.get("id") == "acme:cleanup"
+        assert backend.add_job.call_args.kwargs.get("job_id") == "acme:cleanup"
 
     def test_add_job_without_id_passes_through(self):
         sched, backend = self._make()

@@ -6,7 +6,7 @@ icon: material/calendar-clock
 
 # Scheduler Service
 
-The `SchedulerService` allows you to schedule asynchronous background tasks directly within your Xcore application. It is built on top of [APScheduler](https://apscheduler.readthedocs.io/) and supports a wide range of triggers, including interval-based, date-based (one-shot), and standard cron expressions.
+The `SchedulerService` allows you to schedule asynchronous background tasks directly within your Xcore application. It is built on top of [APScheduler](https://apscheduler.readthedocs.io/) and supports interval-based, date-based (one-shot), and cron triggers.
 
 ---
 
@@ -18,73 +18,97 @@ The `SchedulerService` allows you to schedule asynchronous background tasks dire
 
 ---
 
-### Key Concepts
+### Architecture
 
-#### The Async Scheduler
-Xcore uses the `AsyncIOScheduler`, ensuring that scheduled tasks run within the framework's main event loop without blocking or requiring complex threading logic.
+#### Dispatch pattern
 
-#### Job Persistence
-- **Memory Store**: Default. Jobs are lost when the server restarts.
-- **Redis Store**: Recommended for production. Jobs are persisted in Redis, allowing them to survive restarts and even migrate between server instances.
+All jobs — including bound methods from plugins — are stored through a two-level indirection:
+
+```
+APScheduler (Redis)
+  └─ stores: "xcore.services.scheduler.service:_dispatch_job"  +  args=["job_id"]
+       └─ at runtime → looks up _JOB_REGISTRY["job_id"] → calls real callable
+```
+
+This means Redis never needs to serialize the actual callable. Bound methods, closures, and objects with database connections are all supported without pickling issues.
+
+#### Distributed lock (multi-worker)
+
+When `backend: redis`, each job execution is guarded by a Redis lock (`xcore:sched:lock:<job_id>`).
+If several workers receive the same trigger simultaneously, only the first one executes — the others skip silently.
+
+```
+Worker 1  ──┐
+Worker 2  ──┼──→  trigger fires  ──→  SET xcore:sched:lock:my_job NX EX 300
+Worker 3  ──┘                             ├─ Worker 1 → OK  → executes
+                                          ├─ Worker 2 → nil → skip
+                                          └─ Worker 3 → nil → skip
+```
 
 ---
 
 ### Practical Guide
 
-#### 1. Using Decorators
-The simplest way to schedule tasks in a Trusted plugin is using the `@scheduler` decorators.
+#### 1. SDK decorators (recommended)
+
+Use `@cron` and `@interval` from `xcore.sdk` in any plugin that inherits `ScheduledMixin` (included automatically via `AutoMixin`).
 
 ```python linenums="1"
-from xcore import TrustedBase
+from xcore.sdk import cron, interval
 
 class Plugin(TrustedBase):
-    async def on_start(self):
-        scheduler = self.get_service("scheduler")
 
-        @scheduler.interval(minutes=5)
-        async def check_updates():
-            print("Checking for updates...")
+    @cron("0 3 * * *")          # daily at 03:00
+    async def nightly_cleanup(self) -> None:
+        ...
 
-        @scheduler.cron("0 3 * * *")  # (1)!
-        async def nightly_cleanup():
-            print("Running nightly cleanup...")
+    @interval(minutes=5)
+    async def heartbeat(self) -> None:
+        ...
 ```
 
-1.  Standard 5-part cron expression (minute, hour, day, month, day_of_week).
+Jobs are registered on `on_load` and removed on `on_unload` — no manual lifecycle management needed.
 
-#### 2. Manual Job Management
-You can add and remove jobs dynamically during the application's runtime.
+#### 2. Direct API
 
 ```python linenums="1"
-async def handle(self, action, payload):
-    scheduler = self.get_service("scheduler")
+scheduler = self.ctx.get_service("scheduler")
 
-    if action == "schedule_reminder":
-        # Add a one-shot job
-        scheduler.add_job(
-            self.send_reminder,
-            trigger="date",
-            run_date=payload["time"],
-            args=[payload["user_id"]],
-            job_id=f"reminder_{payload['id']}"
-        )
-        return {"status": "ok"}
+scheduler.add_job(
+    self.send_reminder,
+    trigger="date",
+    run_date=payload["time"],
+    job_id=f"reminder_{payload['id']}",
+)
+```
+
+#### 3. One-shot date job
+
+```python linenums="1"
+from datetime import datetime, timedelta
+
+scheduler.add_job(
+    notify_user,
+    trigger="date",
+    run_date=datetime.now() + timedelta(hours=2),
+    job_id="notify_123",
+)
 ```
 
 ---
 
 ### API Reference
 
-#### `SchedulerService` Methods
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `add_job(func, trigger, ...)` | `Job` | Low-level access to the APScheduler `add_job` method. |
-| `interval(seconds, minutes, ...)` | `Decorator` | Decorator for periodic tasks. |
-| `cron(expression)` | `Decorator` | Decorator for tasks using a cron expression string. |
-| `remove_job(job_id)` | `None` | Stop and remove a scheduled task. |
-| `pause_job(job_id)` | `None` | Temporarily suspend a job. |
-| `resume_job(job_id)` | `None` | Resume a previously paused job. |
-| `jobs()` | `list[dict]` | List all currently active jobs and their next run times. |
+| Method | Return | Description |
+|--------|--------|-------------|
+| `add_job(func, trigger, ...)` | `Job` | Register a job. The callable is stored locally; only a picklable reference is sent to APScheduler. |
+| `cron(expression, job_id)` | `Decorator` | Decorator for cron-scheduled methods. |
+| `interval(**kwargs)` | `Decorator` | Decorator for fixed-interval methods. |
+| `remove_job(job_id)` | `None` | Remove the job from the scheduler and the local registry. |
+| `pause_job(job_id)` | `None` | Suspend a job without removing it. |
+| `resume_job(job_id)` | `None` | Resume a paused job. |
+| `jobs()` | `list[dict]` | List all active jobs with their next run time. |
+| `status()` | `dict` | Returns service status, job count, timezone, and `distributed_lock` flag. |
 
 ---
 
@@ -93,19 +117,39 @@ async def handle(self, action, payload):
 ```yaml linenums="1" title="xcore.yaml"
 services:
   scheduler:
-    enabled: true        # bool — Enable/disable the service. Default: true
-    backend: "memory"    # str — "memory" | "redis". Default: "memory"
-    timezone: "UTC"      # str — Standard IANA timezone. Default: "UTC"
-    url: ~               # str — Required for Redis backend. Default: null
+    enabled: true           # bool — Enable/disable the service. Default: true
+    backend: "memory"       # str — "memory" | "redis". Default: "memory"
+    timezone: "UTC"         # str — Standard IANA timezone. Default: "UTC"
+    url: ~                  # str — Required when backend is "redis"
 
-    jobs:                # (1)!
+    jobs:                   # (1)!
       - id: "global_sync"
         func: "myapp.tasks:sync_data"
         trigger: "interval"
         hours: 1
 ```
 
-1.  **Global Jobs**: You can declare static jobs that run independently of any plugin lifecycle.
+1.  **Static jobs** declared here are registered at startup, independently of any plugin.
+
+#### Job defaults (applied to every job)
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `coalesce` | `True` | Merge missed triggers into a single run instead of executing one per missed interval |
+| `max_instances` | `1` | Prevent concurrent executions of the same job on the same worker |
+| `misfire_grace_time` | `60 s` | Cancel a job if it is more than 60 seconds late |
+
+---
+
+### Scaling
+
+No extra configuration is needed. When `backend: redis`:
+
+- All workers share the same APScheduler job store via Redis.
+- Each worker registers its own jobs at startup via `ScheduledMixin.on_load`.
+- The built-in distributed lock ensures exactly-once execution per trigger.
+
+For true single-executor semantics (e.g., expensive cron jobs that must never run twice), you can lower `_LOCK_TTL` in the service or implement your own idempotency in the job function.
 
 ---
 
@@ -113,20 +157,26 @@ services:
 
 !!! danger "ImportError: APScheduler not installed"
     Xcore does not bundle APScheduler by default.
-    **Fix**: Run `pip install apscheduler` in your environment.
+    **Fix**: `pip install apscheduler`
 
 !!! warning "Async/Sync Mixup"
-    The scheduler runs in an `asyncio` loop. While it can run synchronous functions using `to_thread`, it is highly recommended to use `async def` for all your tasks.
+    All scheduled functions should be `async def`. Synchronous callables are supported but will block the event loop.
 
 !!! failure "Duplicate Job IDs"
-    If you try to add a job with an ID that already exists, the framework will overwrite the existing job if `replace_existing: true` (default) or raise a `ConflictingIdError`.
+    `add_job` defaults to `replace_existing=True`, so re-registering a job on plugin reload is safe.
+
+!!! info "Lock TTL and long-running jobs"
+    The distributed lock TTL is 300 seconds by default. If a job regularly takes longer, increase `_LOCK_TTL` in `xcore/services/scheduler/service.py` or split the job into smaller tasks.
 
 ---
 
 ### Best Practices
 
-!!! success "Manage Plugin Job Lifecycles"
-    If you add jobs dynamically in `on_start()`, ensure you assign meaningful `job_id`s so you can identify and potentially remove them later.
+!!! success "Use meaningful job IDs"
+    Always set an explicit `job_id` so you can pause, resume, or remove the job by name.
 
-!!! tip "Use Timezones"
-    Always specify a `timezone` in your configuration (e.g., `Europe/Paris`) to avoid confusion with Daylight Saving Time transitions.
+!!! tip "Always set a timezone"
+    Configure `timezone: Europe/Paris` (or your local zone) to avoid DST surprises with cron expressions.
+
+!!! tip "Keep job functions thin"
+    Delegate heavy work to a separate async service or worker. The scheduler should only orchestrate, not process.

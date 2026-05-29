@@ -42,8 +42,14 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      - name: Run lint with makefile
-        run: make lint-check
+      - name: Vérification format (black)
+        run: poetry run black --check xcore/ tests/
+
+      - name: Vérification imports (isort)
+        run: poetry run isort --check-only xcore/ tests/
+
+      - name: Linting (flake8)
+        run: poetry run flake8 xcore/ --max-line-length=120 --extend-ignore=E203,W503 --exclude=.venv
 
   # ── Type checking ──────────────────────────────────────────────────────────
   typecheck:
@@ -71,10 +77,10 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --no-interaction
-          poetry add mypy
+          poetry run pip install mypy --quiet
 
       - name: Run mypy
-        run: poetry run mypy xcore/ --ignore-missing-imports
+        run: poetry run mypy xcore/ --ignore-missing-imports --no-error-summary
 
   # ── Tests ──────────────────────────────────────────────────────────────────
   test:
@@ -119,7 +125,7 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --no-interaction
-          poetry add mypy
+          poetry run pip install mypy --quiet
 
       - name: Run tests with coverage
         env:
@@ -130,7 +136,6 @@ jobs:
         run: |
           poetry run pytest tests/ \
             --cov=xcore \
-            --cov=extensions \
             --cov-report=xml \
             --cov-report=term-missing \
             --tb=short \

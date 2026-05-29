@@ -89,6 +89,17 @@ jobs:
     if: github.event.pull_request.draft == false
     permissions:
       contents: read
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -114,6 +125,7 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: sqlite:///./test.db
+          REDIS_URL: redis://localhost:6379/0
           SECRET_KEY: pr-test-key
         run: poetry run pytest tests/ -q --tb=short -x
         # -x : stoppe au premier échec

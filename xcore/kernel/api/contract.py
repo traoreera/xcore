@@ -117,6 +117,30 @@ class TrustedBase(ABC):
         # Rétro-compatibilité v1 : expose _services directement
         self._services = ctx.services if ctx else {}
 
+    @property
+    def metrics(self):
+        """Accès au MetricsRegistry — enregistrer des métriques custom."""
+        return getattr(self.ctx, "metrics", None)
+
+    @property
+    def tracer(self):
+        """Accès au Tracer — créer des spans custom."""
+        return getattr(self.ctx, "tracer", None)
+
+    @property
+    def health(self):
+        """Accès au HealthChecker — enregistrer des health checks custom."""
+        return getattr(self.ctx, "health", None)
+
+    @property
+    def logger(self):
+        """Logger structuré xcore pour ce plugin."""
+        from ...kernel.observability import get_logger
+
+        return get_logger(
+            f"xcore.plugin.{self.ctx.name}" if self.ctx else "xcore.plugin"
+        )
+
     # xcore/kernel/api/contract.py
     # Ajouter après get_service_as(), avant get_router()
 

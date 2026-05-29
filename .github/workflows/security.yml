@@ -31,9 +31,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install deps
-        run: |
-          poetry lock
-          poetry install --no-interaction
+        run: poetry install --no-interaction
 
       - name: Audit with pip-audit
         run: |
@@ -43,7 +41,7 @@ jobs:
       - name: Check for known vulnerabilities (Safety)
         run: |
           pip install safety
-          poetry export -f requirements.txt --without-hashes | safety check --stdin || true
+          poetry export -f requirements.txt --without-hashes | safety scan --stdin || true
 
   # ── Analyse statique de sécurité (Bandit) ─────────────────────────────────
   sast:
@@ -62,7 +60,7 @@ jobs:
 
       - name: Run Bandit
         run: |
-          bandit -r xcore/ extensions/ plugins/ \
+          bandit -r xcore/ \
             -ll \
             --exclude ".venv,tests" \
             -f json -o bandit-report.json || true

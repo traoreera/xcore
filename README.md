@@ -13,7 +13,7 @@
     <img src="https://github.com/traoreera/xcore/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
   </a>
   <a href="https://github.com/traoreera/xcore/releases">
-    <img src="https://img.shields.io/badge/version-2.1.2-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-2.3.0-blue.svg" alt="Version" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />

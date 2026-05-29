@@ -1,143 +1,252 @@
 ---
-title: Observability
-description: Integrated logging, metrics, and distributed tracing for Xcore applications.
+title: Observabilité
+description: Logging structuré, métriques Prometheus et tracing distribué pour xcore.
 icon: material/eye
 ---
 
-# Observability
+# Observabilité
 
-Xcore provides built-in tools for monitoring the health, performance, and behavior of your application and its plugins. It integrates logging, metrics collection, and distributed tracing into a unified observability stack.
-
----
-
-### Prerequisites
-
-- [x] [Service Container](./services.md) overview understood
-- [x] [Prometheus](https://prometheus.io/) (optional, for metrics collection)
-- [x] [Jaeger/Zipkin](https://www.jaegertracing.io/) (optional, for trace visualization)
+xcore intègre trois piliers d'observabilité : logging structuré, métriques (mémoire ou Prometheus) et tracing. Ils sont disponibles dans chaque plugin via des propriétés directes sur `TrustedBase`, sans configuration supplémentaire.
 
 ---
 
-### Key Components
+### Composants
 
-#### 1. Structured Logging
-Xcore uses a structured logging approach. Logs are categorized by subsystem (kernel, services, plugins) and include contextual metadata like `tenant_id` and `request_id`.
+| Pilier | Classe | Accès plugin |
+|--------|--------|-------------|
+| Logging | `XcoreLogger` | `self.logger` |
+| Métriques | `MetricsRegistry` / `PrometheusMetricsRegistry` | `self.metrics` |
+| Tracing | `Tracer` | `self.tracer` |
+| Health | `HealthChecker` | `self.health` |
 
-```bash
-# View real-time logs via CLI
-make logs-live
-```
+---
 
-#### 2. Metrics Registry
-A lightweight registry for collecting application-level metrics. It supports Counters, Gauges, and Histograms.
+## 1. Logging structuré
+
+Le logger accepte des champs arbitraires en kwargs. En mode `text` ils s'affichent en fin de ligne, en mode `json` ils deviennent des champs JSON.
 
 ```python linenums="1"
 class Plugin(TrustedBase):
-    async def on_load(self):
-        # Register a counter
-        self.call_counter = self.ctx.metrics.counter(
-            "plugin_calls_total",
-            labels={"plugin": self.name}
-        )
-
     async def handle(self, action, payload):
-        self.call_counter.inc()
-        return ok()
+        self.logger.info("action reçue", action=action, tenant=self.ctx.tenant_id)
+        self.logger.error("base de données inaccessible", service="db", erreur=str(e))
+        self.logger.debug("cache miss", clé="user:123", ttl=300)
 ```
 
-#### 3. Distributed Tracing
-Xcore automatically traces every call made through the `PluginSupervisor`. You can also create manual spans inside your plugin logic.
+**Sortie texte :**
+```
+2026-05-29 14:08:03 [INFO    ] xcore.plugin.my_plugin — action reçue  action=ping  tenant=acme
+```
+
+**Sortie JSON :**
+```json
+{"ts":"2026-05-29T14:08:03.123+00:00","level":"INFO","logger":"xcore.plugin.my_plugin",
+ "msg":"action reçue","action":"ping","tenant":"acme"}
+```
+
+---
+
+## 2. Métriques
+
+### Backends
+
+| Backend | Usage | Endpoint |
+|---------|-------|----------|
+| `memory` (défaut) | Tests, développement | `GET /ipc/metrics` → JSON |
+| `prometheus` | Production | `GET /metrics` → format texte Prometheus |
+
+### Counters, Gauges, Histograms
 
 ```python linenums="1"
-async def process_data(self, data):
-    with self.ctx.tracer.span("data_transformation", layer="processing") as span:
-        result = await self.transform(data)
-        span.set_attribute("items_count", len(data))
-        return result
+class Plugin(TrustedBase):
+    async def handle(self, action, payload):
+        # Counter — valeur qui ne fait qu'augmenter
+        self.metrics.counter(
+            "orders_created_total",
+            labels={"plugin": "shop", "env": "prod"}
+        ).inc()
+
+        # Gauge — valeur qui monte et descend
+        self.metrics.gauge(
+            "queue_size",
+            labels={"queue": "emails"}
+        ).set(42)
+
+        # Histogram — distribution de valeurs (latences, tailles)
+        self.metrics.histogram("order_processing_seconds").observe(0.142)
 ```
 
-#### 4. Health Checks
-The `HealthChecker` monitors the status of all framework components and plugins. It exposes a JSON endpoint (usually `/health`) that can be used by orchestrators like Kubernetes.
+### Endpoint Prometheus
+
+Quand `backend: prometheus`, xcore monte automatiquement `/metrics` au format Prometheus :
+
+```
+# HELP plugin_calls_total_total
+# TYPE plugin_calls_total_total counter
+plugin_calls_total_total{action="create_order",plugin="shop"} 42.0
+# HELP plugin_latency_seconds
+# TYPE plugin_latency_seconds histogram
+plugin_latency_seconds_sum 1.23
+plugin_latency_seconds_count 42
+```
+
+!!! warning "Cardinale des labels"
+    N'utilisez jamais d'IDs utilisateurs, d'URLs brutes ou d'autres valeurs à forte cardinalité comme labels. Cela peut provoquer une explosion mémoire dans Prometheus.
 
 ---
 
-### Practical Guide
+## 3. Tracing
 
-#### Instrumenting your Plugin
-Always include basic metrics and spans in your `handle` method for production readiness.
+Le `PluginSupervisor` crée automatiquement un span par appel de plugin. Vous pouvez créer des spans enfants pour vos opérations internes.
 
-```python linenums="1" hl_lines="6 10"
+```python linenums="1"
 async def handle(self, action, payload):
-    # The framework already started a span for this call.
-    # You can access it via the current context if needed.
+    with self.tracer.span("validate_order") as span:
+        span.set_attribute("order_id", payload["id"])
+        span.set_attribute("items", len(payload["items"]))
+        result = await self._validate(payload)
 
-    start_time = time.monotonic()
-    try:
-        # Business logic here
-        result = await self._do_work(payload)
-        return ok(result=result)
-    finally:
-        # Record execution time in a histogram
-        duration = time.monotonic() - start_time
-        self.ctx.metrics.histogram("action_duration_seconds").observe(duration)
+    with self.tracer.span("persist") as span:
+        await self.db.execute(...)
+        span.set_attribute("table", "orders")
+
+    return ok(result=result)
+```
+
+**Propriétés d'un `Span` :**
+
+| Propriété | Type | Description |
+|-----------|------|-------------|
+| `trace_id` | `str` | Identifiant de trace |
+| `span_id` | `str` | Identifiant de span |
+| `duration_ms` | `float` | Durée en millisecondes |
+| `status` | `str` | `"ok"` ou `"error"` |
+| `attributes` | `dict` | Metadata custom |
+
+---
+
+## 4. Health Checks
+
+Les health checks des services (`db`, `cache`, `scheduler`) sont enregistrés **automatiquement** au démarrage. Les plugins peuvent en ajouter via le SDK ou directement.
+
+```python linenums="1"
+from xcore.sdk import health_check
+
+class Plugin(TrustedBase):
+
+    # Via décorateur SDK
+    @health_check("shop.payment_gateway")
+    async def check_gateway(self) -> tuple[bool, str]:
+        try:
+            await self._ping_gateway()
+            return True, "ok"
+        except Exception as e:
+            return False, str(e)
+
+    # Via accès direct
+    async def on_load(self):
+        @self.health.register("shop.inventory_db")
+        async def check_inventory():
+            return await self.get_service("db").health_check()
+```
+
+**Réponse `GET /ipc/health` :**
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "db":                    {"status": "healthy", "message": "ok", "duration_ms": 1.2},
+    "cache":                 {"status": "healthy", "message": "ok", "duration_ms": 0.8},
+    "scheduler":             {"status": "healthy", "message": "ok", "duration_ms": 0.1},
+    "shop.payment_gateway":  {"status": "degraded", "message": "timeout", "duration_ms": 5001.0}
+  }
+}
 ```
 
 ---
 
-### API Reference
+## API Reference
 
-#### `MetricsRegistry`
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `counter(name, labels)` | `Counter` | Increment-only metric. |
-| `gauge(name, labels)` | `Gauge` | Metric that can go up and down (e.g., queue size). |
-| `histogram(name)` | `Histogram` | Tracks the distribution of values (e.g., latency). |
+### `MetricsRegistry`
 
-#### `Tracer`
-| Method | Return Type | Description |
-|--------|-------------|-------------|
-| `span(name, **attrs)` | `ContextManager` | Starts a new child span. |
-| `set_attribute(k, v)` | `None` | Adds metadata to the current span. |
+| Méthode | Retour | Description |
+|---------|--------|-------------|
+| `counter(name, labels)` | `Counter` | Crée ou récupère un counter. |
+| `gauge(name, labels)` | `Gauge` | Crée ou récupère un gauge. |
+| `histogram(name)` | `Histogram` | Crée ou récupère un histogram. |
+| `snapshot()` | `dict` | Instantané mémoire — non disponible avec backend Prometheus. |
+
+### `Counter` / `Gauge` / `Histogram`
+
+| Méthode | Description |
+|---------|-------------|
+| `Counter.inc(amount=1.0)` | Incrémente. |
+| `Gauge.set(v)` | Fixe la valeur. |
+| `Gauge.inc(v)` / `Gauge.dec(v)` | Incrémente / décrémente. |
+| `Histogram.observe(v)` | Enregistre une observation. |
+
+### `Tracer`
+
+| Méthode | Retour | Description |
+|---------|--------|-------------|
+| `span(name, **attrs)` | `ContextManager[Span]` | Démarre un span, le ferme à la sortie du bloc. |
+
+### `HealthChecker`
+
+| Méthode | Description |
+|---------|-------------|
+| `register(name)` | Décorateur — enregistre une fonction `async () -> (bool, str)`. |
+| `run_all(timeout=5.0)` | Lance tous les checks et retourne le rapport. |
 
 ---
 
-### YAML Configuration
+## Configuration YAML
 
 ```yaml linenums="1" title="xcore.yaml"
 observability:
   logging:
-    level: "INFO"
-    format: "json"      # str — "text" | "json". Default: "text"
+    level: "INFO"           # DEBUG | INFO | WARNING | ERROR | CRITICAL
+    output: "text"          # "text" | "json"
+    file: "log/app.log"     # optionnel — rotation automatique
+    max_bytes: 52428800     # 50 MB par fichier
+    backup_count: 10
 
   metrics:
     enabled: true
-    export_interval: 60 # int — Seconds between exports. Default: 60
+    backend: "memory"       # "memory" | "prometheus"
+    prefix: "myapp"
 
   tracing:
     enabled: true
-    sample_rate: 1.0    # float — 0.0 to 1.0. Default: 1.0
+    backend: "noop"         # "noop" | "opentelemetry"
+    service_name: "myapp"
+    endpoint: ~             # URL OTLP si opentelemetry
 ```
 
 ---
 
-### Common Errors & Pitfalls
+## Erreurs fréquentes
 
-!!! danger "Metric Name Collisions"
-    If two plugins try to register a metric with the same name but different labels, the registry may raise a `ValueError` or return the wrong metric instance.
-    **Fix**: Always prefix your metric names with your plugin name (e.g., `myplugin_request_total`).
+!!! danger "Collision de noms Prometheus"
+    Prometheus enregistre chaque metric globalement. Si deux plugins utilisent le même nom avec des labels différents, une erreur est levée.
+    **Fix** : préfixer les noms par le plugin — `shop_orders_total`, pas `orders_total`.
 
-!!! warning "Excessive Cardinality"
-    Avoid using high-cardinality values (like user IDs or raw URLs) as labels in your metrics. This can lead to memory exhaustion in your metrics backend.
+!!! warning "Span non fermé"
+    Toujours utiliser `with self.tracer.span(...)`. Le context manager garantit que `span.end()` est appelé même en cas d'exception.
 
-!!! failure "Trace Leakage"
-    Always use the `with tracer.span(...)` context manager. If you manually start a span but forget to `end()` it, your traces will be incomplete and resources may leak.
+!!! info "prometheus-client absent"
+    Si `backend: prometheus` est configuré mais que `prometheus_client` n'est pas installé, xcore bascule silencieusement sur le backend mémoire.
+    **Fix** : `pip install prometheus-client`
 
 ---
 
-### Best Practices
+## Bonnes pratiques
 
-!!! success "Use Health Checks"
-    Implement a custom health check in your plugin if it depends on an external API or hardware. This allows the supervisor to know if your plugin is functionally degraded.
+!!! success "Nommage des métriques"
+    Convention Prometheus : `<plugin>_<objet>_<unité>_total` — ex: `shop_orders_created_total`, `auth_login_duration_seconds`.
 
-!!! tip "Contextual Logging"
-    Use `logger.info("message", extra={"key": "val"})` instead of f-strings. This allows structured log parsers (like ELK or Datadog) to index your data efficiently.
+!!! tip "Health check pour les dépendances externes"
+    Si votre plugin appelle une API tierce, enregistrez un `@health_check` dédié — utilisé par Kubernetes pour les readiness probes.
+
+!!! tip "Logs JSON en production"
+    Passez à `output: json` en production pour que les agrégateurs (Datadog, Loki, ELK) indexent les champs structurés directement.

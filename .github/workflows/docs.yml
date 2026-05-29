@@ -2,7 +2,7 @@ name: Docs – Build & Deploy MkDocs
 
 on:
   push:
-    branches: [master, main]
+    branches: [main]
 
   workflow_dispatch:
 
@@ -29,19 +29,22 @@ jobs:
         with:
           python-version: "3.12" # plus stable que 3.13
 
-      - name: Cache pip
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-in-project: true
+
+      - name: Cache deps
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: pip-docs-${{ hashFiles('doc/requirements.txt') }}
+          path: .venv
+          key: venv-docs-${{ hashFiles('poetry.lock') }}
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r doc/requirements.txt
+      - name: Install dependencies (groupe docs)
+        run: poetry install --no-interaction --with docs --no-root
 
       - name: Build site
-        run: mkdocs build
+        run: poetry run mkdocs build
 
       - name: Upload artifact (Pages)
         uses: actions/upload-pages-artifact@v3

@@ -18,7 +18,6 @@ Typage :
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 # Literal dispo Python 3.8+, sinon typing_extensions
@@ -34,9 +33,10 @@ if TYPE_CHECKING:
     from .scheduler.service import SchedulerService
     from .xworker.xworker import WorkerService
 
+from ..kernel.observability import get_logger
 from .base import BaseService, BaseServiceProvider
 
-logger = logging.getLogger("xcore.services.container")
+logger = get_logger("xcore.services.container")
 
 T = TypeVar("T")
 
@@ -55,7 +55,7 @@ class DatabaseServiceProvider(BaseServiceProvider):
         if mgr.adapters:
             first = next(iter(mgr.adapters.values()))
             container._raw.setdefault("db", first)
-        logger.info(f"Database : {list(mgr.adapters.keys())}")
+        logger.info("base de données initialisée", adapteurs=list(mgr.adapters.keys()))
 
 
 class CacheServiceProvider(BaseServiceProvider):
@@ -69,7 +69,7 @@ class CacheServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["cache_service"] = svc
         container._raw["cache"] = svc
-        logger.info(f"Cache : backend={cfg.backend}")
+        logger.info("cache initialisé", backend=cfg.backend)
 
 
 class SchedulerServiceProvider(BaseServiceProvider):
@@ -83,7 +83,7 @@ class SchedulerServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["scheduler_service"] = svc
         container._raw["scheduler"] = svc
-        logger.info("Scheduler : prêt")
+        logger.info("scheduler initialisé", timezone=cfg.timezone, backend=cfg.backend)
 
 
 class XWorkerServiceProvider(BaseServiceProvider):
@@ -99,11 +99,7 @@ class XWorkerServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["worker_service"] = svc
         container._raw["worker"] = svc
-        logger.info(
-            "XWorker : broker=%s queues=%s",
-            cfg.broker_url,
-            cfg.queues,
-        )
+        logger.info("xworker initialisé", broker=cfg.broker_url, queues=cfg.queues)
 
 
 class ExtensionServiceProvider(BaseServiceProvider):
@@ -117,7 +113,9 @@ class ExtensionServiceProvider(BaseServiceProvider):
         container._services["extensions"] = loader
         for name, ext in loader.extensions.items():
             container._raw[f"ext.{name}"] = ext
-        logger.info(f"Extensions : {list(loader.extensions.keys())}")
+        logger.info(
+            "extensions initialisées", extensions=list(loader.extensions.keys())
+        )
 
 
 class ServiceContainer:
@@ -175,19 +173,19 @@ class ServiceContainer:
     def add_provider(self, provider: BaseServiceProvider) -> None:
         """Ajoute un fournisseur de services à la liste d'initialisation."""
         self._providers.append(provider)
-        logger.debug(f"Provider '{provider.__class__.__name__}' ajouté")
+        logger.debug("provider ajouté", provider=provider.__class__.__name__)
 
     def register_provider(self, name: str, provider: Any) -> None:
         """Enregistre un fournisseur de services dynamique (lazy)."""
         self._lazy_providers[name] = provider
-        logger.debug(f"Lazy Provider '{name}' enregistré")
+        logger.debug("provider lazy enregistré", nom=name)
 
     def register_service(self, name: str, service: Any) -> None:
         """Enregistre manuellement un service dans le conteneur."""
         self._raw[name] = service
         if isinstance(service, BaseService):
             self._services[name] = service
-        logger.debug(f"Service '{name}' enregistré manuellement")
+        logger.debug("service enregistré manuellement", service=name)
 
     async def init(self, providers: list[BaseServiceProvider] | None = None) -> None:
         """Initialise tous les services via les providers."""
@@ -197,7 +195,7 @@ class ServiceContainer:
         for provider in providers:
             await provider.init(self)
 
-        logger.info(f"✅ Services initialisés : {sorted(self._raw.keys())}")
+        logger.info("services initialisés", services=sorted(self._raw.keys()))
 
     # ── Accès typé ────────────────────────────────────────────
 
@@ -290,11 +288,11 @@ class ServiceContainer:
             svc = self._services[name]
             try:
                 await asyncio.wait_for(svc.shutdown(), timeout=10.0)
-                logger.info(f"Service '{name}' arrêté")
+                logger.info("service arrêté", service=name)
             except asyncio.TimeoutError:
-                logger.error(f"Service '{name}' : timeout shutdown")
+                logger.error("timeout arrêt service", service=name)
             except Exception as e:
-                logger.error(f"Service '{name}' : erreur shutdown : {e}")
+                logger.error("erreur arrêt service", service=name, erreur=str(e))
         self._services.clear()
         self._raw.clear()
 
