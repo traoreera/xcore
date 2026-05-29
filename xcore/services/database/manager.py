@@ -10,15 +10,15 @@ Route vers l'adaptateur approprié selon le type déclaré dans la config :
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import DatabaseConfig
 
+from ...kernel.observability import get_logger
 from ..base import BaseService, ServiceStatus
 
-logger = logging.getLogger("xcore.services.database")
+logger = get_logger("xcore.services.database")
 
 _TYPE_MAP = {
     "sqlite": "sql",
@@ -47,9 +47,11 @@ class DatabaseManager(BaseService):
             try:
                 await adapter.connect()
                 self.adapters[name] = adapter
-                logger.info(f"[database:{name}] ✅ {cfg.type} connecté")
+                logger.info("connexion établie", adapteur=name, type=cfg.type)
             except Exception as e:
-                logger.error(f"[database:{name}] ❌ connexion échouée : {e}")
+                logger.error(
+                    "connexion échouée", adapteur=name, type=cfg.type, erreur=str(e)
+                )
                 # Ne bloque pas les autres connexions
 
         self._status = ServiceStatus.READY if self.adapters else ServiceStatus.DEGRADED
@@ -80,9 +82,9 @@ class DatabaseManager(BaseService):
         for name, adapter in self.adapters.items():
             try:
                 await adapter.disconnect()
-                logger.info(f"[database:{name}] déconnecté")
+                logger.info("déconnexion réussie", adapteur=name)
             except Exception as e:
-                logger.error(f"[database:{name}] erreur déconnexion : {e}")
+                logger.error("erreur déconnexion", adapteur=name, erreur=str(e))
         self.adapters.clear()
         self._status = ServiceStatus.STOPPED
 

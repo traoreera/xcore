@@ -6,7 +6,7 @@ icon: material/presentation-play
 
 # Introduction
 
-**Xcore v2.1.2** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
+**Xcore v2.3.0** is a high-performance, plugin-first orchestration framework built on top of **FastAPI**. It is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment.
 
 At its core, Xcore follows a **"minimal core"** philosophy: the framework provides the infrastructure (runtime, services, security, observability), while all business logic and features reside in independent, hot-reloadable **plugins**.
 
@@ -90,8 +90,11 @@ Execution Modes
 [Quickstart](./quickstart.md)
 :   Get Xcore up and running in less than 5 minutes.
 
-[Core Architecture](../kernel/kernel.md)
+[Core Architecture](kernel/kernel.md)
 :   Deep dive into the Kernel, Supervisor, and Lifecycle management.
 
-[Plugin Development](../plugins/plugin-anatomy.md)
+[Plugin Development](plugins/plugin-anatomy.md)
 :   Learn how to build your first plugin.
+
+[Command Line Interface](cli/index.md)
+:   Manage your project and plugins with the powerful `xcore` CLI.

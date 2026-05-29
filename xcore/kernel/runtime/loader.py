@@ -11,21 +11,19 @@ Responsabilités :
 from __future__ import annotations
 
 import asyncio
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..context import KernelContext
 
+from ...kernel.observability import get_logger
 from ...kernel.security.validation import ManifestValidator
-
-# from ...sdk.plugin_base import PluginDependency
 from ..api.contract import PluginHandler
 from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
 from .dependency import DependencyGraph
 
-logger = logging.getLogger("xcore.runtime.loader")
+logger = get_logger("xcore.runtime.loader")
 
 
 class PluginLoader:
@@ -88,7 +86,7 @@ class PluginLoader:
 
         plugin_dir = Path(self._config.directory)
         if not plugin_dir.exists():
-            logger.warning(f"Dossier plugins introuvable : {plugin_dir}")
+            logger.warning("dossier plugins introuvable", chemin=str(plugin_dir))
             return {"loaded": [], "failed": [], "skipped": []}
 
         for d in sorted(plugin_dir.iterdir()):
@@ -102,11 +100,13 @@ class PluginLoader:
                     manifests.append(manifest)
                 else:
                     logger.warning(
-                        f"version du framework incompatible: {manifest.name} version requise"
-                        f": {manifest.framework_version} version actuelle: {frameversion}"
+                        "version framework incompatible",
+                        plugin=manifest.name,
+                        requise=manifest.framework_version,
+                        actuelle=frameversion,
                     )
             except Exception as e:
-                logger.warning(f"[{d.name}] Manifeste invalide : {e}")
+                logger.warning("manifeste invalide", plugin=d.name, erreur=str(e))
                 skipped.append(d.name)
 
         if not manifests:
@@ -115,7 +115,7 @@ class PluginLoader:
         try:
             ordered = self._topo_sort(manifests)
         except ValueError as e:
-            logger.error(f"Erreur dépendances : {e}")
+            logger.error("erreur tri des dépendances", erreur=str(e))
             return {
                 "loaded": [],
                 "failed": [m.name for m in manifests],
@@ -137,8 +137,11 @@ class PluginLoader:
                     # Vérifie la contrainte de version
                     if not dep.is_compatible(resolved_versions.get(dep.name, "1.0")):
                         logger.error(
-                            f"[{m.name}] Dépendance '{dep.name}' version "
-                            f"{resolved_versions[dep.name]} incompatible avec {dep.version_constraint}"
+                            "version de dépendance incompatible",
+                            plugin=m.name,
+                            dep=dep.name,
+                            version_disponible=resolved_versions[dep.name],
+                            contrainte=dep.version_constraint,
                         )
                         deps_ok = False
                         break
@@ -148,12 +151,13 @@ class PluginLoader:
             if not wave:
                 stuck = [m.name for m in remaining]
                 logger.error(
-                    f"Chargement bloqué (dépendances manquantes ou incompatibles) : {stuck}"
+                    "chargement bloqué — dépendances manquantes ou incompatibles",
+                    plugins_bloqués=stuck,
                 )
                 failed.extend(stuck)
                 break
 
-            logger.info(f"⚡ Vague : [{', '.join(m.name for m in wave)}]")
+            logger.info("chargement de la vague", plugins=[m.name for m in wave])
 
             results = await asyncio.gather(
                 *[self._try_load(m) for m in wave],
@@ -178,7 +182,9 @@ class PluginLoader:
                         and m.name not in failed
                     ]
                     if cascade:
-                        logger.error(f"[{name}] Cascade : {cascade}")
+                        logger.error(
+                            "échec en cascade", plugin=name, dépendants=cascade
+                        )
                         failed.extend(cascade)
                         resolved.update(cascade)
 
@@ -190,8 +196,10 @@ class PluginLoader:
             ]
 
         logger.info(
-            f"Plugins — chargés: {len(loaded)}, "
-            f"échecs: {len(failed)}, ignorés: {len(skipped)}"
+            "bilan chargement plugins",
+            chargés=len(loaded),
+            échecs=len(failed),
+            ignorés=len(skipped),
         )
         return {"loaded": loaded, "failed": failed, "skipped": skipped}
 
@@ -200,7 +208,7 @@ class PluginLoader:
             await self._activate(manifest)
             return manifest, True
         except Exception as e:
-            logger.error(f"[{manifest.name}] Échec activation : {e}")
+            logger.error("échec activation plugin", plugin=manifest.name, erreur=str(e))
             return manifest, False
 
     async def _activate(self, manifest) -> None:
@@ -211,7 +219,7 @@ class PluginLoader:
             raise ValueError(f"Aucun activateur trouvé pour le mode {mode}")
         handler = await activator.activate(manifest, self)
         self._handlers[manifest.name] = handler
-        logger.info(f"[{manifest.name}] ✅ {mode.value.upper()}")
+        logger.info("plugin activé", plugin=manifest.name, mode=mode.value)
 
     # ── Chargement individuel ─────────────────────────────────
 
@@ -224,12 +232,12 @@ class PluginLoader:
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
-                logger.info(f"[{plugin_name}] Dépendance '{dep_name}' → chargement...")
+                logger.info("chargement dépendance", plugin=plugin_name, dep=dep_name)
                 await self.load(dep_name)
 
         await self._activate(manifest)
         self._flush_services([plugin_name])
-        logger.info(f"[{plugin_name}] ✅ chargé")
+        logger.info("plugin chargé", plugin=plugin_name)
 
     async def reload(self, plugin_name: str) -> None:
         if plugin_name not in self._handlers:
@@ -286,7 +294,7 @@ class PluginLoader:
             if handler and hasattr(handler, "propagate_services"):
                 updated = handler.propagate_services(is_reload=False)
                 logger.debug(
-                    f"[{name}] 📦 services disponibles : {sorted(updated.keys())}"
+                    "services propagés", plugin=name, services=sorted(updated.keys())
                 )
 
     # ── Tri topologique (Kahn) ────────────────────────────────
@@ -314,10 +322,10 @@ class PluginLoader:
             try:
                 await asyncio.wait_for(coro, timeout=10.0)
             except Exception as e:
-                logger.error(f"Erreur déchargement : {e}")
+                logger.error("erreur lors du déchargement", erreur=str(e))
 
         self._handlers.clear()
-        logger.info("Tous les plugins déchargés.")
+        logger.info("tous les plugins déchargés")
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
         """

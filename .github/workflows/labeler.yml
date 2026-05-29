@@ -19,7 +19,7 @@
 "documentation":
   - changed-files:
       - any-glob-to-any-file:
-          - "docs/**"
+          - "doc/**"
           - "*.md"
           - "*.rst"
 

@@ -1,6 +1,6 @@
 ---
 title: Installation & Setup
-description: Guide to installing Xcore v2.1.2 and its dependencies.
+description: Guide to installing Xcore v2.3.0 and its dependencies.
 icon: material/download
 ---
 
@@ -114,5 +114,5 @@ plugins:
 [Quickstart](./quickstart.md)
 :   Learn how to integrate Xcore into your FastAPI application.
 
-[CLI Reference](../cli/cli.md)
+[CLI Reference](cli/index.md)
 :   Explore the `xcore` command-line tools.

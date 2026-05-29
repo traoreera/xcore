@@ -4,33 +4,61 @@ tenancy/services.py — Wrappers tenant-aware pour DB, Cache et Scheduler.
 Le plugin écrit :
     cache.get("invoices")
     db.execute("SELECT * FROM orders")
-    scheduler.add_job(fn, id="cleanup")
+    scheduler.add_job(fn, job_id="cleanup")
 
 xcore préfixe automatiquement avec tenant_id :
     cache     → clé  "acme:invoices"
     db        → SET search_path=acme avant chaque requête (PostgreSQL)
     scheduler → job_id "acme:cleanup"
 
-Le plugin ne gère jamais le tenant — c'est transparent.
+Le tenant_id courant est résolu depuis un ContextVar asyncio — chaque tâche
+(chaque requête HTTP) dispose de sa propre valeur, sans mutation d'état partagé.
 """
 
 from __future__ import annotations
 
 import contextlib
+import re
+from contextvars import ContextVar
 from typing import Any
+
+# Tenant actif pour la tâche asyncio courante.
+# Initialisé à "default". Mis à jour par supervisor._dispatch à chaque requête.
+_current_tenant_id: ContextVar[str] = ContextVar("xcore_tenant_id", default="default")
+
+# Tenant ID valide : lettres, chiffres, tirets, underscores uniquement.
+_VALID_TENANT = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_tenant(tenant_id: str) -> str:
+    if not _VALID_TENANT.match(tenant_id):
+        raise ValueError(
+            f"tenant_id invalide : {tenant_id!r} "
+            "(caractères autorisés : a-z A-Z 0-9 _ -)"
+        )
+    return tenant_id
 
 
 class TenantAwareCache:
     """
-    Wrapper sur le cache qui préfixe toutes les clés avec tenant_id.
+    Wrapper sur le cache qui préfixe toutes les clés avec le tenant courant.
 
-    Délègue toutes les opérations au cache sous-jacent après avoir
-    préfixé la clé : "<tenant_id>:<key>".
+    tenant_id optionnel :
+      - fourni → tenant statique (utile pour les tests)
+      - absent  → tenant lu depuis _current_tenant_id (ContextVar) à chaque opération
     """
 
-    def __init__(self, cache: Any, tenant_id: str) -> None:
+    def __init__(self, cache: Any, tenant_id: str | None = None) -> None:
         self._cache = cache
-        self._tenant = tenant_id
+        self._static_tenant = tenant_id
+
+    @property
+    def _tenant(self) -> str:
+        return (
+            self._static_tenant
+            if self._static_tenant is not None
+            else _current_tenant_id.get()
+        )
 
     def _k(self, key: str) -> str:
         return f"{self._tenant}:{key}"
@@ -60,7 +88,6 @@ class TenantAwareCache:
         return [k[len(prefix) :] if k.startswith(prefix) else k for k in raw]
 
     async def clear(self, pattern: str = "*") -> int:
-        """Supprime les clés du tenant courant correspondant au pattern."""
         matched = await self._cache.keys(f"{self._tenant}:{pattern}")
         for k in matched:
             await self._cache.delete(k)
@@ -74,26 +101,36 @@ class TenantAwareDB:
     """
     Wrapper sur la DB qui isole par tenant via search_path PostgreSQL.
 
-    Avant chaque requête SQL, exécute :
-        SET search_path TO <tenant_id>, public
-
-    Ce qui redirige toutes les tables vers le schéma du tenant.
-    Pour MySQL ou SQLite, silencieux (pas de search_path).
+    tenant_id optionnel :
+      - fourni → tenant statique
+      - absent  → tenant lu depuis _current_tenant_id (ContextVar)
+    SET search_path utilise un identifiant validé pour éviter toute injection SQL.
+    Pour MySQL ou SQLite, le SET search_path est ignoré silencieusement.
     """
 
-    def __init__(self, db: Any, tenant_id: str) -> None:
+    def __init__(self, db: Any, tenant_id: str | None = None) -> None:
         self._db = db
-        self._tenant = tenant_id
+        self._static_tenant = tenant_id
+
+    @property
+    def _tenant(self) -> str:
+        return (
+            self._static_tenant
+            if self._static_tenant is not None
+            else _current_tenant_id.get()
+        )
 
     async def _set_tenant_schema(self, conn: Any) -> None:
         try:
-            await conn.execute(f"SET search_path TO {self._tenant}, public")
+            tenant = _validate_tenant(self._tenant)
+            await conn.execute(f"SET search_path TO {tenant}, public")
+        except ValueError:
+            raise
         except Exception:
             pass
 
     @contextlib.asynccontextmanager
     async def session(self):
-        """Retourne une session avec search_path configuré."""
         async with self._db.session() as sess:
             await self._set_tenant_schema(sess)
             yield sess
@@ -119,23 +156,42 @@ class TenantAwareDB:
 
 class TenantAwareScheduler:
     """
-    Wrapper sur le scheduler qui préfixe les job_id avec tenant_id.
+    Wrapper sur le scheduler qui préfixe les job_id avec le tenant courant.
 
-    scheduler.add_job(fn, id="cleanup") → job_id "acme:cleanup"
-    scheduler.remove_job("cleanup")     → retire "acme:cleanup"
-    scheduler.get_job("cleanup")        → cherche "acme:cleanup"
+    scheduler.add_job(fn, job_id="cleanup") → job_id "acme:cleanup"
+    scheduler.remove_job("cleanup")         → retire "acme:cleanup"
+
+    tenant_id optionnel :
+      - fourni → tenant statique
+      - absent  → tenant lu depuis _current_tenant_id (ContextVar)
     """
 
-    def __init__(self, scheduler: Any, tenant_id: str) -> None:
+    def __init__(self, scheduler: Any, tenant_id: str | None = None) -> None:
         self._scheduler = scheduler
-        self._tenant = tenant_id
+        self._static_tenant = tenant_id
+
+    @property
+    def _tenant(self) -> str:
+        return (
+            self._static_tenant
+            if self._static_tenant is not None
+            else _current_tenant_id.get()
+        )
 
     def _jid(self, job_id: str) -> str:
         return f"{self._tenant}:{job_id}"
 
-    def add_job(self, func: Any, *args, id: str | None = None, **kwargs) -> Any:
-        if id is not None:
-            kwargs["id"] = self._jid(id)
+    def add_job(
+        self,
+        func: Any,
+        *args,
+        id: str | None = None,
+        job_id: str | None = None,
+        **kwargs,
+    ) -> Any:
+        raw_id = id or job_id
+        if raw_id is not None:
+            kwargs["job_id"] = self._jid(raw_id)
         return self._scheduler.add_job(func, *args, **kwargs)
 
     def remove_job(self, job_id: str) -> None:
@@ -151,7 +207,7 @@ class TenantAwareScheduler:
         self._scheduler.resume_job(self._jid(job_id))
 
     def get_jobs(self) -> list:
-        """Retourne uniquement les jobs du tenant courant."""
+        """Jobs filtrés pour le tenant courant — objets APScheduler (attribut .id)."""
         prefix = f"{self._tenant}:"
         return [
             j
@@ -159,25 +215,29 @@ class TenantAwareScheduler:
             if getattr(j, "id", "").startswith(prefix)
         ]
 
+    def jobs(self) -> list:
+        """Jobs filtrés pour le tenant courant — dicts SchedulerService (clé 'id')."""
+        prefix = f"{self._tenant}:"
+        return [j for j in self._scheduler.jobs() if j.get("id", "").startswith(prefix)]
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._scheduler, name)
 
 
 def wrap_services_for_tenant(
     services: dict[str, Any],
-    tenant_id: str,
+    tenant_id: str | None = None,
     isolate_cache: bool = True,
     isolate_db: bool = True,
     isolate_scheduler: bool = False,
 ) -> dict[str, Any]:
     """
-    Retourne une vue des services avec les wrappers tenant-aware.
+    Retourne une copie des services avec wrappers tenant-aware.
 
-    - Wrappe tous les adapters DB (clé "db" + tout adapter de type AsyncSQLAdapter)
-    - Wrappe le cache (clé "cache")
-    - Wrappe le scheduler si isolate_scheduler=True (clé "scheduler")
-
-    Les flags viennent de TenancyConfig.
+    tenant_id optionnel :
+      - fourni → tenant statique dans les wrappers (tests, wrapping explicite)
+      - absent  → les wrappers lisent le tenant depuis _current_tenant_id (ContextVar)
+                  safe pour la concurrence, aucune mutation à chaque requête
     """
     wrapped = dict(services)
 
@@ -185,11 +245,8 @@ def wrap_services_for_tenant(
         wrapped["cache"] = TenantAwareCache(wrapped["cache"], tenant_id)
 
     if isolate_db:
-        # Wrappe la clé principale "db"
         if wrapped.get("db") is not None:
             wrapped["db"] = TenantAwareDB(wrapped["db"], tenant_id)
-
-        # Wrappe tous les autres adapters SQL nommés (enregistrés par DatabaseManager)
         for key, svc in list(wrapped.items()):
             if key in ("db", "cache", "scheduler", "worker") or key.startswith("ext."):
                 continue
@@ -203,7 +260,6 @@ def wrap_services_for_tenant(
 
 
 def _is_db_adapter(svc: Any) -> bool:
-    """Détecte si un service est un adapter de base de données."""
     cls_name = type(svc).__name__
     return any(
         cls_name.endswith(suffix)

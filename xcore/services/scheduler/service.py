@@ -35,19 +35,70 @@ Usage:
             hour: 3
             minute: 0
     ```
+
+Scaling multi-workers
+---------------------
+Chaque worker enregistre ses jobs au démarrage (via ScheduledMixin.on_load).
+Quand le backend est Redis, un lock distribué (`xcore:sched:lock:<job_id>`)
+garantit qu'un seul worker exécute le job même si tous reçoivent le déclenchement.
+Les autres workers voient le lock occupé et skippent silencieusement.
 """
 
 from __future__ import annotations
 
-import logging
+import inspect
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from ...configurations.sections import SchedulerConfig
 
+from ...kernel.observability import get_logger
 from ..base import BaseService, ServiceStatus
 
-logger = logging.getLogger("xcore.services.scheduler")
+logger = get_logger("xcore.services.scheduler")
+
+# Registre module-level : job_id → callable réel (bound method ou fonction).
+# APScheduler ne stocke que la référence textuelle vers _dispatch_job ;
+# le vrai callable est résolu ici à l'exécution.
+_JOB_REGISTRY: dict[str, Callable] = {}
+
+# Client Redis asyncio partagé pour les locks distribués.
+# Initialisé uniquement quand backend=redis.
+_REDIS_LOCK_CLIENT: Any = None
+
+# TTL du lock en secondes — suffisant pour les jobs les plus longs.
+# Si un job dépasse cette durée, le lock expire et un autre worker peut prendre la main.
+_LOCK_TTL = 300
+
+
+async def _dispatch_job(job_id: str) -> None:
+    fn = _JOB_REGISTRY.get(job_id)
+    if fn is None:
+        logger.warning(
+            "job introuvable dans le registre",
+            job_id=job_id,
+            raison="plugin déchargé ?",
+        )
+        return
+
+    if _REDIS_LOCK_CLIENT is not None:
+        lock_key = f"xcore:sched:lock:{job_id}"
+        acquired = await _REDIS_LOCK_CLIENT.set(lock_key, "1", nx=True, ex=_LOCK_TTL)
+        if not acquired:
+            logger.debug(
+                "job ignoré — déjà en cours sur un autre worker", job_id=job_id
+            )
+            return
+        try:
+            result = fn()
+            if inspect.isawaitable(result):
+                await result
+        finally:
+            await _REDIS_LOCK_CLIENT.delete(lock_key)
+    else:
+        result = fn()
+        if inspect.isawaitable(result):
+            await result
 
 
 class SchedulerService(BaseService):
@@ -59,22 +110,25 @@ class SchedulerService(BaseService):
         self._scheduler = None
 
     async def init(self) -> None:
+        global _REDIS_LOCK_CLIENT
         self._status = ServiceStatus.INITIALIZING
         try:
             from apscheduler.jobstores.memory import MemoryJobStore
             from apscheduler.schedulers.asyncio import AsyncIOScheduler
         except ImportError:
-            logger.warning("APScheduler not install — pip install apscheduler")
+            logger.warning(
+                "APScheduler non installé", conseil="pip install apscheduler"
+            )
             self._status = ServiceStatus.DEGRADED
             return
 
-        jobstores = {"default": MemoryJobStore()}
+        jobstores: dict = {"default": MemoryJobStore()}
 
-        # Backend Redis si configuré
         if self._config.backend == "redis":
             try:
                 from urllib.parse import urlparse
 
+                import redis.asyncio as aioredis
                 from apscheduler.jobstores.redis import RedisJobStore
 
                 parsed = urlparse(self._config.url)
@@ -83,22 +137,37 @@ class SchedulerService(BaseService):
                     port=parsed.port or 6379,
                     db=int(parsed.path.lstrip("/") or 0),
                     password=parsed.password or None,
+                    pickle_protocol=5,
                 )
+                _REDIS_LOCK_CLIENT = aioredis.from_url(
+                    self._config.url,
+                    encoding="utf-8",
+                    decode_responses=True,
+                )
+                logger.debug("lock distribué activé", backend="redis")
             except ImportError:
-                logger.warning("apscheduler[redis] not install — fallback memory")
+                logger.warning("apscheduler[redis] non installé — repli sur mémoire")
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
+            job_defaults={
+                "coalesce": True,  # fusionne les déclenchements manqués en un seul
+                "max_instances": 1,  # pas d'exécutions parallèles du même job
+                "misfire_grace_time": 60,
+            },
             timezone=self._config.timezone,
         )
 
-        # Chargement des jobs depuis la config
         for job_cfg in self._config.jobs:
             self._add_job_from_config(job_cfg)
 
         self._scheduler.start()
         self._status = ServiceStatus.READY
-        logger.info(f"Scheduler started (timezone={self._config.timezone})")
+        logger.info(
+            "scheduler démarré",
+            timezone=self._config.timezone,
+            backend=self._config.backend,
+        )
 
     def _add_job_from_config(self, job_cfg: dict) -> None:
         try:
@@ -119,7 +188,11 @@ class SchedulerService(BaseService):
                 **kwargs,
             )
         except Exception as e:
-            logger.error(f"Impossible de charger le job '{job_cfg.get('id')}' : {e}")
+            logger.error(
+                "impossible de charger le job depuis la config",
+                job=job_cfg.get("id"),
+                erreur=str(e),
+            )
 
     # ── API publique ──────────────────────────────────────────
 
@@ -133,11 +206,20 @@ class SchedulerService(BaseService):
     ) -> Any:
         if self._scheduler is None:
             raise RuntimeError("Scheduler non initialisé")
+
+        effective_id = job_id or getattr(func, "__name__", repr(func))
+
+        # Enregistrer le callable réel localement.
+        # APScheduler stocke uniquement la référence textuelle vers _dispatch_job
+        # + le job_id en args — 100 % sérialisable par Redis, sans aucun bound method.
+        _JOB_REGISTRY[effective_id] = func
+
         return self._scheduler.add_job(
-            func,
+            "xcore.services.scheduler.service:_dispatch_job",
             trigger=trigger,
-            id=job_id,
+            id=effective_id,
             replace_existing=replace_existing,
+            args=[effective_id],
             **trigger_args,
         )
 
@@ -174,6 +256,7 @@ class SchedulerService(BaseService):
         return decorator
 
     def remove_job(self, job_id: str) -> None:
+        _JOB_REGISTRY.pop(job_id, None)
         if self._scheduler:
             self._scheduler.remove_job(job_id)
 
@@ -196,8 +279,12 @@ class SchedulerService(BaseService):
     # ── Cycle de vie ──────────────────────────────────────────
 
     async def shutdown(self) -> None:
+        global _REDIS_LOCK_CLIENT
         if self._scheduler and self._scheduler.running:
             self._scheduler.shutdown(wait=False)
+        if _REDIS_LOCK_CLIENT is not None:
+            await _REDIS_LOCK_CLIENT.aclose()
+            _REDIS_LOCK_CLIENT = None
         self._status = ServiceStatus.STOPPED
 
     async def health_check(self) -> tuple[bool, str]:
@@ -212,4 +299,5 @@ class SchedulerService(BaseService):
             "running": self._scheduler.running if self._scheduler else False,
             "jobs": len(self.jobs()),
             "timezone": self._config.timezone,
+            "distributed_lock": _REDIS_LOCK_CLIENT is not None,
         }

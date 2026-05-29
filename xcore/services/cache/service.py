@@ -7,15 +7,15 @@ L'interface est identique pour les deux.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...configurations.sections import CacheConfig
 
+from ...kernel.observability import get_logger
 from ..base import BaseService, ServiceStatus
 
-logger = logging.getLogger("xcore.services.cache")
+logger = get_logger("xcore.services.cache")
 
 
 class CacheService(BaseService):
@@ -64,7 +64,7 @@ class CacheService(BaseService):
             )
 
         self._status = ServiceStatus.READY
-        logger.info(f"Cache prêt (backend={backend_type})")
+        logger.info("cache prêt", backend=backend_type)
 
     # ── API ───────────────────────────────────────────────────
 

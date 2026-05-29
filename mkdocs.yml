@@ -1,14 +1,14 @@
 site_name: Xcore Framework
 site_description: Plugin-first backend framework built on FastAPI
-site_url: https://docs.xcore.dev
+site_url: https://xcorehub.dev
 repo_url: https://github.com/traoreera/xcore
 repo_name: traoreera/xcore
-edit_uri: edit/main/docs/
+edit_uri: edit/main/doc/
 docs_dir: doc
 site_dir: docs
 theme:
   name: material
-  custom_dir: docs/overrides
+  custom_dir: doc/overrides
   language: en
   logo: assets/logo.svg
   favicon: assets/logo.svg
@@ -101,10 +101,59 @@ nav:
       - Secure Sandbox: examples/sandbox-example.md
       - Multi-Tenant Analytics: examples/tenancy-example.md
       - Scheduled Syncer: examples/scheduler-example.md
+  - SDK:
+      - Concepts: sdk/concepts.md
+      - API:
+          - Overview: sdk/api/index.md
+          - Database:
+              - Adapters: sdk/api/adapters.md
+          - Authentication:
+              - Auth: sdk/api/auth.md
+          - Mixins & Decorators:
+              - SDK Mixin: sdk/api/automixin.md
+              - Cache: sdk/api/cache.md
+              - Decorators: sdk/api/decorators.md
+              - Events: sdk/api/events.md
+              - Scheduler: sdk/api/scheduler.md
+          - Utilities:
+              - Response: sdk/api/responses.md
+              - Observability: sdk/api/observability.md
+          - Configuration:
+              - Manifest: sdk/api/manifest.md
+      - Examples: sdk/examples/demo-plugin.md
+
   - Security & Sandboxing: security/security.md
   - Observability: observability/observability.md
-  - CLI Reference: cli/cli.md
+  - Command Line Interface:
+      - Overview: cli/index.md
+      - Getting Started:
+          - Installation: cli/getting-started/install.md
+          - Configuration: cli/getting-started/configuration.md
+          - Authentication: cli/getting-started/auth.md
+      - Base Commands:
+          - Project Init: cli/commands/init.md
+          - Health Check: cli/commands/health.md
+      - Manager:
+          - Overview: cli/manager/index.md
+          - Monitoring: cli/manager/monitoring.md
+          - Services: cli/manager/services.md
+      - Plugins:
+          - Overview: cli/plugin/index.md
+          - Installation: cli/plugin/install.md
+          - Local Development: cli/plugin/local.md
+          - Marketplace: cli/plugin/marketplace.md
+          - Runtime Control: cli/plugin/runtime.md
+          - Security: cli/plugin/security.md
+          - Updates: cli/plugin/update.md
+      - Workers:
+          - Overview: cli/worker/index.md
+          - Orchestration: cli/worker/process.md
+      - Sandbox: cli/sandbox/index.md
+      - Migrations: cli/migration/index.md
+      - Configuration: cli/config/index.md
+      - Full Reference: cli/reference.md
   - Best Practices: best-practices.md
+  - Changelog: changelog.md
 
 plugins:
   - search:

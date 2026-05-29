@@ -43,6 +43,7 @@ from .kernel.observability import (
     MetricsRegistry,
     Tracer,
     configure_logging,
+    create_metrics_registry,
     get_logger,
 )
 from .kernel.runtime.lifecycle import LifecycleManager
@@ -135,7 +136,6 @@ class Xcore:
             app = FastAPI(lifespan=lifespan)
             xcore.setup(app)          # ← ici, avant que l'app démarre
         """
-        from .kernel.api.middleware import Middlewares
 
         def _lazy_service(name: str):
             """Résout le service au moment de la requête, pas à l'enregistrement."""
@@ -170,7 +170,7 @@ class Xcore:
 
         # etape intermediare
         # configuration de l'observabilite
-        self.metrics = MetricsRegistry()
+        self.metrics = create_metrics_registry(self._config.observability.metrics)
         self.tracer = Tracer(self._config.observability.tracing.service_name)
         self.health = HealthChecker()
 
@@ -180,6 +180,17 @@ class Xcore:
         self.services = ServiceContainer(self._config.services)
         self.services.load_default_providers()
         await self.services.init()
+
+        # Enregistrement auto des health checks pour chaque service
+        for svc_name, svc in self.services.as_dict().items():
+            if hasattr(svc, "health_check"):
+                # Capture par valeur
+                _svc = svc
+                _name = svc_name
+
+                @self.health.register(_name)
+                async def _check(_s=_svc):
+                    return await _s.health_check()
 
         # 2. Registry des plugins
         self.registry = PluginRegistry(self._config)
@@ -278,6 +289,26 @@ class Xcore:
                         f"{middleware['name']}📦 état {middleware['name']}_{key} "
                         "mis à jour"
                     )
+
+        # Endpoint /metrics Prometheus (seulement si backend=prometheus)
+        if (
+            getattr(self._config.observability.metrics, "backend", "memory")
+            == "prometheus"
+        ):
+            try:
+                from fastapi import APIRouter as _AR
+                from fastapi import Response
+                from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+                _metrics_router = _AR()
+
+                @_metrics_router.get("/metrics")
+                async def prometheus_metrics():
+                    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+                app.include_router(_metrics_router)
+            except ImportError:
+                pass
 
         app.openapi_schema = None  # force la regen du schéma OpenAPI
 
