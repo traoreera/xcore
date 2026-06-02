@@ -155,7 +155,7 @@ class MigrationRunner:
         logger.info(f"Migration sync downgrade → {revision}")
         command.downgrade(self._get_config(), revision)
 
-    async def revison(self, **kwargs) -> None:
+    async def revision(self, **kwargs) -> None:
         """Crée une nouvelle révision de migration."""
         from alembic import command  # type: ignore
 

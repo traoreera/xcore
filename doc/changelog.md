@@ -10,6 +10,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-05-29
+
+### Fixed
+
+- **database/session** : Connexion échouait silencieusement car la session n'était pas vérifiée avant utilisation. Ajout d'une vérification explicite de l'état de session (`is_active`) avant chaque opération, avec reconnexion automatique si la session est expirée ou fermée.
+- **database/async_sql** : `pool_pre_ping=True` levait `ping() missing 1 required positional argument: 'reconnect'` avec le driver `aiomysql`. Le pre-ping est désormais désactivé automatiquement pour `aiomysql` et `cymysql`, compensé par un event listener pessimiste (`engine_connect`) et `pool_recycle`.
+- **database/async_sql** : Gestion des connexions mortes améliorée — les erreurs `OperationalError` et `DisconnectionError` lors d'un rollback sont maintenant capturées et loggées sans planter le worker.
+- **database/_utils** : Les paramètres `read_timeout` et `write_timeout` sont exclusifs à `pymysql`. `sanitize_connect_args()` les filtre désormais pour `aiomysql` avec un warning explicite, évitant une erreur silencieuse à la connexion.
+- **database/migrations** : `MigrationRunner._is_async()` ne reconnaissait pas les suffixes `+aiomysql` et `+asyncmy`, forçant le chemin synchrone sur des connexions async. Les deux drivers sont maintenant inclus dans `async_markers`.
+- **database/container** : La configuration `DatabaseConfig` n'exposait pas certains paramètres de production (`pool_timeout`, `pool_reset_on_return`, `connect_args`, `isolation_level`, `execution_options`). Ces champs sont désormais lus depuis `integration.yaml` et transmis aux adapters.
+
+### Improved
+
+- **CI/CD** : Workflow `ci.yml` mis à jour — étape de coverage affinée, labels PR revus, workflow `pr.yml` ajouté pour valider le titre (conventional commits) et la taille des PRs.
+- **CI/CD** : Workflow `security.yml` — scan Bandit restreint aux dossiers existants (`xcore/`, `tests/`) pour éliminer les faux positifs sur `extensions/` et `plugins/`.
+- **Tests** : Correction du test `test_tenancy.py` — assertion alignée sur le comportement réel du `ContextVar` après reset.
+- **Documentation** : Refonte complète de la section CLI (`doc/cli/`) avec des guides détaillés pour l'installation, la configuration, les commandes `worker`, `plugin`, `sandbox`, `manager` et `migration`. Ajout de la référence API SDK (`doc/sdk/api/`).
+- **Observabilité** : `XcoreLogger` enrichi avec support structurel des champs contextuels ; `MetricsCollector` étendu avec backends `memory` et `prometheus` documentés.
+
 ## [2.3.0] - 2026-05-14
 
 ### Added

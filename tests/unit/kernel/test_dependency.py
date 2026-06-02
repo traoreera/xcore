@@ -1,36 +1,46 @@
 import pytest
 
-from xcore.kernel.runtime.dependency import DependencyGraph
+from xcore.registry.resolver import (
+    CircularDependencyError,
+    DependencyResolver,
+    MissingDependencyError,
+)
 
 
-def test_dependency_graph_ordered():
-    graph = DependencyGraph()
-    graph.add_node("A", "dataA")
-    graph.add_node("B", "dataB")
-    graph.add_node("C", "dataC")
+def test_resolver_ordered():
+    resolver = DependencyResolver()
+    resolver.add("A", [])
+    resolver.add("B", ["A"])
+    resolver.add("C", ["B"])
 
-    # B -> A (B depends on A)
-    # C -> B (C depends on B)
-    graph.add_dependency("B", "A")
-    graph.add_dependency("C", "B")
-
-    ordered = graph.get_ordered()
-    assert ordered == ["dataA", "dataB", "dataC"]
+    ordered = resolver.resolve()
+    assert ordered == ["A", "B", "C"]
 
 
-def test_dependency_graph_cycle():
-    graph = DependencyGraph()
-    graph.add_node("A", 1)
-    graph.add_node("B", 2)
-    graph.add_dependency("A", "B")
-    graph.add_dependency("B", "A")
+def test_resolver_cycle():
+    resolver = DependencyResolver()
+    resolver.add("A", ["B"])
+    resolver.add("B", ["A"])
 
-    with pytest.raises(ValueError, match="Circular dependency"):
-        graph.get_ordered()
+    with pytest.raises(CircularDependencyError):
+        resolver.resolve()
 
 
-def test_dependency_graph_missing_node():
-    graph = DependencyGraph()
-    graph.add_node("A", 1)
-    with pytest.raises(ValueError):
-        graph.add_dependency("A", "B")
+def test_resolver_missing_dependency():
+    resolver = DependencyResolver()
+    resolver.add("A", ["B"])
+
+    with pytest.raises(MissingDependencyError):
+        resolver.resolve()
+
+
+def test_resolver_waves():
+    resolver = DependencyResolver()
+    resolver.add("A", [])
+    resolver.add("B", [])
+    resolver.add("C", ["A", "B"])
+
+    waves = resolver.waves()
+    assert len(waves) == 2
+    assert set(waves[0]) == {"A", "B"}
+    assert waves[1] == ["C"]
