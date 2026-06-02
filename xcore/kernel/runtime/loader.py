@@ -17,11 +17,16 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..context import KernelContext
 
+from xcore.registry.resolver import (
+    CircularDependencyError,
+    DependencyResolver,
+    MissingDependencyError,
+)
+
 from ...kernel.observability import get_logger
 from ...kernel.security.validation import ManifestValidator
 from ..api.contract import PluginHandler
 from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
-from .dependency import DependencyGraph
 
 logger = get_logger("xcore.runtime.loader")
 
@@ -228,7 +233,9 @@ class PluginLoader:
         if not plugin_dir.is_dir():
             raise FileNotFoundError(f"Dossier plugin introuvable : {plugin_dir}")
 
-        manifest = self._validator.load_and_validate(plugin_dir)
+        manifest, valid, _ = self._validator.load_and_validate(plugin_dir)
+        if not valid:
+            raise ValueError(f"Plugin '{plugin_name}' : version framework incompatible")
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
@@ -300,19 +307,18 @@ class PluginLoader:
     # ── Tri topologique (Kahn) ────────────────────────────────
     @staticmethod
     def _topo_sort(manifests: list) -> list:
-        graph = DependencyGraph()
+        manifest_map = {m.name: m for m in manifests}
+        resolver = DependencyResolver()
         for m in manifests:
-            graph.add_node(m.name, m)
-
-        for m in manifests:
-            for dep in m.requires:
-                # dep est un PluginDependency object
-                dep_name = dep.name if hasattr(dep, "name") else str(dep)
-                if dep_name not in graph:
-                    raise ValueError(f"[{m.name}] Missing dependency '{dep_name}'")
-                graph.add_dependency(m.name, dep_name)
-
-        return graph.get_ordered()
+            requires = [
+                dep.name if hasattr(dep, "name") else str(dep) for dep in m.requires
+            ]
+            resolver.add(m.name, requires)
+        try:
+            ordered_names = resolver.resolve()
+        except (CircularDependencyError, MissingDependencyError) as e:
+            raise ValueError(str(e)) from e
+        return [manifest_map[name] for name in ordered_names]
 
     async def shutdown(self) -> None:
         """Décharge tous les plugins proprement."""

@@ -18,8 +18,13 @@ import json
 import logging
 import os
 import sys
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# ContextVar par tâche asyncio — évite les race conditions entre coroutines
+# qui partageraient le même FilesystemGuard (requis pour la sécurité sandbox).
+_sandbox_in_guard: ContextVar[bool] = ContextVar("sandbox_in_guard", default=False)
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "WARNING"),
@@ -109,7 +114,14 @@ class FilesystemGuard:
         self._allowed = _resolve_safe(allowed_paths, ["data/"])
         self._denied = _resolve_safe(denied_paths, ["src/"])
         self._original_open = builtins_open
-        self._in_guard = False
+
+    @property
+    def _in_guard(self) -> bool:
+        return _sandbox_in_guard.get()
+
+    @_in_guard.setter
+    def _in_guard(self, value: bool) -> None:
+        _sandbox_in_guard.set(value)
 
     def _resolve(self, path_arg) -> Path:
         """Résout un chemin en absolu depuis le cwd (plugin_dir)."""

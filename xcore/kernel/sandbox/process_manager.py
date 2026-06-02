@@ -106,7 +106,12 @@ class SandboxProcessManager:
 
         self._ctx._events.emit_sync(
             f"plugin.{self.manifest.name}.services_registered",
-            data={"plugin": self.manifest.name, "is_reload": False, "services": []},
+            data={
+                "plugin": self.manifest.name,
+                "is_reload": False,
+                "is_sandboxed": True,
+                "services": [],
+            },
         )
 
     async def _spawn(self) -> None:

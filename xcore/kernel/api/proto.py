@@ -23,7 +23,6 @@ class EventBus(Protocol):
 
 
 class HookManager(Protocol):
-
     def register(
         self,
         event_name: str,
@@ -53,7 +52,6 @@ class HookManager(Protocol):
 
 
 class HealthChecker(Protocol):
-
     def register(self, name: str) -> Callable:
         """
         Decorator to register a function to be called when an event is emitted.
@@ -83,6 +81,7 @@ class PluginContext:
     """
 
     name: str
+    env: dict
     services: dict[str, Any] = field(default_factory=dict)
     events: EventBus = None  # EventBus
     hooks: HookManager = None  # HookManager

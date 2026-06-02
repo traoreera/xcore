@@ -63,6 +63,7 @@ class MarketplaceClient:
         self._timeout = raw_mkt.get("timeout", DEFAULT_TIMEOUT)
         self._cache_ttl = raw_mkt.get("cache_ttl", 300)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        CACHE_DIR.chmod(0o700)
 
     # ── API publique ──────────────────────────────────────────
 
@@ -195,6 +196,7 @@ class MarketplaceClient:
         path = self._cache_path(key)
         try:
             path.write_text(json.dumps({"_ts": time.time(), "data": data}))
+            path.chmod(0o600)
         except Exception:
             pass
 
