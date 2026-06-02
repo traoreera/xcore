@@ -81,7 +81,7 @@ class PluginContext:
     """
 
     name: str
-    env: dict
+    env: dict = field(default_factory=dict)
     services: dict[str, Any] = field(default_factory=dict)
     events: EventBus = None  # EventBus
     hooks: HookManager = None  # HookManager
