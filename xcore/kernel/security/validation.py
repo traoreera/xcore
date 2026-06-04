@@ -54,6 +54,8 @@ class FrameworkVersionError(Exception):
     """Raised when a plugin's framework_version constraint is not satisfied."""
     pass
 
+# Alias de rétro-compatibilité — à supprimer en v-prochaine-majeure
+FrameworkVersionVersion = FrameworkVersionError
 
 _ENV_VAR_RE = re.compile(r"^\$\{(.+)\}$")
 
