@@ -17,6 +17,7 @@ import time
 import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+import collections.abc  
 
 if TYPE_CHECKING:
     from ..context import KernelContext
@@ -368,7 +369,7 @@ class LifecycleManager:
             return
 
         services: dict = {}
-        if ctx.services:
+        if ctx.services is not None:
             # ServiceContainer expose as_dict() ou un mapping direct
             if hasattr(ctx.services, "as_dict"):
                 services = ctx.services.as_dict()
@@ -377,9 +378,12 @@ class LifecycleManager:
 
         for entry in inject_spec:
             # Accepte dict brut (depuis YAML) ou objet avec attributs
-            if isinstance(entry, dict):
+            if isinstance(entry, collections.abc.Mapping):
                 svc_name = entry.get("name")
                 required = entry.get("required", True)
+                # `type` est parsé mais non contraint pour l'instant ;
+                # réservé pour une validation de compatibilité de service future.
+                _svc_type = entry.get("type")
             else:
                 svc_name = getattr(entry, "name", None)
                 required = getattr(entry, "required", True)
