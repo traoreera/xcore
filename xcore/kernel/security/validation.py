@@ -50,7 +50,8 @@ class ManifestError(Exception):
     pass
 
 
-class FrameworkVersionVersion(Exception):
+class FrameworkVersionError(Exception):
+    """Déclenché lorsque la contrainte framework_version d'un plugin n'est pas respectée."""
     pass
 
 
