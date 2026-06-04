@@ -51,7 +51,7 @@ class ManifestError(Exception):
 
 
 class FrameworkVersionError(Exception):
-    """Déclenché lorsque la contrainte framework_version d'un plugin n'est pas respectée."""
+    """Raised when a plugin's framework_version constraint is not satisfied."""
     pass
 
 
