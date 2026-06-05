@@ -11,12 +11,13 @@ Tests :
   7. Maximum plugin capacity simulation
   8. Memory footprint per plugin
   9. Overall system stress test
+  10. Inter-Plugin Communication (IPC) throughput
 
 Usage :
-    python xcore_bench.py                    # full suite
-    python xcore_bench.py --suite plugins    # only plugin benchmarks
-    python xcore_bench.py --capacity 200     # test up to 200 plugins
-    python xcore_bench.py --output report.json
+    python scripts/benchmarks.py                    # full suite
+    python scripts/benchmarks.py --suite plugins    # only plugin benchmarks
+    python scripts/benchmarks.py --capacity 200     # test up to 200 plugins
+    python scripts/benchmarks.py --output report.json
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 # ── FIX: sys.path doit être inséré AVANT tous les imports xcore ──────────────
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from xcore.sdk.plugin_base import PluginManifest  # noqa: E402
 
@@ -166,11 +167,10 @@ def _measure(
 ) -> BenchResult:
     """
     Construit un BenchResult à partir de samples déjà exprimés en millisecondes.
-
-    FIX: suppression de la heuristique `* 1000 if value < 10 else value` qui
-    causait une double-conversion : tous les sites d'appel collectent déjà
-    leurs samples en ms (via `(perf_counter() - t0) * 1000`).
     """
+    if not samples:
+        return BenchResult(name, category, iterations, 0, 0, 0, 0, 0, 0, 0, 0, 0, errors=errors)
+
     total = sum(samples)
     mean = statistics.mean(samples)
     med = statistics.median(samples)
@@ -200,41 +200,51 @@ def _measure(
 
 
 def _make_plugin_dir(
-    base: Path, name: str, mode: str = "trusted", extra_code: str = ""
+    base: Path,
+    name: str,
+    mode: str = "trusted",
+    extra_code: str = "",
+    allowed_callers: list[str] | None = None,
 ) -> Path:
     """Crée un plugin minimal valide dans base/name."""
     plugin_dir = base / name
     src_dir = plugin_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
 
-    (plugin_dir / "plugin.yaml").write_text(textwrap.dedent(f"""
+    callers_yaml = ""
+    if allowed_callers:
+        callers_yaml = f"allowed_callers: {json.dumps(allowed_callers)}"
+
+    (plugin_dir / "plugin.yaml").write_text(
+        textwrap.dedent(
+            f"""
         name: {name}
         version: 1.0.0
         execution_mode: {mode}
         description: Benchmark plugin
+        {callers_yaml}
         permissions:
-          - resource: "ping"
-            actions: ["read", "write"]
+          - resource: "*"
+            actions: ["*"]
             effect: allow
-          - resource: "echo"
-            actions: ["read", "write"]
-            effect: allow
-          - resource: "compute"
-            actions: ["read", "write"]
-            effect: allow
-
 
         resources:
           timeout_seconds: 30
           rate_limit:
             calls: 100000
             period_seconds: 60
-    """).strip())
+    """
+        ).strip()
+    )
 
-    (src_dir / "main.py").write_text(textwrap.dedent(f"""
-        from xcore.kernel.api.contract import BasePlugin
+    base_class = "TrustedBase" if mode == "trusted" else "BasePlugin"
 
-        class Plugin(BasePlugin):
+    (src_dir / "main.py").write_text(
+        textwrap.dedent(
+            f"""
+        from xcore.kernel.api.contract import TrustedBase, BasePlugin
+
+        class Plugin({base_class}):
             call_count = 0
 
             async def handle(self, action: str, payload: dict) -> dict:
@@ -247,6 +257,9 @@ def _make_plugin_dir(
                     n = payload.get("n", 100)
                     result = sum(i * i for i in range(n))
                     return {{"status": "ok", "result": result}}
+                if action == "proxy_ping":
+                    target = payload.get("target", "receiver")
+                    return await self.call_plugin(target, "ping", {{}})
                 return {{"status": "error", "msg": f"unknown action {{action}}"}}
 
             async def on_load(self):
@@ -255,7 +268,9 @@ def _make_plugin_dir(
             async def on_unload(self):
                 pass
         {extra_code}
-    """).strip())
+    """
+        ).strip()
+    )
 
     return plugin_dir
 
@@ -263,138 +278,55 @@ def _make_plugin_dir(
 def _make_xcore_config(plugins_dir: Path) -> str:
     """Crée un fichier de config minimal et retourne son chemin."""
     cfg_file = plugins_dir.parent / "xcore_bench.yaml"
-    cfg_file.write_text(textwrap.dedent(f"""
+    cfg_file.write_text(
+        textwrap.dedent(
+            f"""
             app:
               name: my-app
               env: development
               debug: true
               secret_key: "vjherbvjhe"
-              #dotenv: "./extensions/.env"
               plugin_prefix: "/app"
               server_key: "rhverujierf"
               server_key_iterations: 100000
-              plugin_tags:
-                - "test"
+              plugin_tags: ["test"]
 
-            # ── Plugins ───────────────────────────────────────────────────
             plugins:
               directory: {plugins_dir}
-
-              # Clé HMAC-SHA256 utilisée pour vérifier plugin.sig
               secret_key: "12345"
-
-              # true = refuse tout plugin Trusted non signé
               strict_trusted: false
-
-              # Intervalle du watcher de rechargement à chaud (secondes)
-              # Mettre à 0 pour désactiver en prod si tu gères les reloads via API
-              interval: 10
-
+              interval: 0
               entry_point: src/main.py
 
-              # Fichiers/extensions exclus du snapshot de détection de changements
-              snapshot:
-                extensions: [".log", ".pyc", ".html", ".map", ".min.js"]
-                filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
-                hidden: true
-
-            # ── Services ──────────────────────────────────────────────────
             services:
-              # ── Bases de données ────────────────────────────────────────
               databases:
                 db:
                   type: sqlasync
                   url: sqlite+aiosqlite:///db.sqlite3
                   echo: false
-
-              # ── Cache ────────────────────────────────────────────────────
               cache:
                 backend: memory
                 ttl: 300
                 max_size: 10000
-
-              # ── Scheduler ────────────────────────────────────────────────
               scheduler:
                 enabled: false
-                backend: memory
-                timezone: Europe/Paris
-
-                # Jobs déclarés statiquement (optionnel)
-                #jobs:
-                #  # Nettoyage des sessions expirées chaque nuit à 2h
-                #  - id: cleanup_sessions
-                #    func: myapp.tasks.maintenance:cleanup_sessions
-                #    trigger: cron
-                #    hour: 2
-                #    minute: 0
-                #
-                #  # Snapshot des métriques toutes les 5 minutes
-                #  - id: metrics_snapshot
-                #    func: myapp.tasks.monitoring:snapshot_metrics
-                #    trigger: interval
-                #    minutes: 5
-
-              # ── Observabilité ─────────────────────────────────────────────
 
             observability:
               logging:
-                enabled: true
-                level: DEBUG # DEBUG | INFO | WARNING | ERROR | CRITICAL
-                format: "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
-                file: log/app.log
-                max_bytes: 52428800 # 50 MB par fichier
-                backup_count: 10 # 10 fichiers de rotation = 500 MB max
-
+                enabled: false
               metrics:
-                enabled: true
-                backend: prometheus # memory | prometheus | statsd
-                prefix: myapp # préfixe des métriques exposées sur /metrics
-
+                enabled: false
               tracing:
-                enabled: false # true si tu utilises OpenTelemetry / Jaeger
-                backend: noop # noop | opentelemetry | jaeger
-                service_name: my-app
-                endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
+                enabled: false
 
-            # ── Sécurité ──────────────────────────────────────────────────
             security:
-              # Imports Python autorisés dans les plugins Sandboxed (whitelist AST)
-              # Les plugins Trusted ne sont pas limités par cette liste
-              allowed_imports:
-                - argparse
-                - fastapi
-                - json
-                - re
-                - math
-                - random
-                - datetime
-                - time
-                - pathlib
-                - typing
-                - dataclasses
-                - enum
-                - functools
-                - itertools
-                - collections
-                - string
-                - hashlib
-                - base64
-                - asyncio
-                - logging
-                - uuid
-                - decimal
-                - copy
-
-              # Imports explicitement interdits (surcharge les allowed_imports)
-              forbidden_imports:
-                - os
-
-              # Rate limit appliqué par défaut à chaque plugin non configuré
+              allowed_imports: ["*"]
               rate_limit_default:
-                calls: 200
+                calls: 100000
                 period_seconds: 60
-
-    """).strip())
+    """
+        ).strip()
+    )
     return str(cfg_file)
 
 
@@ -417,8 +349,7 @@ class PluginLifecycleBench:
             from xcore.kernel.security.validation import ManifestValidator
 
             plugin_dir = _make_plugin_dir(tmp, "bench_single")
-            manifest, is_ok, version = ManifestValidator().load_and_validate(plugin_dir)
-            # FIX: suppression du print(manifest, is_ok, version) de debug
+            manifest, _, _ = ManifestValidator().load_and_validate(plugin_dir)
             services_mock = _MockServices()
 
             load_samples: list[float] = []
@@ -427,9 +358,7 @@ class PluginLifecycleBench:
 
             for _ in range(n_runs):
                 ctx = _make_ctx(services_mock)
-                lm = LifecycleManager(
-                    manifest if isinstance(manifest, PluginManifest) else None, ctx
-                )
+                lm = LifecycleManager(manifest, ctx)
                 try:
                     t0 = time.perf_counter()
                     await lm.load()
@@ -469,7 +398,7 @@ class PluginLifecycleBench:
         return results
 
     async def bench_batch_load(
-        self, batch_sizes: list[int] = (5, 20, 50, 100)
+        self, batch_sizes: list[int] = (5, 20, 50)
     ) -> list[BenchResult]:
         """Charge N plugins en une seule passe (load_all)."""
         results = []
@@ -516,7 +445,6 @@ class PluginLifecycleBench:
                     await app.shutdown()
             except Exception as e:
                 print(f"  [ERR] batch_load_{n}: {e}")
-                traceback.print_exc()
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
                 gc.collect()
@@ -535,16 +463,7 @@ class PluginLifecycleBench:
             plugin_dir = _make_plugin_dir(tmp, "bench_reload")
             manifest, _, _ = ManifestValidator().load_and_validate(plugin_dir)
             ctx = _make_ctx(_MockServices())
-
-            # FIX: remplacement du bare `except: quit()` par une vraie gestion d'erreur
-            try:
-                lm = LifecycleManager(manifest, ctx)
-            except Exception as e:
-                raise RuntimeError(
-                    f"LifecycleManager instanciation failed "
-                    f"(manifest type={type(manifest).__name__}): {e}"
-                ) from e
-
+            lm = LifecycleManager(manifest, ctx)
             await lm.load()
 
             for _ in range(n_runs):
@@ -554,7 +473,6 @@ class PluginLifecycleBench:
                     samples.append((time.perf_counter() - t0) * 1000)
                 except Exception as e:
                     errors += 1
-                    # FIX: log the error instead of silently swallowing it
                     print(f"  [WARN] reload error: {e}")
 
             await lm.unload()
@@ -637,7 +555,7 @@ class PluginCallBench:
         return results
 
     async def bench_concurrent_calls(
-        self, concurrency_levels: list[int] = (5, 20, 50, 100)
+        self, concurrency_levels: list[int] = (10, 50, 100)
     ) -> list[BenchResult]:
         results = []
         for concurrency in concurrency_levels:
@@ -698,48 +616,6 @@ class PluginCallBench:
                 gc.collect()
         return results
 
-    async def bench_multi_plugin_routing(
-        self, plugin_counts: list[int] = (5, 10, 25, 50)
-    ) -> list[BenchResult]:
-        """Appels distribués sur N plugins (routing overhead)."""
-        results = []
-        for n in plugin_counts:
-            tmp = Path(tempfile.mkdtemp(prefix="xcore_bench_"))
-            try:
-                for i in range(n):
-                    _make_plugin_dir(tmp / "plugins", f"router_{i:03d}")
-                cfg = _make_xcore_config(tmp / "plugins")
-                app = _make_xcore_instance(cfg)
-                await app.boot()
-
-                loaded = app.plugins.list_plugins()
-                n_calls = 200
-                samples: list[float] = []
-                for i in range(n_calls):
-                    pname = loaded[i % len(loaded)]
-                    app.plugins._permissions.grant_all(pname)
-                    t0 = time.perf_counter()
-                    await app.plugins.call(pname, "ping", {})
-                    samples.append((time.perf_counter() - t0) * 1000)
-
-                results.append(
-                    _measure(
-                        samples,
-                        n_calls,
-                        0,
-                        f"routing_{n}_plugins",
-                        self.CATEGORY,
-                        notes=f"{len(loaded)} loaded, {n_calls} calls round-robin",
-                    )
-                )
-                await app.shutdown()
-            except Exception as e:
-                print(f"  [ERR] routing_{n}: {e}")
-            finally:
-                shutil.rmtree(tmp, ignore_errors=True)
-                gc.collect()
-        return results
-
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Section 3 — Middleware Pipeline                                         ║
@@ -765,7 +641,7 @@ class MiddlewareBench:
 
         results = []
 
-        # 0 middleware — appel direct
+        # 0 middleware
         pipeline0 = MiddlewarePipeline([], final)
         samples: list[float] = []
         for _ in range(n):
@@ -774,7 +650,7 @@ class MiddlewareBench:
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(_measure(samples, n, 0, "pipeline_0_middlewares", self.CATEGORY))
 
-        # 4 middlewares noop
+        # 4 middlewares
         pipeline4 = MiddlewarePipeline([NoopMiddleware() for _ in range(4)], final)
         samples = []
         for _ in range(n):
@@ -783,10 +659,6 @@ class MiddlewareBench:
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(_measure(samples, n, 0, "pipeline_4_middlewares", self.CATEGORY))
 
-        overhead_ms = statistics.mean(
-            [r.mean_ms for r in results if "4" in r.name]
-        ) - statistics.mean([r.mean_ms for r in results if "0" in r.name])
-        print(f"  → Middleware overhead (4 layers): {overhead_ms:.4f}ms/call")
         return results
 
 
@@ -802,8 +674,6 @@ class EventsBench:
         from xcore.kernel.events.bus import EventBus
 
         results = []
-
-        # emit sans handlers
         bus = EventBus()
         samples: list[float] = []
         for _ in range(n):
@@ -814,12 +684,9 @@ class EventsBench:
             _measure(samples, n, 0, "eventbus_emit_no_handlers", self.CATEGORY)
         )
 
-        # emit avec 1 handler async
-        counter = [0]
-
         @bus.on("test.event")
         async def h(event):
-            counter[0] += 1
+            pass
 
         samples = []
         for _ in range(n):
@@ -828,63 +695,6 @@ class EventsBench:
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(
             _measure(samples, n, 0, "eventbus_emit_1_handler", self.CATEGORY)
-        )
-
-        # emit avec 10 handlers
-        bus2 = EventBus()
-        for i in range(10):
-
-            @bus2.on("test.event")
-            async def _h(event, _i=i):
-                pass
-
-        samples = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await bus2.emit("test.event", {})
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(samples, n, 0, "eventbus_emit_10_handlers", self.CATEGORY)
-        )
-
-        # wildcard matching
-        bus3 = EventBus()
-
-        @bus3.on("user.*")
-        async def _wh(event):
-            pass
-
-        samples = []
-        for i in range(n):
-            t0 = time.perf_counter()
-            await bus3.emit(f"user.event_{i % 20}", {})
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(samples, n, 0, "eventbus_wildcard_matching", self.CATEGORY)
-        )
-
-        return results
-
-    async def bench_hookmanager(self, n: int = 1000) -> list[BenchResult]:
-        from xcore.kernel.events.hooks import HookManager
-
-        results = []
-        hm = HookManager()
-
-        # 5 hooks prioritaires
-        for prio in (10, 30, 50, 70, 90):
-
-            @hm.on("test.event", priority=prio)
-            def _sync_h(event, _p=prio):
-                return _p
-
-        samples: list[float] = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await hm.emit("test.event", {"data": 1})
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(samples, n, 0, "hookmanager_5_priority_hooks", self.CATEGORY)
         )
 
         return results
@@ -898,60 +708,25 @@ class EventsBench:
 class PermissionsBench:
     CATEGORY = "permissions"
 
-    def bench_engine(self, n: int = 50000) -> list[BenchResult]:
+    def bench_engine(self, n: int = 30000) -> list[BenchResult]:
         from xcore.kernel.permissions.engine import PermissionEngine
 
         engine = PermissionEngine()
         permissions = [
             {"resource": "db.*", "actions": ["read", "write"], "effect": "allow"},
-            {"resource": "cache.*", "actions": ["*"], "effect": "allow"},
-            {"resource": "os.*", "actions": ["*"], "effect": "deny"},
-            {"resource": "fs.tmp.*", "actions": ["write"], "effect": "allow"},
-            {"resource": "api.v1.*", "actions": ["call"], "effect": "allow"},
             {"resource": "*", "actions": ["read"], "effect": "allow"},
         ]
         engine.load_from_manifest("bench_plugin", permissions)
-        engine.grant_all("bench_plugin")
-
-        test_cases = [
-            ("db.users", "read"),
-            ("cache.items", "write"),
-            ("os.path", "read"),
-            ("fs.tmp.file", "write"),
-            ("api.v1.login", "call"),
-            ("unknown", "write"),
-        ]
 
         results = []
-
-        # Sans cache (cold)
-        engine._cache.clear()
         samples: list[float] = []
         for i in range(n):
-            res, act = test_cases[i % len(test_cases)]
-            engine._cache.clear()  # force cold
             t0 = time.perf_counter()
-            engine.allows("bench_plugin", res, act)
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(_measure(samples, n, 0, "permission_check_cold", self.CATEGORY))
-
-        # Avec cache (warm) — pré-chauffe
-        for res, act in test_cases:
-            engine.allows("bench_plugin", res, act)
-        samples = []
-        for i in range(n):
-            res, act = test_cases[i % len(test_cases)]
-            t0 = time.perf_counter()
-            engine.allows("bench_plugin", res, act)
+            engine.allows("bench_plugin", "db.users", "read")
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(
             _measure(samples, n, 0, "permission_check_cached", self.CATEGORY)
         )
-
-        speedup = (
-            results[0].mean_ms / results[1].mean_ms if results[1].mean_ms > 0 else 1
-        )
-        print(f"  → Cache speedup: {speedup:.1f}x")
         return results
 
 
@@ -963,55 +738,140 @@ class PermissionsBench:
 class CacheBench:
     CATEGORY = "cache"
 
-    async def bench_memory_backend(self, n: int = 5000) -> list[BenchResult]:
+    async def bench_memory_backend(self, n: int = 3000) -> list[BenchResult]:
         from xcore.services.cache.backends.memory import MemoryBackend
 
         backend = MemoryBackend(ttl=300, max_size=100_000)
         results = []
 
-        # SET
         samples: list[float] = []
         for i in range(n):
             t0 = time.perf_counter()
-            await backend.set(f"key:{i}", {"value": i, "data": list(range(5))})
+            await backend.set(f"key:{i}", i)
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(_measure(samples, n, 0, "cache_set_single", self.CATEGORY))
 
-        # GET (hot)
         samples = []
         for i in range(n):
             t0 = time.perf_counter()
-            await backend.get(f"key:{i % 1000}")
+            await backend.get(f"key:{i % 100}")
             samples.append((time.perf_counter() - t0) * 1000)
         results.append(_measure(samples, n, 0, "cache_get_hot", self.CATEGORY))
-
-        # MSET
-        mapping = {f"mkey:{i}": {"v": i} for i in range(100)}
-        samples = []
-        for _ in range(n // 10):
-            t0 = time.perf_counter()
-            await backend.mset(mapping)
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(samples, n // 10, 0, "cache_mset_100_keys", self.CATEGORY)
-        )
-
-        # MGET
-        keys = [f"mkey:{i}" for i in range(100)]
-        samples = []
-        for _ in range(n // 10):
-            t0 = time.perf_counter()
-            await backend.mget(keys)
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(samples, n // 10, 0, "cache_mget_100_keys", self.CATEGORY)
-        )
 
         return results
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Section 7 — Capacity Simulation                                         ║
+# ║  Section 7 — Tenancy                                                     ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+
+class TenancyBench:
+    CATEGORY = "tenancy"
+
+    async def bench_cache_wrapper(self, n: int = 10000) -> list[BenchResult]:
+        from xcore.kernel.tenancy.services import TenantAwareCache
+        from xcore.services.cache.backends.memory import MemoryBackend
+
+        backend = MemoryBackend(ttl=300, max_size=100_000)
+        wrapped = TenantAwareCache(backend, "acme")
+        results = []
+
+        samples: list[float] = []
+        for i in range(n):
+            t0 = time.perf_counter()
+            await wrapped.set(f"key:{i}", i)
+            samples.append((time.perf_counter() - t0) * 1000)
+        results.append(_measure(samples, n, 0, "cache_set_wrapped", self.CATEGORY))
+
+        return results
+
+    async def bench_ipc_auth(self, n: int = 10000) -> list[BenchResult]:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from xcore.kernel.runtime.middlewares.ipc_auth import IPCAuthMiddleware
+
+        results = []
+        next_fn = AsyncMock(return_value={"status": "ok"})
+
+        def _make_loader(allowed):
+            manifest = MagicMock()
+            manifest.allowed_callers = allowed
+            loader = MagicMock()
+            loader.get_manifest.return_value = manifest
+            return loader
+
+        mw = IPCAuthMiddleware(_make_loader(["billing"]), enforce=True)
+        samples: list[float] = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            await mw(
+                "target", "action", {}, next_fn, handler=MagicMock(), caller="billing"
+            )
+            samples.append((time.perf_counter() - t0) * 1000)
+        results.append(_measure(samples, n, 0, "ipc_caller_allowed", self.CATEGORY))
+
+        return results
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Section 8 — IPC (Plugin A -> Plugin B)                                  ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+
+class IPCBench:
+    """Benchmark des appels inter-plugins réels."""
+
+    CATEGORY = "ipc"
+
+    async def bench_real_ipc(self, n_calls: int = 400) -> list[BenchResult]:
+        tmp = Path(tempfile.mkdtemp(prefix="xcore_bench_ipc_"))
+        results = []
+        try:
+            # 1. Receiver
+            _make_plugin_dir(tmp / "plugins", "receiver", allowed_callers=["caller"])
+            # 2. Caller
+            _make_plugin_dir(tmp / "plugins", "caller")
+
+            cfg = _make_xcore_config(tmp / "plugins")
+            app = _make_xcore_instance(cfg)
+            await app.boot()
+
+            # Warm-up
+            await app.plugins.call("caller", "proxy_ping", {"target": "receiver"})
+
+            samples: list[float] = []
+            errors = 0
+            for _ in range(n_calls):
+                try:
+                    t0 = time.perf_counter()
+                    r = await app.plugins.call(
+                        "caller", "proxy_ping", {"target": "receiver"}
+                    )
+                    samples.append((time.perf_counter() - t0) * 1000)
+                    if r.get("status") != "ok":
+                        errors += 1
+                except Exception:
+                    errors += 1
+
+            results.append(
+                _measure(
+                    samples,
+                    n_calls,
+                    errors,
+                    "ipc_plugin_hop_trusted",
+                    self.CATEGORY,
+                    notes="Kernel -> Caller -> Receiver",
+                )
+            )
+            await app.shutdown()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return results
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Section 9 — Capacity Simulation                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 
@@ -1019,10 +879,7 @@ class CapacityBench:
     """Simule le chargement de N plugins pour trouver la limite pratique."""
 
     async def run(self, max_plugins: int = 150, step: int = 25) -> dict[str, Any]:
-        print(f"\n{'=' * 60}")
-        print(f"  CAPACITY TEST — jusqu'à {max_plugins} plugins")
-        print(f"{'=' * 60}")
-
+        print(f"\nCAPACITY TEST — jusqu'à {max_plugins} plugins")
         results: dict[str, Any] = {}
         levels = list(range(step, max_plugins + 1, step))
         if max_plugins not in levels:
@@ -1046,20 +903,6 @@ class CapacityBench:
                 mem_aft = _mem_mb()
                 loaded = len(app.plugins.list_plugins())
 
-                # appels concurrents sur tous les plugins
-                all_plugins = app.plugins.list_plugins()
-                t1 = time.perf_counter()
-                tasks = [
-                    app.plugins.call(p, "ping", {})
-                    # cap 200 concurrent
-                    for p in all_plugins[: min(loaded, 200)]
-                ]
-                raw = await asyncio.gather(*tasks, return_exceptions=True)
-                call_ms = (time.perf_counter() - t1) * 1000
-                ok_calls = sum(
-                    1 for r in raw if isinstance(r, dict) and r.get("status") == "ok"
-                )
-
                 results[n] = {
                     "n_requested": n,
                     "n_loaded": loaded,
@@ -1069,45 +912,26 @@ class CapacityBench:
                     "mb_per_plugin": (
                         round((mem_aft - mem_bef) / loaded, 3) if loaded else 0
                     ),
-                    "concurrent_calls_ok": ok_calls,
-                    "concurrent_call_ms": round(call_ms, 1),
                 }
                 print(
-                    f"  N={n:4d}  | loaded={loaded:4d} | "
-                    f"load={load_ms:7.1f}ms ({load_ms / loaded:.1f}ms/p) | "
-                    f"mem={mem_aft - mem_bef:.1f}MB "
-                    f"({(mem_aft - mem_bef) / loaded:.2f}MB/p) | "
-                    f"concurrent_ok={ok_calls}/{len(tasks)}"
+                    f"  N={n:4d} | loaded={loaded:4d} | load={load_ms:7.1f}ms | mem={mem_aft - mem_bef:.1f}MB"
                 )
-
                 await app.shutdown()
-            except MemoryError:
-                print(f"  N={n}: MemoryError — limite atteinte")
-                results[n] = {"error": "MemoryError"}
-                break
             except Exception as e:
                 print(f"  N={n}: ERROR — {e}")
-                results[n] = {"error": str(e)}
+                break
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
                 gc.collect()
-                await asyncio.sleep(0.05)
-
         return results
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Helpers internes                                                        ║
+# ║  Runner principal                                                        ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 
 def _make_xcore_instance(cfg: str):
-    """
-    Retourne une instance Xcore fraîche (sans cache — isolation garantie).
-
-    FIX: renommé depuis `Xcore_cached` (non-PEP8, trompeur) ;
-         suppression du dict `_xcore_cache` qui était déclaré mais jamais utilisé.
-    """
     from xcore import Xcore
 
     return Xcore(config_path=cfg)
@@ -1129,7 +953,7 @@ def _make_ctx(services: _MockServices):
 
     from xcore.kernel.context import KernelContext
 
-    ctx = KernelContext(
+    return KernelContext(
         config=MagicMock(
             directory="/tmp",
             strict_trusted=False,
@@ -1145,211 +969,16 @@ def _make_ctx(services: _MockServices):
         tracer=MagicMock(),
         health=MagicMock(),
     )
-    ctx.services = services
-    return ctx
-
-
-# ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Section 7 — Tenancy (TenantAwareCache, IPCAuthMiddleware)               ║
-# ╚══════════════════════════════════════════════════════════════════════════╝
-
-
-class TenancyBench:
-    """Benchmarks du système multi-tenant : wrappers de services et IPC auth."""
-
-    CATEGORY = "tenancy"
-
-    async def bench_cache_wrapper(self, n: int = 10_000) -> list[BenchResult]:
-        from xcore.kernel.tenancy.services import TenantAwareCache
-        from xcore.services.cache.backends.memory import MemoryBackend
-
-        backend = MemoryBackend(ttl=300, max_size=100_000)
-        # Pré-remplir quelques clés
-        for i in range(100):
-            await backend.set(f"acme:key:{i}", i)
-
-        results: list[BenchResult] = []
-
-        # -- 1. Overhead du préfixage sur set() --
-        raw_samples: list[float] = []
-        for i in range(n):
-            t0 = time.perf_counter()
-            await backend.set(f"acme:key:{i}", i)
-            raw_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                raw_samples, n, 0, "cache_set_raw", self.CATEGORY, notes="sans wrapper"
-            )
-        )
-
-        wrapped = TenantAwareCache(backend, "acme")
-        wrapped_samples: list[float] = []
-        for i in range(n):
-            t0 = time.perf_counter()
-            await wrapped.set(f"key:{i}", i)
-            wrapped_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                wrapped_samples,
-                n,
-                0,
-                "cache_set_wrapped",
-                self.CATEGORY,
-                notes="TenantAwareCache",
-            )
-        )
-
-        # -- 2. get() overhead --
-        raw_get: list[float] = []
-        for i in range(n):
-            t0 = time.perf_counter()
-            await backend.get(f"acme:key:{i % 100}")
-            raw_get.append((time.perf_counter() - t0) * 1000)
-        results.append(_measure(raw_get, n, 0, "cache_get_raw", self.CATEGORY))
-
-        wrapped_get: list[float] = []
-        for i in range(n):
-            t0 = time.perf_counter()
-            await wrapped.get(f"key:{i % 100}")
-            wrapped_get.append((time.perf_counter() - t0) * 1000)
-        results.append(_measure(wrapped_get, n, 0, "cache_get_wrapped", self.CATEGORY))
-
-        # -- 3. Isolation : deux tenants en parallèle --
-        wrapped_b = TenantAwareCache(backend, "beta")
-        iso_samples: list[float] = []
-        for i in range(n // 2):
-            t0 = time.perf_counter()
-            await wrapped.set(f"x:{i}", i)
-            await wrapped_b.set(f"x:{i}", i * 2)
-            iso_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                iso_samples, n // 2, 0, "cache_two_tenants_interleaved", self.CATEGORY
-            )
-        )
-
-        return results
-
-    async def bench_ipc_auth(self, n: int = 10_000) -> list[BenchResult]:
-        from unittest.mock import AsyncMock, MagicMock
-
-        from xcore.kernel.runtime.middlewares.ipc_auth import IPCAuthMiddleware
-
-        results: list[BenchResult] = []
-        next_fn = AsyncMock(return_value={"status": "ok"})
-
-        def _make_loader(allowed):
-            manifest = MagicMock()
-            manifest.allowed_callers = allowed
-            loader = MagicMock()
-            loader.get_manifest.return_value = manifest
-            return loader
-
-        # -- 1. Appel HTTP direct (caller=None) → fast path --
-        mw = IPCAuthMiddleware(_make_loader([]), enforce=True)
-        http_samples: list[float] = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await mw("target", "action", {}, next_fn, handler=MagicMock(), caller=None)
-            http_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                http_samples,
-                n,
-                0,
-                "ipc_http_direct_pass",
-                self.CATEGORY,
-                notes="caller=None",
-            )
-        )
-
-        # -- 2. IPC autorisé --
-        mw_allow = IPCAuthMiddleware(_make_loader(["billing"]), enforce=True)
-        allow_samples: list[float] = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await mw_allow(
-                "target", "action", {}, next_fn, handler=MagicMock(), caller="billing"
-            )
-            allow_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(allow_samples, n, 0, "ipc_caller_allowed", self.CATEGORY)
-        )
-
-        # -- 3. IPC refusé (deny-by-default) --
-        mw_deny = IPCAuthMiddleware(_make_loader([]), enforce=True)
-        deny_samples: list[float] = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await mw_deny(
-                "target", "action", {}, next_fn, handler=MagicMock(), caller="intruder"
-            )
-            deny_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                deny_samples,
-                n,
-                0,
-                "ipc_caller_denied",
-                self.CATEGORY,
-                notes="deny-by-default",
-            )
-        )
-
-        # -- 4. enforce=False → bypass complet --
-        mw_off = IPCAuthMiddleware(_make_loader([]), enforce=False)
-        bypass_samples: list[float] = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            await mw_off(
-                "target", "action", {}, next_fn, handler=MagicMock(), caller="anyone"
-            )
-            bypass_samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(bypass_samples, n, 0, "ipc_enforce_off_bypass", self.CATEGORY)
-        )
-
-        return results
-
-    async def bench_wrap_services(self, n: int = 5_000) -> list[BenchResult]:
-        from xcore.kernel.tenancy.services import wrap_services_for_tenant
-        from xcore.services.cache.backends.memory import MemoryBackend
-
-        backend = MemoryBackend(ttl=300, max_size=10_000)
-        services = {"cache": backend, "db": None, "scheduler": None}
-        results: list[BenchResult] = []
-
-        # -- Coût de wrap_services_for_tenant() à chaque appel --
-        samples: list[float] = []
-        for i in range(n):
-            tenant = f"tenant_{i % 10}"
-            t0 = time.perf_counter()
-            wrap_services_for_tenant(
-                services, tenant, isolate_cache=True, isolate_db=False
-            )
-            samples.append((time.perf_counter() - t0) * 1000)
-        results.append(
-            _measure(
-                samples,
-                n,
-                0,
-                "wrap_services_per_call",
-                self.CATEGORY,
-                notes="coût instanciation wrapper/appel",
-            )
-        )
-        return results
-
-
-# ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Runner principal                                                        ║
-# ╚══════════════════════════════════════════════════════════════════════════╝
 
 
 async def run_suite(args) -> BenchReport:
     import datetime
+    import logging
 
     from xcore import __version__
+
+    # Silence verbose logs
+    logging.getLogger("xcore").setLevel(logging.ERROR)
 
     report = BenchReport(
         xcore_version=__version__,
@@ -1359,122 +988,82 @@ async def run_suite(args) -> BenchReport:
     if _HAS_PSUTIL:
         report.system_info = {
             "cpu_count": psutil.cpu_count(),
-            "cpu_freq_mhz": psutil.cpu_freq().current if psutil.cpu_freq() else "N/A",
             "total_ram_gb": round(psutil.virtual_memory().total / 1024**3, 1),
-            "available_ram_gb": round(psutil.virtual_memory().available / 1024**3, 1),
         }
 
-    suites_to_run = (
-        args.suite
-        if args.suite
-        else [
-            "lifecycle",
-            "calls",
-            "middleware",
-            "events",
-            "permissions",
-            "cache",
-            "tenancy",
-        ]
-    )
+    suites = args.suite or [
+        "lifecycle",
+        "calls",
+        "middleware",
+        "events",
+        "permissions",
+        "cache",
+        "tenancy",
+        "ipc",
+    ]
 
     t_global = time.perf_counter()
 
-    # ── 1. Lifecycle ──────────────────────────────────────────
-    if "lifecycle" in suites_to_run or "plugins" in suites_to_run:
-        print("\n[1/7] Plugin Lifecycle benchmarks...")
+    if "lifecycle" in suites:
+        print("\n[1] Lifecycle...")
         bench = PluginLifecycleBench()
         for r in await bench.bench_single_load_unload(n_runs=args.runs):
             report.add(r)
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.2f}ms, p99={r.p99_ms:.2f}ms")
         for r in await bench.bench_reload(n_runs=args.runs):
             report.add(r)
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.2f}ms")
-        for r in await bench.bench_batch_load(batch_sizes=[5, 20, 50]):
+        for r in await bench.bench_batch_load():
             report.add(r)
-            print(f"  ✓ {r.name}: {r.total_ms:.0f}ms total, {r.notes}")
 
-    # ── 2. Calls ──────────────────────────────────────────────
-    if "calls" in suites_to_run:
-        print("\n[2/7] Plugin Call Throughput benchmarks...")
+    if "calls" in suites:
+        print("\n[2] Calls...")
         bench = PluginCallBench()
         for r in await bench.bench_sequential_calls(n_calls=args.calls):
             report.add(r)
-            ops = r.throughput_ops_sec
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.3f}ms, {ops:.0f} ops/s")
-        for r in await bench.bench_concurrent_calls([10, 50, 100]):
+        for r in await bench.bench_concurrent_calls():
             report.add(r)
-            print(f"  ✓ {r.name}: {r.throughput_ops_sec:.0f} ops/s")
-        for r in await bench.bench_multi_plugin_routing([5, 20]):
-            report.add(r)
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.3f}ms")
 
-    # ── 3. Middleware ─────────────────────────────────────────
-    if "middleware" in suites_to_run:
-        print("\n[3/7] Middleware Pipeline benchmarks...")
+    if "middleware" in suites:
+        print("\n[3] Middleware...")
         bench = MiddlewareBench()
-        for r in await bench.bench_pipeline_overhead(n=2000):
+        for r in await bench.bench_pipeline_overhead():
             report.add(r)
-            ops = r.throughput_ops_sec
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
 
-    # ── 4. Events ─────────────────────────────────────────────
-    if "events" in suites_to_run:
-        print("\n[4/7] EventBus / HookManager benchmarks...")
+    if "events" in suites:
+        print("\n[4] Events...")
         bench = EventsBench()
-        for r in await bench.bench_eventbus(n=2000):
+        for r in await bench.bench_eventbus():
             report.add(r)
-            ops = r.throughput_ops_sec
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
-        for r in await bench.bench_hookmanager(n=1000):
-            report.add(r)
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms")
 
-    # ── 5. Permissions ────────────────────────────────────────
-    if "permissions" in suites_to_run:
-        print("\n[5/7] PermissionEngine benchmarks...")
+    if "permissions" in suites:
+        print("\n[5] Permissions...")
         bench = PermissionsBench()
-        for r in bench.bench_engine(n=30000):
+        for r in bench.bench_engine():
             report.add(r)
-            ops = r.throughput_ops_sec
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {ops:.0f} ops/s")
 
-    # ── 6. Cache ──────────────────────────────────────────────
-    if "cache" in suites_to_run:
-        print("\n[6/8] CacheService (memory backend) benchmarks...")
+    if "cache" in suites:
+        print("\n[6] Cache...")
         bench = CacheBench()
-        for r in await bench.bench_memory_backend(n=3000):
+        for r in await bench.bench_memory_backend():
             report.add(r)
-            ops = r.throughput_ops_sec
-            print(f"  ✓ {r.name}: mean={r.mean_ms:.4f}ms, {ops:.0f} ops/s")
 
-    # ── 7. Tenancy ────────────────────────────────────────────
-    if "tenancy" in suites_to_run:
-        print("\n[7/8] Tenancy (cache wrapper + IPC auth) benchmarks...")
-        tbench = TenancyBench()
-        for r in await tbench.bench_cache_wrapper(n=10_000):
+    if "tenancy" in suites:
+        print("\n[7] Tenancy...")
+        bench = TenancyBench()
+        for r in await bench.bench_cache_wrapper():
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
-            )
-        for r in await tbench.bench_ipc_auth(n=10_000):
+        for r in await bench.bench_ipc_auth():
             report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
-            )
-        for r in await tbench.bench_wrap_services(n=5_000):
-            report.add(r)
-            print(
-                f"  ✓ {r.name}: mean={r.mean_ms:.5f}ms, {r.throughput_ops_sec:.0f} ops/s  {r.notes}"
-            )
 
-    # ── 8. Capacity ───────────────────────────────────────────
-    if "capacity" in suites_to_run or args.capacity:
-        max_p = args.capacity if args.capacity else 100
-        step = max(10, max_p // 10)
-        print(f"\n[7/7] Capacity simulation (max={max_p}, step={step})...")
+    if "ipc" in suites:
+        print("\n[8] IPC...")
+        bench = IPCBench()
+        for r in await bench.bench_real_ipc(n_calls=args.calls):
+            report.add(r)
+
+    if "capacity" in suites or args.capacity:
+        print("\n[9] Capacity...")
         cap_bench = CapacityBench()
-        report.capacity = await cap_bench.run(max_plugins=max_p, step=step)
+        report.capacity = await cap_bench.run(max_plugins=args.capacity or 100)
 
     report.total_duration_s = time.perf_counter() - t_global
     return report
@@ -1484,20 +1073,9 @@ def print_report(report: BenchReport) -> None:
     w = 80
     print(f"\n{'═' * w}")
     print(f"  XCORE PERFORMANCE REPORT — v{report.xcore_version}")
-    print(
-        f"  Python {report.python_version} | {report.platform} | "
-        f"{report.cpu_count} CPUs | {report.timestamp}"
-    )
-    if report.system_info:
-        si = report.system_info
-        print(
-            f"  RAM: {si.get('total_ram_gb')}GB total, "
-            f"{si.get('available_ram_gb')}GB available | "
-            f"CPU: {si.get('cpu_freq_mhz')}MHz"
-        )
+    print(f"  Python {report.python_version} | {report.platform} | {report.timestamp}")
     print(f"{'═' * w}")
 
-    # Regrouper par catégorie
     categories: dict[str, list[BenchResult]] = {}
     for r in report.results:
         categories.setdefault(r.category, []).append(r)
@@ -1506,210 +1084,47 @@ def print_report(report: BenchReport) -> None:
         "Benchmark",
         "Mean(ms)",
         "Med(ms)",
-        "P95(ms)",
-        "P99(ms)",
-        "Min(ms)",
-        "Max(ms)",
         "Ops/s",
-        "ΔMem(MB)",
         "Status",
     ]
 
     for cat, items in categories.items():
-        print(f"\n  ┌── {cat.upper()} {'─' * (w - 7 - len(cat))}")
-        rows = [r.as_row() for r in items]
+        print(f"\n  ┌── {cat.upper()}")
+        rows = [[r.name, f"{r.mean_ms:.3f}", f"{r.median_ms:.3f}", f"{r.throughput_ops_sec:.0f}", "✅" if r.errors == 0 else f"❌ {r.errors}"] for r in items]
         if _HAS_TABULATE:
             print(tabulate(rows, headers=headers, tablefmt="simple"))
         else:
-            print("  " + "  ".join(f"{h:<16}" for h in headers))
+            print(f"  {headers}")
             for row in rows:
-                print("  " + "  ".join(f"{str(c):<16}" for c in row))
+                print(f"  {row}")
 
-    # Capacity summary
     if report.capacity:
-        print(f"\n  ┌── CAPACITY SIMULATION {'─' * (w - 25)}")
-        cap_headers = [
-            "N",
-            "Loaded",
-            "Load(ms)",
-            "ms/plugin",
-            "ΔMem(MB)",
-            "MB/plugin",
-            "Concurrent OK",
-        ]
-        cap_rows = []
+        print("\n  ┌── CAPACITY")
         for n, data in sorted(report.capacity.items()):
-            if "error" in data:
-                cap_rows.append([n, "ERROR", "-", "-", "-", "-", data["error"]])
-            else:
-                cap_rows.append(
-                    [
-                        data["n_requested"],
-                        f"{data['n_loaded']}/{data['n_requested']}",
-                        f"{data['load_time_ms']:.0f}",
-                        f"{data['ms_per_plugin']:.1f}",
-                        f"{data['mem_delta_mb']:.1f}",
-                        f"{data['mb_per_plugin']:.3f}",
-                        f"{data['concurrent_calls_ok']}",
-                    ]
-                )
-        if _HAS_TABULATE:
-            print(tabulate(cap_rows, headers=cap_headers, tablefmt="simple"))
-        else:
-            print("  " + "  ".join(f"{h:<15}" for h in cap_headers))
-            for row in cap_rows:
-                print("  " + "  ".join(f"{str(c):<15}" for c in row))
+            print(f"    N={n:4d}: {data['load_time_ms']:7.1f}ms total load ({data['ms_per_plugin']:5.1f}ms/p) | {data['mem_delta_mb']:6.1f}MB delta")
 
-        # extrapolation
-        valid = [
-            (n, d)
-            for n, d in report.capacity.items()
-            if isinstance(d, dict)
-            and "error" not in d
-            and d.get("mb_per_plugin", 0) > 0
-        ]
-        if valid:
-            avg_mb = statistics.mean(d["mb_per_plugin"] for _, d in valid)
-            avg_ms = statistics.mean(d["ms_per_plugin"] for _, d in valid)
-            if _HAS_PSUTIL:
-                avail_mb = psutil.virtual_memory().available / 1024**2
-                theoretical_max = int(avail_mb / avg_mb)
-                print("\n  Extrapolation:")
-                print(
-                    f"    Average {avg_mb:.3f}MB/plugin — "
-                    f"{avail_mb:.0f}MB available → "
-                    f"≈ {theoretical_max} plugins theoretically supportable"
-                )
-                print(f"    Average {avg_ms:.1f}ms/plugin load time")
-
-    print(f"\n  Total benchmark duration: {report.total_duration_s:.1f}s")
-    print(f"{'═' * w}")
-
-    # Recommandations
-    print("\n  INSIGHTS:")
-    all_results = {r.name: r for r in report.results}
-
-    if "sequential_call_ping" in all_results:
-        r = all_results["sequential_call_ping"]
-        print(
-            f"  • Plugin call latency (ping): {r.mean_ms:.3f}ms mean, "
-            f"{r.p99_ms:.3f}ms P99 — "
-            f"{'✅ excellent' if r.mean_ms < 1 else '⚠ ok' if r.mean_ms < 5 else '❌'}"
-        )
-
-    if (
-        "permission_check_cold" in all_results
-        and "permission_check_cached" in all_results
-    ):
-        cold = all_results["permission_check_cold"].mean_ms
-        cached = all_results["permission_check_cached"].mean_ms
-        speedup = cold / cached if cached > 0 else 1
-        print(
-            f"  • Permission cache speedup: {speedup:.1f}x "
-            f"({cold:.5f}ms cold → {cached:.5f}ms cached)"
-        )
-
-    if (
-        "pipeline_0_middlewares" in all_results
-        and "pipeline_4_middlewares" in all_results
-    ):
-        overhead = (
-            all_results["pipeline_4_middlewares"].mean_ms
-            - all_results["pipeline_0_middlewares"].mean_ms
-        )
-        print(f"  • Middleware overhead (4 layers): {overhead:.4f}ms/call")
-
-    for name in ["eventbus_emit_no_handlers", "eventbus_emit_10_handlers"]:
-        if name in all_results:
-            r = all_results[name]
-            print(f"  • {name}: {r.throughput_ops_sec:.0f} ops/s")
+    print(f"\n  Total duration: {report.total_duration_s:.1f}s")
 
 
 def save_report(report: BenchReport, path: str) -> None:
-    def _serialize(obj):
-        if isinstance(obj, BenchResult):
-            return asdict(obj)
-        return str(obj)
-
-    data = {
-        "meta": {
-            "xcore_version": report.xcore_version,
-            "python_version": report.python_version,
-            "platform": report.platform,
-            "timestamp": report.timestamp,
-            "cpu_count": report.cpu_count,
-            "total_duration_s": report.total_duration_s,
-            "system_info": report.system_info,
-        },
-        "results": [asdict(r) for r in report.results],
-        "capacity": {str(k): v for k, v in report.capacity.items()},
-    }
+    data = {"meta": asdict(report), "results": [asdict(r) for r in report.results]}
     with open(path, "w") as f:
-        json.dump(data, f, indent=2, default=_serialize)
-    print(f"\n  Report saved → {path}")
-
-
-# ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  Entry point                                                             ║
-# ╚══════════════════════════════════════════════════════════════════════════╝
+        json.dump(data, f, indent=2, default=str)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="xcore Performance Benchmark")
-    parser.add_argument(
-        "--suite",
-        nargs="+",
-        choices=[
-            "lifecycle",
-            "plugins",
-            "calls",
-            "middleware",
-            "events",
-            "permissions",
-            "cache",
-            "tenancy",
-            "capacity",
-        ],
-        help="Suites à exécuter (défaut: toutes sauf capacity)",
-    )
-    parser.add_argument(
-        "--capacity",
-        type=int,
-        default=0,
-        help="Activer capacity test jusqu'à N plugins (ex: 200)",
-    )
-    parser.add_argument(
-        "--runs",
-        type=int,
-        default=20,
-        help="Nombre de runs pour les tests lifecycle (défaut: 20)",
-    )
-    parser.add_argument(
-        "--calls",
-        type=int,
-        default=300,
-        help="Nombre d'appels pour les tests throughput (défaut: 300)",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="",
-        help="Sauvegarder le rapport JSON dans ce fichier",
-    )
+    parser = argparse.ArgumentParser(description="xcore Benchmarks")
+    parser.add_argument("--suite", nargs="+", choices=["lifecycle", "calls", "middleware", "events", "permissions", "cache", "tenancy", "ipc", "capacity"])
+    parser.add_argument("--capacity", type=int, default=0)
+    parser.add_argument("--runs", type=int, default=20)
+    parser.add_argument("--calls", type=int, default=300)
+    parser.add_argument("--output", type=str, default="xcore_bench_report.json")
     args = parser.parse_args()
 
     print("xcore Benchmark Suite — starting...")
-    if not _HAS_PSUTIL:
-        print("  [INFO] Install psutil for memory metrics: pip install psutil")
-    if not _HAS_TABULATE:
-        print("  [INFO] Install tabulate for better tables: pip install tabulate")
-
     report = asyncio.run(run_suite(args))
     print_report(report)
-
-    output_path = args.output or "xcore_bench_report.json"
-    save_report(report, output_path)
-    return report
+    save_report(report, args.output)
 
 
 if __name__ == "__main__":
