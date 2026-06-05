@@ -51,8 +51,11 @@ class Middlewares:
                     svc_name = param.value
                     config[param.name] = lambda n=svc_name: self._prototypes(n)
                 elif param.type == "events":
-                    # Passe un callable () → event bus, résolu à la requête
-                    config[param.name] = lambda: self._event_bus
+                    # L'event bus est un singleton disponible dès configure() :
+                    # on l'injecte directement (objet avec .emit(name, data)), pas
+                    # un résolveur 0-arg — sinon un middleware qui appelle
+                    # emit(name, data) se prend un TypeError d'arité.
+                    config[param.name] = self._event_bus
                 else:
                     config[param.name] = param.value
             instances.append({"cls": cls, "config": config, "name": mddw.name})

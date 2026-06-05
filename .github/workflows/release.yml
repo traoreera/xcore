@@ -1,66 +1,103 @@
-name: Release – Tag & Publish
+# ============================================================
+# Release — Tag & Publish
+# Déclenché uniquement sur un tag v*.*.*
+# Séparé du CI pour garder une responsabilité unique
+# ============================================================
+
+name: Release
 
 on:
   push:
     tags:
-      - "v*.*.*"   # déclenché sur v1.0.0, v1.2.3, etc.
+      - "v*.*.*" # v1.0.0, v1.2.3, v2.0.0-beta.1, etc.
 
 permissions:
   contents: read
 
-jobs:
+env:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.8.2"
 
-  # ── Validation pre-release ─────────────────────────────────────────────────
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # JOB 1 — Validations pre-release
+  # ──────────────────────────────────────────────────────────────
   pre-release-checks:
     name: 🔍 Pre-release Checks
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
+    outputs:
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      version: ${{ steps.version.outputs.version }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Poetry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-in-project: true
+        run: pip install poetry==${{ env.POETRY_VERSION }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Run full test suite
-        env:
-          DATABASE_URL: sqlite:///./test.db
-          SECRET_KEY: release-test-key
-        run: poetry run pytest tests/ -q --tb=short
+        run: poetry install --with dev
 
       - name: Check tag matches pyproject.toml version
+        id: version
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
           PYPROJECT=$(poetry version -s)
+
           if [ "$TAG" != "$PYPROJECT" ]; then
-            echo "❌ Tag ($TAG) ≠ pyproject.toml version ($PYPROJECT)"
+            echo "❌ Tag ($TAG) ≠ pyproject.toml ($PYPROJECT)"
             exit 1
           fi
-          echo "✓ Version match: $TAG"
+          echo "✅ Version cohérente : $TAG"
 
-  # ── Génération du changelog ────────────────────────────────────────────────
+          # Détection pre-release (alpha, beta, rc)
+          if echo "$TAG" | grep -qE '-(alpha|beta|rc)'; then
+            echo "is_prerelease=true"  >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          echo "version=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Run full test suite (xcore/)
+        run: make ci-test STRICT=1
+
+      - name: Security audit
+        run: make ci-security
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2 — Génération du changelog (commits conventionnels)
+  # ──────────────────────────────────────────────────────────────
   changelog:
-    name: 📝 Generate Changelog
+    name: 📝 Changelog
     runs-on: ubuntu-latest
     needs: pre-release-checks
     permissions:
       contents: read
+
     outputs:
       notes: ${{ steps.notes.outputs.notes }}
+
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # historique complet pour le changelog
+          fetch-depth: 0 # historique complet requis
 
       - name: Generate release notes
         id: notes
@@ -68,69 +105,145 @@ jobs:
           PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
           CURR_TAG=${GITHUB_REF#refs/tags/}
 
-          echo "## What's Changed" > /tmp/notes.md
-          echo "" >> /tmp/notes.md
+          echo "Comparaison : ${PREV_TAG:-<début>}...${CURR_TAG}"
 
-          # Features
-          FEATS=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^feat" --pretty="format:- %s" 2>/dev/null)
-          if [ -n "$FEATS" ]; then
-            echo "### ✨ New Features" >> /tmp/notes.md
-            echo "$FEATS" >> /tmp/notes.md
-            echo "" >> /tmp/notes.md
-          fi
+          {
+            echo "## What's Changed"
+            echo ""
 
-          # Fixes
-          FIXES=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^fix" --pretty="format:- %s" 2>/dev/null)
-          if [ -n "$FIXES" ]; then
-            echo "### 🐛 Bug Fixes" >> /tmp/notes.md
-            echo "$FIXES" >> /tmp/notes.md
-            echo "" >> /tmp/notes.md
-          fi
+            # ── Features ──────────────────────────────────────
+            FEATS=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" --grep="^feat" 2>/dev/null)
+            if [ -n "$FEATS" ]; then
+              echo "### ✨ New Features"
+              echo "$FEATS"
+              echo ""
+            fi
 
-          # Docs
-          DOCS=$(git log ${PREV_TAG}..${CURR_TAG} --oneline --grep="^docs" --pretty="format:- %s" 2>/dev/null)
-          if [ -n "$DOCS" ]; then
-            echo "### 📖 Documentation" >> /tmp/notes.md
-            echo "$DOCS" >> /tmp/notes.md
-            echo "" >> /tmp/notes.md
-          fi
+            # ── Bug fixes ─────────────────────────────────────
+            FIXES=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" --grep="^fix" 2>/dev/null)
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
 
-          echo "" >> /tmp/notes.md
-          echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURR_TAG}" >> /tmp/notes.md
+            # ── Breaking changes ──────────────────────────────
+            BREAKING=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" --grep="BREAKING CHANGE" 2>/dev/null)
+            if [ -n "$BREAKING" ]; then
+              echo "### ⚠️ Breaking Changes"
+              echo "$BREAKING"
+              echo ""
+            fi
 
-          NOTES=$(cat /tmp/notes.md)
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            # ── Perf ──────────────────────────────────────────
+            PERF=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" --grep="^perf" 2>/dev/null)
+            if [ -n "$PERF" ]; then
+              echo "### ⚡ Performance"
+              echo "$PERF"
+              echo ""
+            fi
 
-  # ── GitHub Release ─────────────────────────────────────────────────────────
-  release:
-    name: 🎉 Build & Create GitHub Release
+            # ── Docs ──────────────────────────────────────────
+            DOCS=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" --grep="^docs" 2>/dev/null)
+            if [ -n "$DOCS" ]; then
+              echo "### 📖 Documentation"
+              echo "$DOCS"
+              echo ""
+            fi
+
+            # ── Chores & autres ───────────────────────────────
+            CHORES=$(git log ${PREV_TAG:+${PREV_TAG}..}${CURR_TAG} \
+              --pretty="format:- %s (%h)" \
+              --grep="^\(chore\|refactor\|test\|ci\|build\)" 2>/dev/null)
+            if [ -n "$CHORES" ]; then
+              echo "### 🔧 Maintenance"
+              echo "$CHORES"
+              echo ""
+            fi
+
+            if [ -n "$PREV_TAG" ]; then
+              echo "---"
+              echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURR_TAG}"
+            fi
+          } > /tmp/notes.md
+
+          # Exporter via output multiline
+          {
+            echo "notes<<EOF"
+            cat /tmp/notes.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          echo "── Aperçu du changelog ──"
+          cat /tmp/notes.md
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 3 — Build du package
+  # ──────────────────────────────────────────────────────────────
+  build:
+    name: 🏗️ Build Package
     runs-on: ubuntu-latest
-    needs: changelog
+    needs: pre-release-checks
     permissions:
-      contents: write
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Poetry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-in-project: true
+        run: pip install poetry==${{ env.POETRY_VERSION }}
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
 
-      - name: Build package
+      - name: Build wheel + sdist
         run: poetry build
 
       - name: Verify dist contents
         run: ls -lh dist/
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 4 — Création de la GitHub Release
+  # ──────────────────────────────────────────────────────────────
+  release:
+    name: 🎉 GitHub Release
+    runs-on: ubuntu-latest
+    needs: [changelog, build]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -138,22 +251,31 @@ jobs:
           name: "xcore ${{ github.ref_name }}"
           body: ${{ needs.changelog.outputs.notes }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+          prerelease: ${{ needs.pre-release-checks.outputs.is_prerelease == 'true' }}
           generate_release_notes: false
           files: |
             dist/*.whl
             dist/*.tar.gz
 
-  # ── Notification de succès ─────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────
+  # JOB 5 — Résumé final
+  # ──────────────────────────────────────────────────────────────
   notify:
-    name: 📣 Notify Release
+    name: 📣 Summary
     runs-on: ubuntu-latest
     needs: release
-    if: success()
+    if: always()
     permissions:
       contents: read
+
     steps:
       - name: Release summary
         run: |
-          echo "🎉 Release ${{ github.ref_name }} published successfully!"
-          echo "URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          if [ "${{ needs.release.result }}" = "success" ]; then
+            echo "✅ Release ${{ github.ref_name }} publiée avec succès"
+            echo "🔗 https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          else
+            echo "❌ Échec de la release ${{ github.ref_name }}"
+            echo "Vérifiez les jobs : pre-release-checks / build / release"
+            exit 1
+          fi

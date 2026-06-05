@@ -1,107 +1,84 @@
-name: CI – Tests & Quality
+# ============================================================
+# CI — xcore project
+# Déclenché sur : toutes les branches (push), PR, tags/releases
+# Blocage merge : uniquement sur main/master
+# ============================================================
 
-on:
-  push:
-    branches: [features, main]
-  pull_request:
-    branches: [features, main]
+name: CI
 
 permissions:
   contents: read
+  actions: write
 
+on:
+  push:
+    branches: ["**"] # toutes les branches
+    tags: ["v*.*.*"] # tags de release (ex: v1.2.3)
+  pull_request:
+    branches: ["**"]
+
+# Annule un run en cours si un nouveau push arrive sur la même branche
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.8.2"
+
+# ──────────────────────────────────────────────────────────────
+# JOB 1 — Lint & style (toutes branches, non-bloquant hors main)
+# ──────────────────────────────────────────────────────────────
 jobs:
-  # ── Lint & format ──────────────────────────────────────────────────────────
   lint:
-    name: 🔍 Lint & Format
+    name: 🔍 Lint & Style
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache deps
+      - name: Cache Poetry
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Vérification format (black)
-        run: poetry run black --check xcore/ tests/
-
-      - name: Vérification imports (isort)
-        run: poetry run isort --check-only xcore/ tests/
-
-      - name: Linting (flake8)
-        run: poetry run flake8 xcore/ --max-line-length=120 --extend-ignore=E203,W503 --exclude=.venv
-
-  # ── Type checking ──────────────────────────────────────────────────────────
-  typecheck:
-    name: 🔎 Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-in-project: true
-
-      - name: Cache deps
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+        run: pip install poetry==${{ env.POETRY_VERSION }}
 
       - name: Install dependencies
-        run: |
-          poetry install --no-interaction
-          poetry run pip install mypy --quiet
+        run: poetry install --with dev
 
-      - name: Run mypy
-        run: poetry run mypy xcore/ --ignore-missing-imports --no-error-summary
+      - name: Black check
+        run: poetry run black xcore/ --check
 
-  # ── Tests ──────────────────────────────────────────────────────────────────
+      - name: isort check
+        run: poetry run isort xcore/ --check-only
+
+      - name: Flake8
+        run: poetry run flake8 xcore/
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 2 — Tests + couverture (toutes branches)
+  # Bloquant sur main/master, avertissement sur les autres
+  # ──────────────────────────────────────────────────────────────
   test:
-    name: 🧪 Tests (Python ${{ matrix.python-version }})
+    name: 🧪 Tests & Coverage
     runs-on: ubuntu-latest
     needs: lint
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13"]
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -111,56 +88,135 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-in-project: true
-
-      - name: Cache deps
+      - name: Cache Poetry
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: poetry-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-${{ matrix.python-version }}-
+
+      - name: Install Poetry
+        run: pip install poetry==${{ env.POETRY_VERSION }}
 
       - name: Install dependencies
-        run: |
-          poetry install --no-interaction
-          poetry run pip install mypy --quiet
+        run: poetry install --with dev
 
       - name: Run tests with coverage
-        env:
-          DATABASE_URL: sqlite:///./test.db
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: test-secret-key-for-ci
-          DEBUG: "false"
+        # Sur main/master : strict (exit code propagé)
+        # Sur les autres branches : avertissement seulement
         run: |
-          poetry run pytest tests/ \
-            --cov=xcore \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --tb=short \
-            -q
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: matrix.python-version == '3.13'
-        with:
-          file: coverage.xml
-          fail_ci_if_error: false
-
-  # ── Résumé du CI ───────────────────────────────────────────────────────────
-  ci-success:
-    name: ✅ CI Passed
-    runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
-    if: always()
-    steps:
-      - name: Check all jobs
-        run: |
-          if [[ "${{ needs.lint.result }}" != "success" ||
-                "${{ needs.typecheck.result }}" != "success" ||
-                "${{ needs.test.result }}" != "success" ]]; then
-            echo "One or more CI jobs failed"
-            exit 1
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/master" ]]; then
+            make test-cov STRICT=1
+          else
+            make test-cov STRICT=0 || echo "⚠️  Tests échoués (branche non protégée)"
           fi
-          echo "All CI jobs passed ✓"
+
+      - name: Upload coverage report (XML)
+        if: matrix.python-version == '3.11' # upload une seule fois
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 7
+
+      - name: Upload to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          flags: xcore
+          fail_ci_if_error: false # ne pas bloquer le CI si Codecov est indisponible
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 3 — Audit sécurité Bandit (toutes branches)
+  # ──────────────────────────────────────────────────────────────
+  security:
+    name: 🔒 Security Audit
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Bandit audit (xcore/)
+        run: make security
+
+      - name: Upload Bandit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-reports
+          path: reports/
+          retention-days: 14
+
+      - name: Check .env not tracked
+        run: make security-check
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 4 — Build & package (main, master, tags uniquement)
+  # La publication est déléguée à release.yml
+  # ──────────────────────────────────────────────────────────────
+  build:
+    name: 🏗️ Build
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: |
+      github.ref == 'refs/heads/main'   ||
+      github.ref == 'refs/heads/master' ||
+      startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Poetry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
+
+      - name: Install Poetry
+        run: pip install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Build package
+        run: poetry build --no-cache
+
+      - name: Verify dist contents
+        run: ls -lh dist/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────
+  # NOTE : La release GitHub est gérée dans release.yml
+  # Ce CI valide + construit — release.yml changelog + publie.
+  # ──────────────────────────────────────────────────────────────

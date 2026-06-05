@@ -780,7 +780,6 @@ async def _run(plugin_dir: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps({"status": "error", "msg": "Usage : worker.py <plugin_dir>"}))
         sys.exit(1)
 
     _apply_resource_limits()

@@ -1,14 +1,6 @@
 # .github/labeler.yml
 # Mappage automatique des labels selon les fichiers modifiés dans une PR
 
-"plugin":
-  - changed-files:
-      - any-glob-to-any-file: "plugins/**"
-
-"extension":
-  - changed-files:
-      - any-glob-to-any-file: "extensions/**"
-
 "core":
   - changed-files:
       - any-glob-to-any-file:
