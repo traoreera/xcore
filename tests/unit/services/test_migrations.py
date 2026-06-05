@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from xcore.services.database.migrations import MigrationRunner, MigrationError
 
@@ -140,3 +140,122 @@ class TestMigrationRunner:
                     mock_command.revision.assert_called_once()
                 except Exception:
                     pass
+
+    @pytest.mark.asyncio
+    async def test_upgrade_async_path(self, tmp_path):
+        """Test async upgrade path — run_sync calls the inner function."""
+        runner = MigrationRunner("sqlite+aiosqlite:///./test.db", migrations_dir=tmp_path)
+        mock_cfg = MagicMock()
+        import alembic.command as alembic_command
+
+        mock_conn = AsyncMock()
+        # Make run_sync actually call the function with mock_conn
+        async def real_run_sync(fn):
+            fn(mock_conn)
+        mock_conn.run_sync = real_run_sync
+        mock_engine = MagicMock()
+        mock_engine.begin = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        mock_engine.dispose = AsyncMock()
+
+        with patch.object(runner, "_get_config", return_value=mock_cfg):
+            with patch("xcore.services.database.migrations.create_async_engine", return_value=mock_engine):
+                with patch.object(alembic_command, "upgrade"):
+                    await runner.upgrade("head")
+
+    @pytest.mark.asyncio
+    async def test_downgrade_async_path(self, tmp_path):
+        """Test async downgrade path."""
+        runner = MigrationRunner("sqlite+aiosqlite:///./test.db", migrations_dir=tmp_path)
+        mock_cfg = MagicMock()
+
+        mock_conn = AsyncMock()
+        async def real_run_sync(fn):
+            fn(mock_conn)
+        mock_conn.run_sync = real_run_sync
+        mock_engine = MagicMock()
+        mock_engine.begin = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        mock_engine.dispose = AsyncMock()
+
+        import alembic.command as alembic_command
+        with patch.object(runner, "_get_config", return_value=mock_cfg):
+            with patch("xcore.services.database.migrations.create_async_engine", return_value=mock_engine):
+                with patch.object(alembic_command, "downgrade"):
+                    await runner.downgrade("-1")
+
+    @pytest.mark.asyncio
+    async def test_revision_async_path(self, tmp_path):
+        """Test async revision path."""
+        runner = MigrationRunner("sqlite+aiosqlite:///./test.db", migrations_dir=tmp_path)
+        mock_cfg = MagicMock()
+
+        mock_conn = AsyncMock()
+        async def real_run_sync(fn):
+            fn(mock_conn)
+        mock_conn.run_sync = real_run_sync
+        mock_engine = MagicMock()
+        mock_engine.begin = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        mock_engine.dispose = AsyncMock()
+
+        import alembic.command as alembic_command
+        with patch.object(runner, "_get_config", return_value=mock_cfg):
+            with patch("xcore.services.database.migrations.create_async_engine", return_value=mock_engine):
+                with patch.object(alembic_command, "revision"):
+                    await runner.revision(message="add users")
+
+    @pytest.mark.asyncio
+    async def test_status_async_path(self, tmp_path):
+        """Test async status path."""
+        runner = MigrationRunner("sqlite+aiosqlite:///./test.db", migrations_dir=tmp_path)
+        mock_cfg = MagicMock()
+
+        mock_conn = AsyncMock()
+        async def real_run_sync(fn):
+            try:
+                fn(mock_conn)
+            except Exception:
+                pass  # command.status may not exist
+        mock_conn.run_sync = real_run_sync
+        mock_engine = MagicMock()
+        mock_engine.begin = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        mock_engine.dispose = AsyncMock()
+
+        import alembic.command as alembic_command
+        with patch.object(runner, "_get_config", return_value=mock_cfg):
+            with patch("xcore.services.database.migrations.create_async_engine", return_value=mock_engine):
+                with patch("alembic.command.status", create=True, new=MagicMock()):
+                    await runner.status()
+
+    @pytest.mark.asyncio
+    async def test_init_async_path(self, tmp_path):
+        """Test async init path (no existing versions)."""
+        runner = MigrationRunner("sqlite+aiosqlite:///./test.db", migrations_dir=tmp_path)
+        mock_cfg = MagicMock()
+
+        mock_conn = AsyncMock()
+        async def real_run_sync(fn):
+            fn(mock_conn)
+        mock_conn.run_sync = real_run_sync
+        mock_engine = MagicMock()
+        mock_engine.begin = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_conn),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+        mock_engine.dispose = AsyncMock()
+
+        import alembic.command as alembic_command
+        with patch.object(runner, "_get_config", return_value=mock_cfg):
+            with patch("xcore.services.database.migrations.create_async_engine", return_value=mock_engine):
+                with patch.object(alembic_command, "revision"):
+                    await runner.init()

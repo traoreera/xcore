@@ -57,7 +57,7 @@ st: ## Lancer en mode production (sans reload)
 # ============================================================
 test: ## Lancer les tests unitaires de xcore/
 	@echo "🧪 Tests unitaires (xcore/)..."
-	@poetry run pytest tests/ -q || { \
+	@poetry run pytest tests/ -q -vv || { \
 		if [ "$(STRICT)" = "1" ]; then exit 1; \
 		else echo "[WARN] Échec ignoré (STRICT=0)"; fi; \
 	}
@@ -265,6 +265,10 @@ poetry-ri:  ## Redémarrer Poetry
 clean: ## Supprimer __pycache__, *.pyc, *.pyo
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; true
 	@find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name "*.backup" \) -exec rm -f {} +
+
+
+scanner-core: ## Compiler l'extension scanner_core
+	@cd xcore/kernel/security && poetry run python setup.py build_ext --inplace
 
 
 # ============================================================

@@ -50,7 +50,7 @@ class ManifestError(Exception):
     pass
 
 
-class FrameworkVersionVersion(Exception):
+class FrameworkVersionError(Exception):
     pass
 
 

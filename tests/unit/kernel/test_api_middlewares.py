@@ -274,3 +274,65 @@ class TestRBAC:
             ):
                 result = await checker(request, credentials=None)
         assert result["sub"] == "u1"
+
+
+class TestResolveUser:
+    @pytest.mark.asyncio
+    async def test_resolve_user_from_cache(self):
+        from xcore.kernel.api.rbac import _resolve_user
+        request = MagicMock()
+        cached_user = {"sub": "cached-user"}
+        request.state.user = cached_user
+        result = await _resolve_user(request)
+        assert result == cached_user
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_no_backend(self):
+        from xcore.kernel.api.rbac import _resolve_user
+        from fastapi import HTTPException
+        request = MagicMock()
+        request.state.user = None
+        with patch("xcore.kernel.api.rbac.get_auth_backend", return_value=None):
+            with pytest.raises(HTTPException) as exc:
+                await _resolve_user(request)
+            assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_no_token(self):
+        from xcore.kernel.api.rbac import _resolve_user
+        from fastapi import HTTPException
+        request = MagicMock()
+        request.state.user = None
+        backend = AsyncMock()
+        backend.extract_token = AsyncMock(return_value=None)
+        with patch("xcore.kernel.api.rbac.get_auth_backend", return_value=backend):
+            with pytest.raises(HTTPException) as exc:
+                await _resolve_user(request)
+            assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_invalid_token(self):
+        from xcore.kernel.api.rbac import _resolve_user
+        from fastapi import HTTPException
+        request = MagicMock()
+        request.state.user = None
+        backend = AsyncMock()
+        backend.extract_token = AsyncMock(return_value="bad_token")
+        backend.decode_token = AsyncMock(return_value=None)
+        with patch("xcore.kernel.api.rbac.get_auth_backend", return_value=backend):
+            with pytest.raises(HTTPException) as exc:
+                await _resolve_user(request)
+            assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_resolve_user_valid(self):
+        from xcore.kernel.api.rbac import _resolve_user
+        request = MagicMock()
+        request.state.user = None
+        backend = AsyncMock()
+        backend.extract_token = AsyncMock(return_value="valid_token")
+        backend.decode_token = AsyncMock(return_value={"sub": "user1", "roles": ["admin"]})
+        with patch("xcore.kernel.api.rbac.get_auth_backend", return_value=backend):
+            result = await _resolve_user(request)
+        assert result["sub"] == "user1"
+        assert request.state.user == result
