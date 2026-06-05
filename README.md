@@ -9,6 +9,9 @@
 </p>
 
 <p align="center">
+  <a href="https://xcorehub.dev">
+    <img src="doc/assets/xcore_badge_v2.3.2.svg">
+  </a>
   <a href="https://github.com/traoreera/xcore/actions/workflows/ci.yml">
     <img src="https://github.com/traoreera/xcore/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
   </a>
