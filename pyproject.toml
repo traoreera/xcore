@@ -1,102 +1,111 @@
 [project]
 name = "xcore"
-version = "2.3.1"
+version = "2.3.2"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
 ]
 license = "MIT"
 readme = "README.md"
+homepage = "https://xcorehub.dev"
+repository = "https://github.com/traoreera/xcore"
+keywords = ["xcore", "plugin", "runtime"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
 requires-python = ">=3.12,<4.0"
-
 dependencies = [
-    # SDK (external)
     "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
-    # external cli
-    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",  # main cassé (hatch wheel config manquante)
-
-    # Web
+    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
     "fastapi[standard]>=0.135.1,<1.0.0",
     "uvicorn>=0.38.0,<1.0.0",
-
-    # Data validation
     "pydantic[email]>=2.11.7,<3.0.0",
     "pydantic-settings>=2.12.0,<3.0.0",
-
-    # Database & ORM
     "sqlalchemy>=2.0.41,<3.0.0",
     "alembic>=1.16.1,<2.0.0",
     "psycopg2>=2.9.11,<3.0.0",
     "aiosqlite>=0.22.1,<1.0.0",
-
-    # Cache
     "redis[hiredis]>=7.0.0,<8.0.0",
-
-    # Scheduling
     "apscheduler>=3.11.0,<4.0.0",
-
-    # Configuration & environment
     "python-dotenv>=1.1.0,<2.0.0",
     "pyyaml>=6.0.3,<7.0.0",
-
-    # Observability & utilities
     "rich>=14.0.0,<15.0.0",
     "celery>=5.6.3,<6.0.0",
 ]
 
-# ── Build system ──────────────────────────────────────────────────────────────
-
+# ── Build system ───────────────────────────────────────────────────────────────
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-# ── Development dependencies ──────────────────────────────────────────────────
+# ── Poetry metadata (requis par poetry-core en mode package) ───────────────────
+# Poetry 2.x lit [project] pour les deps mais a encore besoin de [tool.poetry]
+# pour les groupes dev/docs et les packages à inclure dans le build.
+[tool.poetry]
+packages = [{ include = "xcore" }]
 
+# ── Development dependencies ───────────────────────────────────────────────────
 [tool.poetry.group.dev.dependencies]
-# Testing
-pytest = "^9.0.3"
-pytest-asyncio = "^1.2.0"
-pytest-cov = "^7.1.0"
-pytest-benchmark = "^5.2.3"
-httpx = "^0.28.1"
-aiohttp = "^3.13.3"
-faker = "^37.8.0"
+pytest            = "^9.0.3"
+pytest-asyncio    = "^1.2.0"
+pytest-cov        = "^7.1.0"
+pytest-benchmark  = "^5.2.3"
+httpx             = "^0.28.1"
+aiohttp           = "^3.13.3"
+faker             = "^37.8.0"
+psutil            = "^7.0.0"
+black             = "^26.3.1"
+isort             = "^8.0.1"
+flake8            = "^7.3.0"
+autoflake         = "^2.3.1"
+autopep8          = "^2.3.2"
+bandit            = "^1.8.6"
+pre-commit        = "^4.6.0"
 
-# Benchmarking
-psutil = "^7.0.0"
-
-# Linting & formatting
-black = "^26.3.1"
-isort = "^8.0.1"
-flake8 = "^7.3.0"
-autoflake = "^2.3.1"
-autopep8 = "^2.3.2"
-
-# Security audit
-bandit = "^1.8.6"
-
-# Hooks
-pre-commit = "^4.6.0"
-
-# ── Docs dependencies ─────────────────────────────────────────────────────────
-
+# ── Docs dependencies ──────────────────────────────────────────────────────────
 [tool.poetry.group.docs.dependencies]
-mkdocs = "^1.6.1"
-mkdocs-material = "^9.7.3"
-mkdocs-minify-plugin = "^0.8.0"
-mkdocstrings = "^1.0.3"
-mkdocstrings-python = ">=2.0.3,<3.0.0"
-markdown = "^3.8.2"
+mkdocs                = "^1.6.1"
+mkdocs-material       = "^9.7.3"
+mkdocs-minify-plugin  = "^0.8.0"
+mkdocstrings          = "^1.0.3"
+mkdocstrings-python   = ">=2.0.3,<3.0.0"
+markdown              = "^3.8.2"
 
-# ── Tool configuration ────────────────────────────────────────────────────────
-
-[tool.flake8]
-max-line-length = 88
-
+# ── Linting ────────────────────────────────────────────────────────────────────
 [tool.black]
-line-length = 88
-target-version = ["py311"]
+line-length    = 88
+target-version = ["py312"]   # était py311, ton requires-python est >=3.12
 
 [tool.isort]
-profile = "black"
+profile     = "black"
 line_length = 88
+
+# NB: [tool.flake8] n'est pas lu par flake8 dans pyproject.toml —
+#     flake8 lit uniquement setup.cfg ou .flake8 à la racine.
+#     Le fichier .flake8 généré précédemment est la bonne config.
+
+# ── Tests ──────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths    = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts      = "-q --tb=short"
+asyncio_mode = "auto"   # pour pytest-asyncio
+
+# ── Coverage ───────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["xcore"]
+branch = true
+omit   = ["*/tests/*", "*/__pycache__/*", "*/alembic/*"]
+
+[tool.coverage.report]
+show_missing  = true
+skip_covered  = false
+fail_under    = 80     # seuil actuel réel — monter au fur et à mesure
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
