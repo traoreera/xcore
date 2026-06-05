@@ -50,7 +50,7 @@ L'isolation est gérée via des `ContextVar` asynchrones, garantissant qu'une re
 | Catégorie | État | Implémentation XCore |
 | :--- | :--- | :--- |
 | **A01:2021-Broken Access Control** | ✅ Robuste | RBAC intégré, isolation multi-tenant stricte, sandbox. |
-| **A02:2021-Cryptographic Failures** | ✅ Robuste | PBKDF2 pour les clés, HMAC-SHA256 pour les signatures, stockage sécurisé des hashs. |
+| **A02:2021-Cryptographic Failures** | ✅ Robuste | PBKDF2 pour les clés, HMAC-SHA256 pour les signatures, stockage sécurisé des hachages. |
 | **A03:2021-Injection** | ✅ Robuste | SQLAlchemy text() utilisé partout, validation regex des identifiants de locataires. |
 | **A04:2021-Insecure Design** | ✅ Robuste | Architecture fail-closed par défaut. |
 | **A05:2021-Security Misconfig** | ⚠️ Attention | CORSMiddleware configuré mais nécessite activation manuelle dans le boot. |
