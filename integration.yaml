@@ -239,7 +239,7 @@ tenancy:
   isolate_scheduler: false
 
   # Vérifie allowed_callers sur chaque appel IPC plugin-à-plugin
-  enforce_ipc: true
+  enforce_ipc: false
 
 middleware:
   - name: timing

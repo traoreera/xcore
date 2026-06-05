@@ -54,6 +54,8 @@ from .registry.index import PluginRegistry
 from .services import ServiceContainer
 
 __all__ = [
+    "MiddlewareConfig",
+    "MetricsRegistry",
     "__version__",
     "Xcore",
     "PluginLoader",

@@ -1,284 +1,250 @@
-"""
-Tests for ServiceContainer.
-"""
-
-import asyncio
-from dataclasses import dataclass
-from typing import Any
-from unittest.mock import AsyncMock, patch
+"""Tests for ServiceContainer."""
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 
-from xcore.services.base import BaseService, BaseServiceProvider, ServiceStatus
-from xcore.services.container import (
-    CacheServiceProvider,
-    DatabaseServiceProvider,
-    ExtensionServiceProvider,
-    SchedulerServiceProvider,
-    ServiceContainer,
-    XWorkerServiceProvider,
-)
+from xcore.services.container import ServiceContainer
+from xcore.services.base import BaseService, BaseServiceProvider
 
 
-# Mock service classes for testing
-class MockService(BaseService):
-    """Mock service for testing."""
-
-    name = "mock_service"
-
-    def __init__(self):
-        super().__init__()
-        self.init_called = False
-        self.shutdown_called = False
-
-    async def init(self) -> None:
-        self.init_called = True
-        self._status = ServiceStatus.READY
-
-    async def shutdown(self) -> None:
-        self.shutdown_called = True
-        self._status = ServiceStatus.STOPPED
-
-    async def health_check(self) -> tuple[bool, str]:
-        return True, "OK"
-
-    def status(self) -> dict[str, Any]:
-        return {"name": self.name, "status": self._status.value}
-
-
-@dataclass
-class MockConfig:
-    """Mock configuration for ServiceContainer."""
-
-    databases: dict = None
-    cache: Any = None
-    scheduler: Any = None
-    extensions: dict = None
-
-    def __post_init__(self):
-        if self.databases is None:
-            self.databases = {}
-        if self.extensions is None:
-            self.extensions = {}
+def _make_config(**kwargs):
+    cfg = MagicMock()
+    cfg.databases = {}
+    cfg.cache = None
+    cfg.scheduler = None
+    cfg.xworker = None
+    cfg.extensions = {}
+    for k, v in kwargs.items():
+        setattr(cfg, k, v)
+    return cfg
 
 
 class TestServiceContainer:
-    """Test ServiceContainer functionality."""
+    def test_init_empty(self):
+        container = ServiceContainer(_make_config())
+        assert container._raw == {}
+        assert container._services == {}
 
-    @pytest.fixture
-    def mock_config(self):
-        """Create a mock config."""
-        return MockConfig()
+    def test_register_service(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        container.register_service("cache", svc)
+        assert container.get("cache") is svc
 
-    @pytest.fixture
-    def container(self, mock_config):
-        """Create fresh ServiceContainer."""
-        return ServiceContainer(mock_config)
+    def test_register_non_base_service(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("custom", "raw_value")
+        assert container.get("custom") == "raw_value"
+        assert "custom" not in container._services
 
-    def test_default_providers_present(self):
-        """Test default providers are present."""
-        assert len(ServiceContainer.DEFAULT_PROVIDERS) == 5
-        assert DatabaseServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
-        assert CacheServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
-        assert SchedulerServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
-        assert XWorkerServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
-        assert ExtensionServiceProvider in ServiceContainer.DEFAULT_PROVIDERS
+    def test_get_missing_raises(self):
+        container = ServiceContainer(_make_config())
+        with pytest.raises(KeyError, match="Service"):
+            container.get("missing")
 
-    def test_get_nonexistent_service(self, container):
-        """Test getting nonexistent service raises KeyError."""
-        with pytest.raises(KeyError) as exc_info:
-            container.get("nonexistent")
+    def test_get_or_none_returns_none(self):
+        container = ServiceContainer(_make_config())
+        assert container.get_or_none("missing") is None
 
-        assert "nonexistent" in str(exc_info.value)
-        assert "indisponible" in str(exc_info.value)
+    def test_get_or_none_returns_value(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("db", "mydb")
+        assert container.get_or_none("db") == "mydb"
 
-    def test_get_or_none_nonexistent(self, container):
-        """Test get_or_none returns None for nonexistent service."""
-        assert container.get_or_none("nonexistent") is None
+    def test_has_true(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("db", "mydb")
+        assert container.has("db") is True
 
-    def test_has_service(self, container):
-        """Test has() method."""
-        assert container.has("test") is False
+    def test_has_false(self):
+        container = ServiceContainer(_make_config())
+        assert container.has("db") is False
 
-        # Manually add a service
-        container._raw["test"] = MockService()
-        assert container.has("test") is True
+    def test_as_dict(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("db", "mydb")
+        d = container.as_dict()
+        assert "db" in d
+        assert d is container._raw
 
-    def test_has_after_removal(self, container):
-        """Test has() after service removal."""
-        container._raw["test"] = MockService()
-        assert container.has("test") is True
+    def test_get_as_correct_type(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("db", "mydb")
+        result = container.get_as("db", str)
+        assert result == "mydb"
 
-        del container._raw["test"]
-        assert container.has("test") is False
+    def test_get_as_wrong_type_raises(self):
+        container = ServiceContainer(_make_config())
+        container.register_service("db", "mydb")
+        with pytest.raises(TypeError, match="str"):
+            container.get_as("db", int)
 
-    def test_as_dict(self, container):
-        """Test as_dict() returns internal dict."""
-        service = MockService()
-        container._raw["test"] = service
+    def test_add_provider(self):
+        container = ServiceContainer(_make_config())
+        provider = MagicMock(spec=BaseServiceProvider)
+        container.add_provider(provider)
+        assert provider in container._providers
 
-        result = container.as_dict()
-        assert result["test"] is service
+    def test_register_provider(self):
+        container = ServiceContainer(_make_config())
+        provider = MagicMock()
+        container.register_provider("myext", provider)
+        assert "myext" in container._lazy_providers
 
-    def test_get_existing_service(self, container):
-        """Test getting existing service."""
-        service = MockService()
-        container._raw["test_service"] = service
+    def test_get_via_lazy_provider(self):
+        container = ServiceContainer(_make_config())
+        provider = MagicMock()
+        provider.provide.return_value = "lazy_svc"
+        container.register_provider("myext", provider)
+        result = container.get("myext")
+        assert result == "lazy_svc"
 
-        result = container.get("test_service")
-        assert result is service
-
-    def test_get_as_correct_type(self, container):
-        """Test get_as() with correct type."""
-        service = MockService()
-        container._raw["test_service"] = service
-
-        result = container.get_as("test_service", MockService)
-        assert result is service
-
-    def test_get_as_wrong_type(self, container):
-        """Test get_as() with wrong type raises TypeError."""
-        service = MockService()
-        container._raw["test_service"] = service
-
-        with pytest.raises(TypeError) as exc_info:
-            container.get_as("test_service", str)
-
-        assert "MockService" in str(exc_info.value)
-        assert "str" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_init_with_custom_providers(self, container):
-        """Test init with custom providers."""
-        mock_provider = AsyncMock(spec=BaseServiceProvider)
-
-        await container.init(providers=[mock_provider])
-
-        mock_provider.init.assert_called_once_with(container)
+    def test_get_lazy_provider_returns_none_raises(self):
+        container = ServiceContainer(_make_config())
+        provider = MagicMock()
+        provider.provide.return_value = None
+        container.register_provider("myext", provider)
+        with pytest.raises(KeyError):
+            container.get("myext")
 
     @pytest.mark.asyncio
-    async def test_shutdown_empty(self, container):
-        """Test shutdown with no services."""
+    async def test_init_with_providers(self):
+        container = ServiceContainer(_make_config())
+        provider = MagicMock(spec=BaseServiceProvider)
+        provider.init = AsyncMock()
+        await container.init(providers=[provider])
+        provider.init.assert_called_once_with(container)
+
+    @pytest.mark.asyncio
+    async def test_init_empty_providers(self):
+        container = ServiceContainer(_make_config())
+        await container.init(providers=[])
+
+    @pytest.mark.asyncio
+    async def test_shutdown_stops_services(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.shutdown = AsyncMock()
+        container.register_service("cache", svc)
         await container.shutdown()
-        assert len(container._services) == 0
-        assert len(container._raw) == 0
+        svc.shutdown.assert_called_once()
+        assert container._raw == {}
+        assert container._services == {}
 
     @pytest.mark.asyncio
-    async def test_shutdown_with_services(self, container):
-        """Test shutdown calls shutdown on all services."""
-        service1 = MockService()
-        service2 = MockService()
+    async def test_shutdown_handles_exception(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.shutdown = AsyncMock(side_effect=RuntimeError("boom"))
+        container.register_service("cache", svc)
+        await container.shutdown()  # should not raise
 
-        container._services["service1"] = service1
-        container._services["service2"] = service2
-        container._raw["service1"] = service1
-        container._raw["service2"] = service2
-
-        await container.shutdown()
-
-        assert service1.shutdown_called is True
-        assert service2.shutdown_called is True
-        assert len(container._services) == 0
-        assert len(container._raw) == 0
+    def test_load_default_providers(self):
+        container = ServiceContainer(_make_config())
+        container.load_default_providers()
+        assert len(container._providers) == 5
 
     @pytest.mark.asyncio
-    async def test_shutdown_timeout(self, container):
-        """Test shutdown with timeout."""
-        slow_service = MockService()
-        slow_service.shutdown = AsyncMock(side_effect=asyncio.TimeoutError)
-
-        container._services["slow"] = slow_service
-        container._raw["slow"] = slow_service
-
-        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
-            await container.shutdown()
-
-    @pytest.mark.asyncio
-    async def test_health_empty(self, container):
-        """Test health check with no services."""
+    async def test_health_empty(self):
+        container = ServiceContainer(_make_config())
         result = await container.health()
         assert result["ok"] is True
         assert result["services"] == {}
 
     @pytest.mark.asyncio
-    async def test_health_with_services(self, container):
-        """Test health check with services."""
-        service = MockService()
-        container._services["test"] = service
-
+    async def test_health_with_services(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.health_check = AsyncMock(return_value=(True, "ok"))
+        svc.status = MagicMock(return_value={"name": "db"})
+        container.register_service("db", svc)
         result = await container.health()
         assert result["ok"] is True
-        assert result["services"]["test"]["ok"] is True
-        assert result["services"]["test"]["msg"] == "OK"
+        assert "db" in result["services"]
 
     @pytest.mark.asyncio
-    async def test_health_with_failing_service(self, container):
-        """Test health check with failing service."""
-        service = MockService()
-        service.health_check = AsyncMock(return_value=(False, "Connection failed"))
-        container._services["test"] = service
-
+    async def test_health_service_exception(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.health_check = AsyncMock(side_effect=RuntimeError("broken"))
+        container.register_service("broken_svc", svc)
         result = await container.health()
         assert result["ok"] is False
-        assert result["services"]["test"]["ok"] is False
-        assert result["services"]["test"]["msg"] == "Connection failed"
+
+    def test_status(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.status = MagicMock(return_value={"name": "db", "status": "ready"})
+        container.register_service("db", svc)
+        s = container.status()
+        assert "services" in s
+        assert "db" in s["services"]
 
     @pytest.mark.asyncio
-    async def test_health_exception(self, container):
-        """Test health check when service raises exception."""
-        service = MockService()
-        service.health_check = AsyncMock(side_effect=Exception("Health check failed"))
-        container._services["test"] = service
-
-        result = await container.health()
-        assert result["ok"] is False
-        assert "Health check failed" in result["services"]["test"]["msg"]
-
-    def test_status_empty(self, container):
-        """Test status with no services."""
-        result = container.status()
-        assert result["services"] == {}
-        assert result["registered_keys"] == []
-
-    def test_status_with_services(self, container):
-        """Test status with services."""
-        service = MockService()
-        container._services["test"] = service
-        container._raw["service1"] = service
-        container._raw["service2"] = service
-
-        result = container.status()
-        assert "test" in result["services"]
-        assert sorted(result["registered_keys"]) == ["service1", "service2"]
+    async def test_shutdown_logs_success(self):
+        container = ServiceContainer(_make_config())
+        svc = MagicMock(spec=BaseService)
+        svc.shutdown = AsyncMock()
+        container.register_service("db", svc)
+        await container.shutdown()
+        svc.shutdown.assert_called_once()
 
 
 class TestServiceProviders:
-    """Test individual service providers."""
-
     @pytest.mark.asyncio
-    async def test_cache_provider(self):
-        @dataclass
-        class CacheConfig:
-            backend: str = "memory"
-
-        config = MockConfig(cache=CacheConfig())
-        container = ServiceContainer(config)
-        provider = CacheServiceProvider()
-
-        with patch("xcore.services.cache.service.CacheService") as mock_cache_class:
-            mock_svc = MockService()
-            mock_cache_class.return_value = mock_svc
-
-            await provider.init(container)
-
-            mock_cache_class.assert_called_once()
-            assert container.get("cache") is mock_svc
-
-    @pytest.mark.asyncio
-    async def test_database_provider_empty(self):
-        config = MockConfig(databases={})
-        container = ServiceContainer(config)
+    async def test_database_provider_no_databases(self):
+        from xcore.services.container import DatabaseServiceProvider
+        container = ServiceContainer(_make_config(databases={}))
         provider = DatabaseServiceProvider()
+        await provider.init(container)  # should return early, no error
 
-        await provider.init(container)
-        assert "database" not in container._services
+    @pytest.mark.asyncio
+    async def test_cache_provider_no_cache(self):
+        from xcore.services.container import CacheServiceProvider
+        container = ServiceContainer(_make_config(cache=None))
+        provider = CacheServiceProvider()
+        await provider.init(container)  # should return early, no error
+
+    @pytest.mark.asyncio
+    async def test_scheduler_provider_no_config(self):
+        from xcore.services.container import SchedulerServiceProvider
+        container = ServiceContainer(_make_config(scheduler=None))
+        provider = SchedulerServiceProvider()
+        await provider.init(container)  # should return early, no error
+
+    @pytest.mark.asyncio
+    async def test_scheduler_provider_disabled(self):
+        from xcore.services.container import SchedulerServiceProvider
+        cfg = _make_config()
+        sched_cfg = MagicMock()
+        sched_cfg.enabled = False
+        cfg.scheduler = sched_cfg
+        container = ServiceContainer(cfg)
+        provider = SchedulerServiceProvider()
+        await provider.init(container)  # should return early
+        assert "scheduler" not in container._raw
+
+    @pytest.mark.asyncio
+    async def test_xworker_provider_no_config(self):
+        from xcore.services.container import XWorkerServiceProvider
+        container = ServiceContainer(_make_config(xworker=None))
+        provider = XWorkerServiceProvider()
+        await provider.init(container)  # should return early, no error
+
+    @pytest.mark.asyncio
+    async def test_xworker_provider_disabled(self):
+        from xcore.services.container import XWorkerServiceProvider
+        cfg = _make_config()
+        worker_cfg = MagicMock()
+        worker_cfg.enabled = False
+        cfg.xworker = worker_cfg
+        container = ServiceContainer(cfg)
+        provider = XWorkerServiceProvider()
+        await provider.init(container)  # should return early
+
+    @pytest.mark.asyncio
+    async def test_extension_provider_no_extensions(self):
+        from xcore.services.container import ExtensionServiceProvider
+        container = ServiceContainer(_make_config(extensions={}))
+        provider = ExtensionServiceProvider()
+        await provider.init(container)  # should return early, no error

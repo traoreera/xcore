@@ -100,6 +100,50 @@ services:
       type: "redis"
       url: "redis://localhost:6379/1"
 ```
+Autre configuration possible en production
+```yaml linenums="1" title="xcore.yaml"
+services:
+  databases:
+
+    # ── MySQL / MariaDB (prod) ─────────────────────────────
+    default:
+      type: sqlasync        # ou postgresql+aio
+      url: mysql+aiomysql://user:pass@host:3306/db
+      pool_size: 10
+      max_overflow: 20
+      pool_pre_ping: true
+      pool_recycle: 1800           # < wait_timeout MySQL (SHOW VARIABLES LIKE 'wait_timeout')
+      pool_timeout: 30
+      pool_reset_on_return: rollback
+      isolation_level: READ COMMITTED
+      connect_args:
+        connect_timeout: 10        # timeout TCP initial
+        read_timeout: 30           # timeout lecture réseau
+        write_timeout: 30          # timeout écriture réseau
+        charset: utf8mb4
+
+    # ── PostgreSQL (prod) ──────────────────────────────────
+    pg:
+      type: sqlasync
+      url: postgresql+asyncpg://user:pass@host/db
+      pool_size: 10
+      max_overflow: 20
+      pool_pre_ping: true
+      pool_recycle: 3600
+      pool_reset_on_return: rollback
+      isolation_level: READ COMMITTED
+      connect_args:
+        command_timeout: 30
+        timeout: 10                # timeout connexion initiale
+
+    # ── SQLite (dev/test uniquement) ───────────────────────
+    dev:
+      type: sqlasync
+      url: sqlite+aiosqlite:///./dev.db
+      echo: true
+      # pool_recycle / pool_timeout ignorés pour SQLite
+
+```
 
 1.  **Async SQL**: Use `+aio` or `+asyncpg` suffixes for async drivers.
 2.  **MongoDB**: Requires the `database` key to select the target DB.

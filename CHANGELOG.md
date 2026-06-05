@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-06-05
+
+### Added
+- **Python 3.12 Support**: Upgraded codebase and CI pipelines to support Python 3.12.
+- **C++ Security Scanner**: Integrated high-performance `scanner_core` C++ extension for deeper security analysis.
+- **Event Bus Singleton**: Implemented a global `EventBus` singleton available at configuration time, injected directly into middleware parameters.
+- **Enhanced CI/CD**: Added comprehensive test coverage reporting and PR size validation to GitHub Actions.
+- **CORS Configuration**: Centralized CORS configuration in `integration.yaml`.
+
+### Changed
+- **Modularization**: Decoupled core runtime from SDK and CLI.
+    - `xcoreCli` is now an external dependency (`git+https://github.com/xcore-team/xcoreCli.git`).
+    - `xcoresdk` is now an external dependency (`git+https://github.com/xcore-team/xcoreSDK.git`).
+- **Internal Refactoring**:
+    - Complete overhaul of the middleware pipeline for better performance and extensibility.
+    - Improved database container connection handling with explicit session verification.
+- **Documentation**: Migrated documentation system to MkDocs for better maintainability and rich search capabilities.
+
+### Fixed
+- **Plugin Sandbox**: Fixed a bug where environment variables were not correctly injected into the plugin context if missing from the manifest.
+- **Database Reliability**: Resolved an issue where database connections could fail due to unverified sessions; added automatic verification before usage.
+- **Plugin CLI**: Fixed various bugs in plugin-related CLI commands.
+
 ## [2.3.1] - 2026-05-29
 
 ### Fixed
