@@ -108,7 +108,6 @@ class AsyncSQLAdapter:
         pour forcer SQLAlchemy à en créer une nouvelle au prochain checkout.
         """
         from sqlalchemy import event
-        from sqlalchemy.exc import OperationalError
 
         @event.listens_for(self._engine.sync_engine, "connect")
         def connect(dbapi_connection, connection_record):

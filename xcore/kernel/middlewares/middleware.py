@@ -6,10 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Callable, List
-
-if TYPE_CHECKING:
-    from xcore.kernel.runtime.loader import PluginHandler
+from typing import Any, Callable, List
 
 logger = logging.getLogger("xcore.runtime.middleware")
 
