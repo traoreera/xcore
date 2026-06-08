@@ -16,7 +16,7 @@ class FastAPIConfig:
     debug: bool = False
     title: str = "xcore"
     summary: str | None = None
-    description: str = ""
+    description: str = "For Plugin Isolation and Orchestration"
     version: str = "0.1.0"
     openapi_url: str | None = "/openapi.json"
     openapi_tags: list[dict[str, Any]] = field(default_factory=list)
@@ -204,6 +204,78 @@ class ServicesConfig:
 
 
 @dataclass
+class EphemeralConfig:
+    """
+    Configuration du warm pool pour les plugins Ephemeral.
+
+    pool_size        → nombre d'instances pré-chargées en attente
+    max_idle_seconds → durée avant qu'une instance idle soit déchargée
+    max_concurrent   → instances simultanées max (cold boot au-delà)
+    boot_timeout     → timeout de chargement d'une instance (secondes)
+
+    Dans plugin.yaml :
+        execution_mode: ephemeral
+        ephemeral:
+          pool_size: 3
+          max_idle_seconds: 60
+          max_concurrent: 10
+          boot_timeout: 5
+    """
+
+    pool_size: int = 0  # 0 = pas de warm pool (cold boot pur)
+    max_idle_seconds: int = 60
+    max_concurrent: int = 10
+    boot_timeout: float = 5.0
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "EphemeralConfig":
+        valid = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore
+        return cls(**{k: v for k, v in d.items() if k in valid})
+
+    @classmethod
+    def default(cls) -> "EphemeralConfig":
+        return cls()
+
+
+@dataclass
+class TenancyConfig:
+    """
+    Configuration du système multi-tenant.
+
+    enabled          → active/désactive tout le système (défaut: False)
+    header           → nom du header HTTP lu pour extraire le tenant_id
+    subdomain        → active l'extraction depuis le sous-domaine
+    default_tenant   → tenant utilisé si aucun header/sous-domaine trouvé
+    isolate_cache      → préfixe automatique des clés cache par tenant_id
+    isolate_db         → applique SET search_path par tenant_id (PostgreSQL)
+    isolate_scheduler  → préfixe les job_id APScheduler par tenant_id
+    enforce_ipc        → active la vérification allowed_callers sur IPC
+    """
+
+    enabled: bool = False
+    header: str = "X-Tenant-ID"
+    subdomain: bool = False
+    default_tenant: str = "default"
+    isolate_cache: bool = True
+    isolate_db: bool = True
+    isolate_scheduler: bool = False
+    enforce_ipc: bool = True
+
+
+@dataclass
+class __TenancyConfig:
+    """
+    Configuration du système multi-tenant.
+
+    enabled          → active/désactive tout le système (défaut: False)
+    enforce_ipc        → active la vérification allowed_callers sur IPC
+    """
+
+    enabled: bool = False
+    enforce_ipc: bool = True
+
+
+@dataclass
 class PluginConfig:
     directory: str = "./plugins"
     secret_key: bytes = b"change-me-in-production"
@@ -217,6 +289,9 @@ class PluginConfig:
             "hidden": True,
         }
     )
+
+    ephemeral: EphemeralConfig = field(default_factory=EphemeralConfig)
+    tenancy: TenancyConfig = field(default_factory=TenancyConfig)
 
 
 @dataclass
@@ -278,31 +353,6 @@ class MarketplaceConfig:
     api_key: str = ""
     timeout: int = 10
     cache_ttl: int = 300
-
-
-@dataclass
-class TenancyConfig:
-    """
-    Configuration du système multi-tenant.
-
-    enabled          → active/désactive tout le système (défaut: False)
-    header           → nom du header HTTP lu pour extraire le tenant_id
-    subdomain        → active l'extraction depuis le sous-domaine
-    default_tenant   → tenant utilisé si aucun header/sous-domaine trouvé
-    isolate_cache      → préfixe automatique des clés cache par tenant_id
-    isolate_db         → applique SET search_path par tenant_id (PostgreSQL)
-    isolate_scheduler  → préfixe les job_id APScheduler par tenant_id
-    enforce_ipc        → active la vérification allowed_callers sur IPC
-    """
-
-    enabled: bool = False
-    header: str = "X-Tenant-ID"
-    subdomain: bool = False
-    default_tenant: str = "default"
-    isolate_cache: bool = True
-    isolate_db: bool = True
-    isolate_scheduler: bool = False
-    enforce_ipc: bool = True
 
 
 @dataclass

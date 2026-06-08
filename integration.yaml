@@ -62,11 +62,15 @@ plugins:
     filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
     hidden: true
 
+  tenancy:
+    enabled: true
+    enforce_ipc: False
+
 # ── Services ──────────────────────────────────────────────────
 services:
   # ── Bases de données ────────────────────────────────────────
   databases:
-    db:
+    default:
       type: sqlasync
       url: sqlite+aiosqlite:///db.sqlite3
       echo: false
@@ -105,7 +109,7 @@ services:
   # Lancer le beat     : xcore worker beat
   # Inspecter          : xcore worker inspect
   xworker:
-    enabled: false
+    enabled: true
 
     # Nom de l'app Celery (affiché dans les logs et Flower)
     name: my-app

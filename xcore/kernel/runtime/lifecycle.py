@@ -85,7 +85,7 @@ class LifecycleManager:
 
     def _on_state_change(self, old: PluginState, new: PluginState) -> None:
         logger.debug(
-            "transition d'état", plugin=self.manifest.name, de=old.value, vers=new.value
+            "state transition", plugin=self.manifest.name, de=old.value, vers=new.value
         )
         if self._events:
             self._events.emit_sync(
@@ -113,16 +113,16 @@ class LifecycleManager:
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(
-                "plugin chargé",
+                "plugin loaded",
                 plugin=self.manifest.name,
                 timeout_s=self.manifest.resources.timeout_seconds,
             )
         except Exception as e:
             self._sm.transition("error")
             logger.exception(
-                "échec chargement plugin", plugin=self.manifest.name, erreur=str(e)
+                "plugin loading failed", plugin=self.manifest.name, erreur=str(e)
             )
-            raise LoadError(f"[{self.manifest.name}] Échec chargement : {e}") from e
+            raise LoadError(f"[{self.manifest.name}] Loading failed: {e}") from e
 
     async def _do_load(self) -> None:
         entry = self.manifest.plugin_dir / self.manifest.entry_point
@@ -211,7 +211,7 @@ class LifecycleManager:
                         hook()
                 except Exception as e:
                     logger.error(
-                        "erreur dans le hook",
+                        "error in hook",
                         plugin=self.manifest.name,
                         hook=name,
                         erreur=str(e),
@@ -239,7 +239,7 @@ class LifecycleManager:
             del sys.modules[name]
         spec = importlib.util.spec_from_file_location(name, path)
         if spec is None or spec.loader is None:
-            raise LoadError(f"Impossible de créer le spec pour {path}")
+            raise LoadError(f"Impossible to create spec for {path}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
         spec.loader.exec_module(module)
@@ -287,7 +287,7 @@ class LifecycleManager:
             self.propagate_services(is_reload=True)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
-            logger.info("plugin rechargé", plugin=self.manifest.name)
+            logger.info("plugin reloaded", plugin=self.manifest.name)
         except Exception as e:
             self._sm.transition("error")
             raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
@@ -299,7 +299,7 @@ class LifecycleManager:
         try:
             await self._do_unload()
             self._sm.transition("ok")
-            logger.info("plugin déchargé", plugin=self.manifest.name)
+            logger.info("plugin unloaded", plugin=self.manifest.name)
         except Exception:
             self._sm.transition("error")
             raise
@@ -338,13 +338,13 @@ class LifecycleManager:
             if router is not None:
                 self.plugin_router = router
                 logger.info(
-                    "router HTTP collecté",
+                    "collected HTTP router",
                     plugin=self.manifest.name,
                     routes=len(getattr(router, "routes", [])),
                 )
         except Exception as e:
             logger.error(
-                "erreur collecte router HTTP", plugin=self.manifest.name, erreur=str(e)
+                "error collecting HTTP router", plugin=self.manifest.name, erreur=str(e)
             )
 
     def _collect_middlewares(self) -> None:
@@ -360,13 +360,13 @@ class LifecycleManager:
             if middlewares is not None:
                 self.plugin_middlewares.update(middlewares)
                 logger.info(
-                    "middlewares collectés",
+                    "collected middlewares",
                     plugin=self.manifest.name,
                     count=len(self.plugin_middlewares),
                 )
         except Exception as e:
             logger.error(
-                "erreur collecte middlewares", plugin=self.manifest.name, erreur=str(e)
+                "error collecting middlewares", plugin=self.manifest.name, erreur=str(e)
             )
 
     # ── Propagation des services (fix #3 v1) ──────────────────

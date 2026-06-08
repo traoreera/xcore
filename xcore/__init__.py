@@ -142,7 +142,7 @@ class Xcore:
         def _lazy_service(name: str):
             """Résout le service au moment de la requête, pas à l'enregistrement."""
             if self.services is None:
-                raise RuntimeError(f"Service '{name}' demandé avant boot()")
+                raise RuntimeError(f"Service '{name}' requested before boot()")
             return self.services.get(name)
 
         from .kernel.tenancy import TenantMiddleware
@@ -164,7 +164,7 @@ class Xcore:
             return self
 
         configure_logging(self._config.observability.logging)
-        self._logger.info(f"━━━ xcore v{__version__} démarrage ━━━")
+        self._logger.info(f"━━━ xcore v{__version__} starting ━━━")
 
         # 0. Validation clés secrètes en production
 
@@ -224,19 +224,19 @@ class Xcore:
             )
 
         self._booted = True
-        self._logger.info("━━━ xcore prêt ━━━")
+        self._logger.info("━━━ xcore ready ━━━")
         return self
 
     async def shutdown(self) -> None:
         if not self._booted:
             return
-        self._logger.info("Arrêt xcore...")
+        self._logger.info("Shutting down xcore...")
         if self.plugins:
             await self.plugins.shutdown()
         if self.services:
             await self.services.shutdown()
         self._booted = False
-        self._logger.info("xcore arrêté.")
+        self._logger.info("xcore stopped.")
 
     def _attach_router(
         self,
@@ -276,20 +276,19 @@ class Xcore:
             app.include_router(prefixed_router)
             n_routes = len(getattr(plugin_router, "routes", []))
             self._logger.info(
-                f"[{plugin_name}] 🌐 {n_routes} route(s) montée(s) "
-                f"sous {wrapper.prefix}"
+                f"[{plugin_name}] 🌐 {n_routes} route(s) mounted sous {wrapper.prefix}"
             )
 
         for middleware in self.plugins.collect_app_state():
             if middleware:
-                states = middleware.get("state")
+                states = middleware.get("states")
                 for key, value in states.items():
                     app.state.__setattr__(
                         key=f"{middleware['name']}_{key}", value=value
                     )
                     self._logger.info(
-                        f"{middleware['name']}📦 état {middleware['name']}_{key} "
-                        "mis à jour"
+                        f"{middleware['name']}📦 state {middleware['name']}_{key} "
+                        "updated"
                     )
 
         # Endpoint /metrics Prometheus (seulement si backend=prometheus)
@@ -327,13 +326,13 @@ class Xcore:
             or self._config.app.server_key == default_key
         ):
             raise RuntimeError(
-                "SECRET_KEY par défaut détecté en production ! "
-                "Configurez app.secret_key dans votre xcore.yaml"
+                "SECRET_KEY default detected in production! "
+                "Configure app.secret_key in your xcore.yaml"
             )
         if self._config.plugins.secret_key == default_key:
             raise RuntimeError(
-                "PLUGIN_SECRET_KEY par défaut détecté en production ! "
-                "Configurez plugins.secret_key dans votre xcore.yaml"
+                "PLUGIN_SECRET_KEY default detected in production! "
+                "Configure plugins.secret_key in your xcore.yaml"
             )
 
     def __repr__(self) -> str:

@@ -131,10 +131,8 @@ security-check: ## Vérifications rapides (.env, mots de passe en dur)
 # ============================================================
 # 📚 Documentation
 # ============================================================
-docs: ## Générer la documentation Sphinx
-	@mkdir -p docs/_build/html
-	@poetry run sphinx-build -b html docs/ docs/_build/html || \
-	  echo "[WARN] Échec build docs"
+docs serve: ## Générer la documentation Sphinx
+	@poetry run mkdocs serve
 
 
 # ============================================================

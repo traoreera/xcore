@@ -50,7 +50,7 @@ class TestMigrationRunner:
     @pytest.mark.asyncio
     async def test_init_no_migrations_dir_raises(self, tmp_path):
         runner = MigrationRunner("sqlite:///./test.db", tmp_path / "nonexistent")
-        with pytest.raises(MigrationError, match="n'existe pas"):
+        with pytest.raises(MigrationError, match="does not exist"):
             await runner.init()
 
     @pytest.mark.asyncio

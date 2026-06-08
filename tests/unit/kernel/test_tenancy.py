@@ -37,7 +37,7 @@ class TestTenantAwareCache:
     async def test_get_prefixes_key(self):
         cache, backend = self._make()
         await cache.get("invoices")
-        backend.get.assert_called_once_with("acme:invoices", None)
+        backend.get.assert_called_once_with("acme:invoices")
 
     @pytest.mark.asyncio
     async def test_set_prefixes_key(self):

@@ -64,10 +64,9 @@ class TenantAwareCache:
         return f"{self._tenant}:{key}"
 
     async def get(self, key: str, default: Any = None) -> Any:
-        try:
-            result = await self._cache.get(self._k(key), default)
-        except TypeError:
-            result = await self._cache.get(self._k(key))
+        # On ne passe pas default au backend car tous ne le supportent pas (TypeError).
+        # On gère le fallback ici : si None, on retourne default.
+        result = await self._cache.get(self._k(key))
         return result if result is not None else default
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:

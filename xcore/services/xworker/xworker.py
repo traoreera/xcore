@@ -70,9 +70,9 @@ class WorkerService(BaseService):
             for module in self._cfg.modules:
                 try:
                     importlib.import_module(module)
-                    logger.debug("Module de tâches chargé : %s", module)
+                    logger.debug("Task module loaded: %s", module)
                 except ImportError:
-                    logger.exception("Module de tâches introuvable : %s", module)
+                    logger.exception("Task module not found: %s", module)
             register_pending_tasks(_celery_worker)
 
     async def init(self) -> None:
@@ -81,7 +81,7 @@ class WorkerService(BaseService):
         self._status = ServiceStatus.INITIALIZING
 
         if _celery_worker is None:
-            logger.error("celery non installé — uv add 'celery[redis]'")
+            logger.error("celery not installed — uv add 'celery[redis]'")
             self._status = ServiceStatus.FAILED
             return
 
@@ -102,16 +102,16 @@ class WorkerService(BaseService):
             )
             self._status = ServiceStatus.READY
         except Exception as exc:
-            logger.warning("Worker : broker inaccessible (%s) → mode dégradé", exc)
+            logger.warning("Worker : broker inaccessible (%s) → degraded mode", exc)
             self._status = ServiceStatus.DEGRADED
 
     async def shutdown(self) -> None:
         self._status = ServiceStatus.STOPPED
-        logger.info("WorkerService arrêté")
+        logger.info("WorkerService stopped")
 
     async def health_check(self) -> tuple[bool, str]:
         if _celery_worker is None:
-            return False, "_celery_worker non initialisée"
+            return False, "_celery_worker not initialized"
         try:
             conn = _celery_worker.connection_for_read()
             conn.ensure_connection(max_retries=1)
@@ -136,12 +136,12 @@ class WorkerService(BaseService):
         self, task_name: str, *args: Any, queue: str = "default", **kwargs: Any
     ) -> Any:
         if _celery_worker is None:
-            raise RuntimeError("WorkerService non initialisé")
+            raise RuntimeError("WorkerService not initialized")
         return _celery_worker.send_task(
             task_name, args=args, kwargs=kwargs, queue=queue
         )
 
     def get_result(self, task_id: str) -> Any:
         if _celery_worker is None:
-            raise RuntimeError("WorkerService non initialisé")
+            raise RuntimeError("WorkerService not initialized")
         return _celery_worker.AsyncResult(task_id)

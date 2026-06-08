@@ -77,7 +77,7 @@ async def _dispatch_job(job_id: str) -> None:
         logger.warning(
             "job introuvable dans le registre",
             job_id=job_id,
-            raison="plugin déchargé ?",
+            raison="plugin unloaded ?",
         )
         return
 

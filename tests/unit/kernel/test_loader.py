@@ -118,13 +118,16 @@ async def test_loader_unload(loader):
 
 @pytest.mark.asyncio
 async def test_loader_unload_missing(loader):
-    with pytest.raises(KeyError, match="non chargé"):
+    with pytest.raises(KeyError, match="not loaded"):
         await loader.unload("p1")
 
 
 @pytest.mark.asyncio
 async def test_loader_get_manifest_none(loader):
     assert loader.get_manifest("none") is None
+
+
+from xcore.kernel.runtime.loader import PluginLoader, _topo_sort
 
 
 def test_loader_topo_sort(loader):
@@ -138,7 +141,7 @@ def test_loader_topo_sort(loader):
     dep.name = "p1"
     m2.requires = [dep]
 
-    ordered = loader._topo_sort([m2, m1])
+    ordered = _topo_sort([m2, m1])
     assert [m.name for m in ordered] == ["p1", "p2"]
 
 
@@ -155,5 +158,5 @@ def test_loader_topo_sort_circular(loader):
     dep1.name = "p1"
     m2.requires = [dep1]
 
-    with pytest.raises(ValueError, match="circulaires"):
-        loader._topo_sort([m1, m2])
+    with pytest.raises(ValueError, match="Circular"):
+        _topo_sort([m1, m2])

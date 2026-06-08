@@ -45,6 +45,7 @@ class ExecutionMode(str, Enum):
     TRUSTED = "trusted"
     SANDBOXED = "sandboxed"
     LEGACY = "legacy"
+    EPHEMERAL = "ephemeral"
 
 
 @runtime_checkable

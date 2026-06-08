@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # CLAUDE.md — xcore
 
 ## Présentation
@@ -20,8 +24,11 @@ Charge, isole et gère des plugins modulaires dans un environnement sandboxé.
 poetry run xcli worker start api
 
 # Tests
-make test                        # suite complète avec coverage
-poetry run pytest tests/ -x -q  # rapide, stoppe au 1er échec
+make test                                                       # suite complète avec coverage
+make test-cov                                                   # tests + rapport HTML de coverage
+poetry run pytest tests/ -x -q                                  # rapide, stoppe au 1er échec
+poetry run pytest tests/unit/kernel/test_supervisor.py -x -q   # fichier unique
+poetry run pytest tests/ -k "test_boot" -x                     # filtrer par nom
 
 # Lint & format
 make lint-fix    # auto-corrige (black + isort)
@@ -44,7 +51,8 @@ xcore/
 ├── kernel/
 │   ├── api/           # contract.py (TrustedBase, BasePlugin), context.py (PluginContext)
 │   ├── observability/ # logging.py (XcoreLogger), metrics.py, tracing.py, health.py
-│   ├── runtime/       # lifecycle.py, loader.py, supervisor.py + middlewares/
+│   ├── runtime/       # lifecycle.py, loader.py, supervisor.py, activator.py
+│   │                  # ephemeral_handler.py, warm_pool.py (pool d'instances préchauffées)
 │   ├── tenancy/       # middleware.py, services.py (TenantAwareDB/Cache/Scheduler)
 │   └── permissions/   # engine.py
 ├── services/
@@ -229,4 +237,6 @@ Le cache `.venv` est clé sur `poetry.lock` — un changement de dépendances in
 - **`make lint-check`** — le Makefile s'appelle `makefile` (minuscule), mais `make` le trouve sur Linux.
 - **Dossiers `extensions/` et `plugins/`** — n'existent pas dans le repo racine. Ne pas les référencer dans les outils CI/bandit.
 - **`logging.getLogger()`** — NE PAS utiliser. Toujours `get_logger()` de `xcore.kernel.observability`.
-- **Branche de travail courante** : `reformation`. La branche principale est `main`.
+- **Branche principale** : `main`. Ne pas confondre avec les branches de feature (`add-ephemeral`, etc.).
+- **Seuil de coverage** : `fail_under = 80` dans `pyproject.toml` (`branch = true`). Le CI échoue en dessous. Patcher les imports locaux dans `boot()` au niveau du module source (`xcore.services.container.ServiceContainer`) et non au niveau `xcore`.
+- **`asyncio_mode = auto`** dans `pyproject.toml` — pas besoin de `@pytest.mark.asyncio` sur chaque test async.

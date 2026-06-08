@@ -11,14 +11,18 @@ logger = logging.getLogger("xcore.config")
 
 
 def _resolve(value: Any) -> Any:
-    """Remplace ${VAR} dans toute la structure YAML."""
+    """Replace ${VAR} in the entire YAML structure."""
     if isinstance(value, str):
 
         def _sub(m: re.Match) -> str:
             var = m.group(1)
             resolved = os.environ.get(var)
             if resolved is None:
-                logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
+                logger.warning(
+                    "Environement Variable not defined; using empty string:",
+                    var,
+                    extra={"var": var},
+                )
                 return ""
             return resolved
 

@@ -55,7 +55,7 @@ class DatabaseServiceProvider(BaseServiceProvider):
         if mgr.adapters:
             first = next(iter(mgr.adapters.values()))
             container._raw.setdefault("db", first)
-        logger.info("base de données initialisée", adapteurs=list(mgr.adapters.keys()))
+        logger.info("database initialized", adapters=list(mgr.adapters.keys()))
 
 
 class CacheServiceProvider(BaseServiceProvider):
@@ -69,7 +69,7 @@ class CacheServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["cache_service"] = svc
         container._raw["cache"] = svc
-        logger.info("cache initialisé", backend=cfg.backend)
+        logger.info("cache initialized", backend=cfg.backend)
 
 
 class SchedulerServiceProvider(BaseServiceProvider):
@@ -83,7 +83,7 @@ class SchedulerServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["scheduler_service"] = svc
         container._raw["scheduler"] = svc
-        logger.info("scheduler initialisé", timezone=cfg.timezone, backend=cfg.backend)
+        logger.info("scheduler initialized", timezone=cfg.timezone, backend=cfg.backend)
 
 
 class XWorkerServiceProvider(BaseServiceProvider):
@@ -99,7 +99,7 @@ class XWorkerServiceProvider(BaseServiceProvider):
         await svc.init()
         container._services["worker_service"] = svc
         container._raw["worker"] = svc
-        logger.info("xworker initialisé", broker=cfg.broker_url, queues=cfg.queues)
+        logger.info("xworker initialized", broker=cfg.broker_url, queues=cfg.queues)
 
 
 class ExtensionServiceProvider(BaseServiceProvider):
@@ -113,9 +113,7 @@ class ExtensionServiceProvider(BaseServiceProvider):
         container._services["extensions"] = loader
         for name, ext in loader.extensions.items():
             container._raw[f"ext.{name}"] = ext
-        logger.info(
-            "extensions initialisées", extensions=list(loader.extensions.keys())
-        )
+        logger.info("extensions initialized", extensions=list(loader.extensions.keys()))
 
 
 class ServiceContainer:
@@ -173,19 +171,19 @@ class ServiceContainer:
     def add_provider(self, provider: BaseServiceProvider) -> None:
         """Ajoute un fournisseur de services à la liste d'initialisation."""
         self._providers.append(provider)
-        logger.debug("provider ajouté", provider=provider.__class__.__name__)
+        logger.debug("provider added", provider=provider.__class__.__name__)
 
     def register_provider(self, name: str, provider: Any) -> None:
         """Enregistre un fournisseur de services dynamique (lazy)."""
         self._lazy_providers[name] = provider
-        logger.debug("provider lazy enregistré", nom=name)
+        logger.debug("lazy provider registered", name=name)
 
     def register_service(self, name: str, service: Any) -> None:
         """Enregistre manuellement un service dans le conteneur."""
         self._raw[name] = service
         if isinstance(service, BaseService):
             self._services[name] = service
-        logger.debug("service enregistré manuellement", service=name)
+        logger.debug("service registered manually", service=name)
 
     async def init(self, providers: list[BaseServiceProvider] | None = None) -> None:
         """Initialise tous les services via les providers."""
@@ -195,7 +193,7 @@ class ServiceContainer:
         for provider in providers:
             await provider.init(self)
 
-        logger.info("services initialisés", services=sorted(self._raw.keys()))
+        logger.info("services initialized", services=sorted(self._raw.keys()))
 
     # ── Accès typé ────────────────────────────────────────────
 
@@ -244,10 +242,10 @@ class ServiceContainer:
                     return svc
 
         raise KeyError(
-            f"Service '{name}' indisponible.\n"
-            f"  Disponibles : {sorted(self._raw.keys())}\n"
-            f"  Providers actifs : {list(self._lazy_providers.keys())}\n"
-            f"  Conseil : vérifiez le nom exact dans votre xcore.yaml → databases / services."
+            f"Service '{name}' unavailable.\n"
+            f"  Available : {sorted(self._raw.keys())}\n"
+            f"  Active providers : {list(self._lazy_providers.keys())}\n"
+            f"  Tip : check the exact name in your xcore.yaml → databases / services."
         )
 
     def get_as(self, name: str, type_: type[T]) -> T:
@@ -263,8 +261,8 @@ class ServiceContainer:
         svc = self.get(name)
         if not isinstance(svc, type_):
             raise TypeError(
-                f"Service '{name}' est de type {type(svc).__name__!r}, "
-                f"attendu {type_.__name__!r}."
+                f"Service '{name}' is of type {type(svc).__name__!r}, "
+                f"expected {type_.__name__!r}."
             )
         return svc
 
@@ -288,11 +286,11 @@ class ServiceContainer:
             svc = self._services[name]
             try:
                 await asyncio.wait_for(svc.shutdown(), timeout=10.0)
-                logger.info("service arrêté", service=name)
+                logger.info("service stopped", service=name)
             except asyncio.TimeoutError:
-                logger.error("timeout arrêt service", service=name)
+                logger.error("timeout stopping service", service=name)
             except Exception as e:
-                logger.error("erreur arrêt service", service=name, erreur=str(e))
+                logger.error("error stopping service", service=name, error=str(e))
         self._services.clear()
         self._raw.clear()
 

@@ -419,7 +419,9 @@ class PluginLifecycleBench:
                     await app.boot()
                     elapsed_ms = (time.perf_counter() - t0) * 1000
                     mem_after = _mem_mb()
-                    loaded = len(app.plugins.list_plugins())
+                    all_loaded = app.plugins.list_plugins()
+                    # Filter out internal 'xcore' virtual plugin from the count
+                    loaded = len([name for name in all_loaded if name != "xcore"])
 
                     results.append(
                         BenchResult(
@@ -436,7 +438,7 @@ class PluginLifecycleBench:
                             std_ms=0,
                             throughput_ops_sec=n / (elapsed_ms / 1000),
                             memory_delta_mb=mem_after - mem_before,
-                            errors=n - loaded,
+                            errors=max(0, n - loaded),
                             notes=f"{loaded}/{n} loaded, "
                             f"{(mem_after - mem_before) / n:.2f}MB/plugin",
                         )

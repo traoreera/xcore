@@ -24,7 +24,7 @@ async def _resolve_user(request: Request) -> AuthPayload:
     if backend is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Auth backend non disponible — plugin auth non chargé",
+            detail="Auth backend non disponible — plugin auth not loaded",
         )
 
     token = await backend.extract_token(request)
@@ -116,7 +116,7 @@ class RBACChecker:
             if self._strict:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Auth backend non disponible — plugin auth non chargé",
+                    detail="Auth backend non disponible — plugin auth not loaded",
                 )
             # Dev mode : passe sans user
             return {}  # type: ignore[return-value]
