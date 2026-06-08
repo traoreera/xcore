@@ -23,7 +23,7 @@ class ActivatorRegistry:
 
     def register(self, mode: Any, activator: PluginActivator) -> None:
         self._activators[mode] = activator
-        logger.debug(f"Activateur enregistré pour le mode : {mode}")
+        logger.debug("Activateur enregistré pour un mode d'exécution.")
 
     def get(self, mode: Any) -> PluginActivator | None:
         return self._activators.get(mode)
