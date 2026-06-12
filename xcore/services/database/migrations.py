@@ -15,12 +15,13 @@ Usage dans un plugin Trusted :
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine  # type: ignore
 
-logger = logging.getLogger("xcore.services.database.migrations")
+from ...kernel.observability import get_logger
+
+logger = get_logger("xcore.services.database.migrations")
 
 
 class MigrationError(Exception):
@@ -83,8 +84,8 @@ class MigrationRunner:
             ]
             if existing:
                 logger.info(
-                    f"{len(existing)} migration(s) already exist — init ignored. "
-                    "Use `revision()` to create a new revision."
+                    "migrations already exist, skipping init",
+                    count=len(existing),
                 )
                 return
 
@@ -103,13 +104,17 @@ class MigrationRunner:
 
             await engine.dispose()
             logger.info(
-                f"First revision '{message}' generated (async, autogenerate={autogenerate})"
+                "first revision generated (async)",
+                message=message,
+                autogenerate=autogenerate,
             )
             return
 
         command.revision(config=self._get_config(), **kwargs)
         logger.info(
-            f"First revision '{message}' generated (sync, autogenerate={autogenerate})"
+            "first revision generated (sync)",
+            message=message,
+            autogenerate=autogenerate,
         )
 
     async def upgrade(self, revision: str = "head") -> None:
@@ -119,7 +124,7 @@ class MigrationRunner:
         if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
-                logger.info("Starting asynchronous migration")
+                logger.info("async migration starting", revision=revision)
 
                 def do_upgrade(sync_conn):
                     cfg = self._get_config()
@@ -128,10 +133,10 @@ class MigrationRunner:
 
                 await conn.run_sync(do_upgrade)
             await engine.dispose()
-            logger.info("Migration completed successfully")
+            logger.info("async migration completed", revision=revision)
             return
 
-        logger.info(f"Migration sync upgrade → {revision}")
+        logger.info("sync migration upgrade", revision=revision)
         command.upgrade(self._get_config(), revision)
 
     async def downgrade(self, revision: str = "-1") -> None:
@@ -149,10 +154,10 @@ class MigrationRunner:
 
                 await conn.run_sync(do_downgrade)
             await engine.dispose()
-            logger.info(f"Migration downgrade → {revision}")
+            logger.info("async migration downgrade completed", revision=revision)
             return
 
-        logger.info(f"Migration sync downgrade → {revision}")
+        logger.info("sync migration downgrade", revision=revision)
         command.downgrade(self._get_config(), revision)
 
     async def revision(self, **kwargs) -> None:

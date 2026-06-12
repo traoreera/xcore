@@ -4,10 +4,10 @@ async_sql.py — Adaptateur SQLAlchemy asynchrone (aiosqlite, asyncpg, aiomysql�
 
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
+from ....kernel.observability import get_logger
 from ._utils import (
     detect_driver,
     is_pre_ping_safe,
@@ -18,7 +18,7 @@ from ._utils import (
 if TYPE_CHECKING:
     from ....kernel.configurations.sections import DatabaseConfig
 
-logger = logging.getLogger("xcore.services.database.async_sql")
+logger = get_logger("xcore.services.database.async_sql")
 
 
 class AsyncSQLAdapter:
@@ -58,8 +58,9 @@ class AsyncSQLAdapter:
 
         if not safe_pre_ping and self._pool_pre_ping:
             logger.info(
-                f"[{self.name}] pool_pre_ping désactivé pour aiomysql "
-                f"— compensation via pool_recycle={self._pool_recycle}s"
+                "pool_pre_ping disabled for aiomysql, compensating with pool_recycle",
+                adapter=self.name,
+                recycle_s=self._pool_recycle,
             )
 
         if self._connect_args:
@@ -97,8 +98,11 @@ class AsyncSQLAdapter:
 
         driver = detect_driver(self.url)
         logger.info(
-            f"[{self.name}] AsyncSQL connecté "
-            f"(driver={driver}, pre_ping={safe_pre_ping}, recycle={self._pool_recycle}s)"
+            "async sql connected",
+            adapter=self.name,
+            driver=driver,
+            pre_ping=safe_pre_ping,
+            recycle_s=self._pool_recycle,
         )
 
     def _install_pessimistic_listener(self) -> None:
@@ -119,7 +123,7 @@ class AsyncSQLAdapter:
             connection_record.info.setdefault("pid", id(dbapi_connection))
 
         logger.debug(
-            f"[{self.name}] Listener pessimiste installé (aiomysql workaround)"
+            "pessimistic listener installed (aiomysql workaround)", adapter=self.name
         )
 
     async def disconnect(self) -> None:
@@ -127,7 +131,7 @@ class AsyncSQLAdapter:
             await self._engine.dispose()
             self._engine = None
             self._AsyncSession = None
-            logger.info(f"[{self.name}] AsyncSQL déconnecté")
+            logger.info("async sql disconnected", adapter=self.name)
 
     @asynccontextmanager
     async def session(self) -> AsyncGenerator:

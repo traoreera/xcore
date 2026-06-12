@@ -8,12 +8,12 @@ The PermissionEngine is the singleton that:
 
 from __future__ import annotations
 
-import logging
 from collections import deque
 
+from ..observability import get_logger
 from .policies import PolicyEffect, PolicySet
 
-logger = logging.getLogger("xcore.permissions.engine")
+logger = get_logger("xcore.permissions.engine")
 
 
 class PermissionDenied(Exception):
@@ -51,11 +51,13 @@ class PermissionEngine:
         self._cache.clear()  # Invalidate cache on policy change
         if not raw_permissions:
             self._policies[plugin_name] = PolicySet.deny_all(plugin_name)
-            logger.debug(f"[{plugin_name}] Aucune permission déclarée → DENY ALL")
+            logger.debug("no permissions declared, deny all", plugin=plugin_name)
         else:
             ps = PolicySet.from_list(plugin_name, raw_permissions)
             self._policies[plugin_name] = ps
-            logger.debug(f"[{plugin_name}] {len(ps.policies)} règle(s) chargée(s)")
+            logger.debug(
+                "permissions loaded", plugin=plugin_name, rules=len(ps.policies)
+            )
 
     def grant_all(self, plugin_name: str) -> None:
         """Grant all permissions to a plugin."""
@@ -104,7 +106,7 @@ class PermissionEngine:
     ) -> PolicyEffect:
         ps = self._policies.get(plugin_name)
         if ps is None:
-            logger.warning(f"[{plugin_name}] Aucune policy chargée → DENY")
+            logger.warning("no policy loaded, denying", plugin=plugin_name)
             effect = PolicyEffect.DENY
         else:
             effect = ps.evaluate(resource, action)
@@ -137,10 +139,13 @@ class PermissionEngine:
 
         # Only log warning or emit events on miss or deny
         if effect == PolicyEffect.DENY:
-            logger.warning(f"DENY [{plugin_name}] {action} on '{resource}'")
-            if self._events:
-                self._events.emit_sync(f"permission.{effect.value}", entry)
-        elif emit_event and self._events:
+            logger.warning(
+                "permission denied",
+                plugin=plugin_name,
+                action=action,
+                resource=resource,
+            )
+        if self._events:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:

@@ -221,7 +221,10 @@ class TestEventBus:
         results = await event_bus.emit("test.event", {})
 
         assert len(results) == 0
-        assert "Test error" in caplog.text
+        assert any(
+            r.getMessage() == "event handler error" and r.xcore_ctx.get("error") == "Test error"
+            for r in caplog.records
+        )
 
     @pytest.mark.asyncio
     async def test_gather_execution(self, event_bus):

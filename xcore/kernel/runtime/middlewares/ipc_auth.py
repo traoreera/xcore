@@ -20,15 +20,15 @@ Exemple plugin.yaml :
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Awaitable, Callable
 
+from ...observability import get_logger
 from .middleware import Middleware
 
 if TYPE_CHECKING:
     from ..loader import PluginLoader
 
-logger = logging.getLogger("xcore.runtime.ipc_auth")
+logger = get_logger("xcore.runtime.ipc_auth")
 
 # Plugins virtuels par défaut — pas de manifest, accessibles par tous.
 _DEFAULT_VIRTUAL_PLUGINS: frozenset[str] = frozenset({"xcore"})

@@ -85,7 +85,10 @@ class LifecycleManager:
 
     def _on_state_change(self, old: PluginState, new: PluginState) -> None:
         logger.debug(
-            "state transition", plugin=self.manifest.name, de=old.value, vers=new.value
+            "state transition",
+            plugin=self.manifest.name,
+            from_state=old.value,
+            to_state=new.value,
         )
         if self._events:
             self._events.emit_sync(
@@ -120,7 +123,7 @@ class LifecycleManager:
         except Exception as e:
             self._sm.transition("error")
             logger.exception(
-                "plugin loading failed", plugin=self.manifest.name, erreur=str(e)
+                "plugin load failed", plugin=self.manifest.name, error=str(e)
             )
             raise LoadError(f"[{self.manifest.name}] Loading failed: {e}") from e
 
@@ -129,15 +132,15 @@ class LifecycleManager:
         if not entry.exists():
             raise LoadError(f"Not found entry point: {entry}")
 
-        # Isolation namespace : utilise un nom de module unique par plugin
-        # pour éviter les conflits entre plugins ayant des fichiers du même nom
-        src_dir = str(self.manifest.plugin_dir / "src")
         module_name = f"xcore_plugin_{self.manifest.name}"
         package_name = module_name
 
         # Crée un package namespace virtuel pour isoler le plugin
         if package_name not in sys.modules:
             sys.modules[package_name] = types.ModuleType(package_name)
+            # Isolation namespace : utilise un nom de module unique par plugin
+            # pour éviter les conflits entre plugins ayant des fichiers du même nom
+            src_dir = str(self.manifest.plugin_dir / "src")
             sys.modules[package_name].__path__ = [src_dir]
 
         # N'ajoute pas src_dir à sys.path global pour éviter les conflits
@@ -338,13 +341,13 @@ class LifecycleManager:
             if router is not None:
                 self.plugin_router = router
                 logger.info(
-                    "collected HTTP router",
+                    "http router collected",
                     plugin=self.manifest.name,
                     routes=len(getattr(router, "routes", [])),
                 )
         except Exception as e:
             logger.error(
-                "error collecting HTTP router", plugin=self.manifest.name, erreur=str(e)
+                "http router collection error", plugin=self.manifest.name, error=str(e)
             )
 
     def _collect_middlewares(self) -> None:
@@ -360,13 +363,13 @@ class LifecycleManager:
             if middlewares is not None:
                 self.plugin_middlewares.update(middlewares)
                 logger.info(
-                    "collected middlewares",
+                    "middlewares collected",
                     plugin=self.manifest.name,
                     count=len(self.plugin_middlewares),
                 )
         except Exception as e:
             logger.error(
-                "error collecting middlewares", plugin=self.manifest.name, erreur=str(e)
+                "middlewares collection error", plugin=self.manifest.name, error=str(e)
             )
 
     # ── Propagation des services (fix #3 v1) ──────────────────
@@ -420,8 +423,7 @@ class LifecycleManager:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger
             protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
-            collisions = set(instance_services.keys()) & protected
-            if collisions:
+            if collisions := set(instance_services.keys()) & protected:
                 raise PermissionError(
                     f"[{self.manifest.name}] Tentative d'écrasement de services "
                     f"noyau sans registre : {collisions}"
@@ -442,7 +444,7 @@ class LifecycleManager:
         if is_reload:
             self._services.update(instance_services)
             logger.info(
-                "services mis à jour (rechargement)",
+                "services updated on reload",
                 plugin=self.manifest.name,
                 services=sorted(instance_services.keys()),
             )
@@ -452,7 +454,7 @@ class LifecycleManager:
                 self._services[k] = instance_services[k]
             if new_keys:
                 logger.info(
-                    "services disponibles",
+                    "services registered",
                     plugin=self.manifest.name,
                     services=sorted(new_keys),
                 )

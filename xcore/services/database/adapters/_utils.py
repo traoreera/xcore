@@ -4,9 +4,9 @@ _utils.py — Normalisation des connect_args et isolation_level selon le driver 
 
 from __future__ import annotations
 
-import logging
+from ....kernel.observability import get_logger
 
-logger = logging.getLogger("xcore.services.database")
+logger = get_logger("xcore.services.database")
 
 
 # Drivers pour lesquels pool_pre_ping est incompatible
@@ -153,8 +153,10 @@ def sanitize_connect_args(url: str, connect_args: dict) -> dict:
             filtered[key] = value
         else:
             logger.warning(
-                f"connect_args : '{key}' ignoré pour le driver '{driver}' "
-                f"(non supporté). Clés valides : {sorted(valid)}"
+                "connect_args key ignored, not supported for driver",
+                key=key,
+                driver=driver,
+                valid_keys=sorted(valid),
             )
 
     return filtered
@@ -177,8 +179,10 @@ def sanitize_isolation_level(url: str, isolation_level: str | None) -> str | Non
     level_upper = isolation_level.upper()
     if level_upper not in valid:
         logger.warning(
-            f"isolation_level '{isolation_level}' ignoré pour '{family}' "
-            f"(non supporté). Niveaux valides : {sorted(valid)}"
+            "isolation_level ignored, not supported for database family",
+            isolation_level=isolation_level,
+            family=family,
+            valid_levels=sorted(valid),
         )
         return None
 

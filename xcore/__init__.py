@@ -19,6 +19,7 @@ Quickstart:
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -164,7 +165,7 @@ class Xcore:
             return self
 
         configure_logging(self._config.observability.logging)
-        self._logger.info(f"━━━ xcore v{__version__} starting ━━━")
+        self._logger.info("xcore starting", version=__version__)
 
         # 0. Validation clés secrètes en production
 
@@ -224,19 +225,19 @@ class Xcore:
             )
 
         self._booted = True
-        self._logger.info("━━━ xcore ready ━━━")
+        self._logger.info("xcore ready")
         return self
 
     async def shutdown(self) -> None:
         if not self._booted:
             return
-        self._logger.info("Shutting down xcore...")
+        self._logger.info("xcore shutting down")
         if self.plugins:
             await self.plugins.shutdown()
         if self.services:
             await self.services.shutdown()
         self._booted = False
-        self._logger.info("xcore stopped.")
+        self._logger.info("xcore stopped")
 
     def _attach_router(
         self,
@@ -276,7 +277,10 @@ class Xcore:
             app.include_router(prefixed_router)
             n_routes = len(getattr(plugin_router, "routes", []))
             self._logger.info(
-                f"[{plugin_name}] 🌐 {n_routes} route(s) mounted sous {wrapper.prefix}"
+                "plugin routes mounted",
+                plugin=plugin_name,
+                routes=n_routes,
+                prefix=wrapper.prefix,
             )
 
         for middleware in self.plugins.collect_app_state():
@@ -287,8 +291,9 @@ class Xcore:
                         key=f"{middleware['name']}_{key}", value=value
                     )
                     self._logger.info(
-                        f"{middleware['name']}📦 state {middleware['name']}_{key} "
-                        "updated"
+                        "app state updated",
+                        plugin=middleware["name"],
+                        key=f"{middleware['name']}_{key}",
                     )
 
         # Endpoint /metrics Prometheus (seulement si backend=prometheus)
@@ -296,7 +301,7 @@ class Xcore:
             getattr(self._config.observability.metrics, "backend", "memory")
             == "prometheus"
         ):
-            try:
+            with contextlib.suppress(ImportError):
                 from fastapi import APIRouter as _AR
                 from fastapi import Response
                 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -308,9 +313,6 @@ class Xcore:
                     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
                 app.include_router(_metrics_router)
-            except ImportError:
-                pass
-
         app.openapi_schema = None  # force la regen du schéma OpenAPI
 
     def _validate_secret_keys(self) -> None:

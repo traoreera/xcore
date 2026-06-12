@@ -99,7 +99,7 @@ class PluginLoader:
 
         plugin_dir = Path(self._config.directory)
         if not plugin_dir.exists():
-            logger.warning("plugins_folder_not_found", path=str(plugin_dir))
+            logger.warning("plugin directory not found", path=str(plugin_dir))
             return {"loaded": [], "failed": [], "skipped": []}
 
         for d in sorted(plugin_dir.iterdir()):
@@ -113,13 +113,13 @@ class PluginLoader:
                     manifests.append(manifest)
                 else:
                     logger.warning(
-                        "framework_version_incompatible",
+                        "incompatible framework version",
                         plugin=manifest.name,
                         required=manifest.framework_version,
                         current=frameversion,
                     )
             except Exception as e:
-                logger.warning("invalid_manifest", plugin=d.name, error=str(e))
+                logger.warning("invalid manifest", plugin=d.name, error=str(e))
                 skipped.append(d.name)
 
         if not manifests:
@@ -128,7 +128,7 @@ class PluginLoader:
         try:
             ordered = _topo_sort(manifests)
         except ValueError as e:
-            logger.error("dependency_sort_error", error=str(e))
+            logger.error("dependency sort error", error=str(e))
             return {
                 "loaded": [],
                 "failed": [m.name for m in manifests],
@@ -153,7 +153,7 @@ class PluginLoader:
                         break
                     if not dep.is_compatible(resolved_versions.get(dep.name, "1.0")):
                         logger.error(
-                            "incompatible_dependency_version",
+                            "incompatible dependency version",
                             plugin=m.name,
                             dep=dep.name,
                             available_version=resolved_versions[dep.name],
@@ -167,13 +167,13 @@ class PluginLoader:
             if not wave:
                 stuck = [m.name for m in remaining]
                 logger.error(
-                    "loading_blocked",
+                    "load blocked, missing or incompatible dependencies",
                     blocked_plugins=stuck,
                 )
                 failed.extend(stuck)
                 break
 
-            logger.info("loading_wave", plugins=[m.name for m in wave])
+            logger.info("loading wave", plugins=[m.name for m in wave])
 
             results = await asyncio.gather(
                 *[self._try_load(m) for m in wave],
@@ -191,17 +191,13 @@ class PluginLoader:
                     wave_loaded.append(name)
                 else:
                     failed.append(name)
-                    # Cascade : les plugins qui dépendent du plugin raté sont aussi ratés
-                    cascade = [
+                    if cascade := [
                         m.name
                         for m in remaining
                         if any(dep.name == name for dep in m.requires)
                         and m.name not in processed
-                    ]
-                    if cascade:
-                        logger.error(
-                            "cascading_failure", plugin=name, dependents=cascade
-                        )
+                    ]:
+                        logger.error("cascade failure", plugin=name, dependants=cascade)
                         failed.extend(cascade)
                         processed.update(cascade)
 
@@ -211,7 +207,7 @@ class PluginLoader:
             remaining = [m for m in remaining if m.name not in processed]
 
         logger.info(
-            "plugin_loading_report",
+            "plugins load summary",
             loaded=len(loaded),
             failed=len(failed),
             skipped=len(skipped),
@@ -223,7 +219,7 @@ class PluginLoader:
             await self._activate(manifest)
             return manifest, True
         except Exception as e:
-            logger.error("plugin_activation_failed", plugin=manifest.name, error=str(e))
+            logger.error("plugin activation failed", plugin=manifest.name, error=str(e))
             return manifest, False
 
     async def _activate(self, manifest: Any) -> None:
@@ -234,7 +230,7 @@ class PluginLoader:
             raise ValueError(f"No activator found for mode {mode}")
         handler = await activator.activate(manifest, self)
         self._handlers[manifest.name] = handler
-        logger.info("plugin_activated", plugin=manifest.name, mode=mode.value)
+        logger.info("plugin activated", plugin=manifest.name, mode=mode.value)
 
     # ── Chargement individuel ─────────────────────────────────
 
@@ -251,7 +247,7 @@ class PluginLoader:
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
-                logger.info("loading_dependency", plugin=plugin_name, dep=dep_name)
+                logger.info("loading dependency", plugin=plugin_name, dep=dep_name)
                 await self.load(dep_name)
             else:
                 dep_handler = self._handlers[dep_name]
@@ -266,7 +262,7 @@ class PluginLoader:
 
         await self._activate(manifest)
         self._flush_services([plugin_name])
-        logger.info("plugin_loaded", plugin=plugin_name)
+        logger.info("plugin loaded", plugin=plugin_name)
 
     async def reload(self, plugin_name: str) -> None:
         if plugin_name not in self._handlers:
@@ -347,17 +343,10 @@ class PluginLoader:
             except asyncio.TimeoutError:
                 logger.error("plugin_stop_timeout", plugin=name)
             except Exception as e:
-                logger.error("plugin_stop_error", plugin=name, error=str(e))
-
-        await asyncio.gather(
-            *[_stop_one(name, h) for name, h in self._handlers.items()],
-            return_exceptions=True,
-        )
+                logger.error("unload error", error=str(e))
 
         self._handlers.clear()
-        logger.info("all_plugins_unloaded")
-
-    # ── Collecte routes / middlewares ─────────────────────────
+        logger.info("all plugins unloaded")
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
         """

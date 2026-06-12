@@ -4,16 +4,16 @@ sql.py — Adaptateur SQLAlchemy synchrone — optimisé production.
 
 from __future__ import annotations
 
-import logging
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Generator
 
+from ....kernel.observability import get_logger
 from ._utils import sanitize_connect_args, sanitize_isolation_level
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
 
-logger = logging.getLogger("xcore.services.database.sql")
+logger = get_logger("xcore.services.database.sql")
 
 
 class SQLAdapter:
@@ -90,8 +90,10 @@ class SQLAdapter:
             conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
         logger.info(
-            f"[{self.name}] SQL connecté "
-            f"(pre_ping={self._pool_pre_ping}, recycle={self._pool_recycle}s)"
+            "sql connected",
+            adapter=self.name,
+            pre_ping=self._pool_pre_ping,
+            recycle_s=self._pool_recycle,
         )
 
     async def disconnect(self) -> None:
@@ -111,7 +113,9 @@ class SQLAdapter:
             try:
                 sess.rollback()
             except Exception as rollback_err:
-                logger.warning(f"[{self.name}] Rollback échoué : {rollback_err}")
+                logger.warning(
+                    "rollback failed", adapter=self.name, error=str(rollback_err)
+                )
             raise
         finally:
             sess.close()

@@ -6,20 +6,20 @@ Usage :
 
     logger = get_logger("xcore.services.scheduler")
 
-    # Log simple
-    logger.info("Scheduler démarré")
+    # Simple log
+    logger.info("scheduler started")
 
-    # Log structuré (champs ajoutés au JSON ou affichés après le message en mode texte)
-    logger.info("Scheduler démarré", timezone="Europe/Paris", backend="redis")
-    logger.error("Connexion échouée", service="db", erreur=str(e))
-    logger.debug("Job ignoré", job_id="acme.cleanup", raison="déjà en cours")
+    # Structured log (fields added to JSON or appended to message in text mode)
+    logger.info("scheduler started", timezone="Europe/Paris", backend="redis")
+    logger.error("connection failed", service="db", error=str(e))
+    logger.debug("job skipped", job_id="acme.cleanup", reason="already running")
 
-Format texte :
-    2026-05-29 14:08:03 [INFO ] xcore.scheduler — Scheduler démarré  backend=redis timezone=Europe/Paris
+Text format:
+    2026-05-29 14:08:03 [INFO ] xcore.scheduler — scheduler started  backend=redis timezone=Europe/Paris
 
-Format JSON :
+JSON format:
     {"ts":"2026-05-29T14:08:03.688","level":"INFO","logger":"xcore.scheduler",
-     "msg":"Scheduler démarré","backend":"redis","timezone":"Europe/Paris"}
+     "msg":"scheduler started","backend":"redis","timezone":"Europe/Paris"}
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class XcoreLogger:
     """
     Wrapper autour de logging.Logger qui accepte des champs structurés en kwargs.
 
-        logger.info("Scheduler démarré", timezone="Europe/Paris", backend="redis")
+        logger.info("scheduler started", timezone="Europe/Paris", backend="redis")
 
     Les kwargs sont transmis au formateur via LogRecord.xcore_ctx et rendus soit
     en ligne (mode texte) soit en champs JSON (mode json).

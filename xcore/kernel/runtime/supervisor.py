@@ -145,14 +145,14 @@ class PluginSupervisor:
                     self._registry.register_core_service(name, svc)
                 except Exception as e:
                     logger.warning(
-                        "service noyau non enregistrable", service=name, erreur=str(e)
+                        "core service registration failed", service=name, error=str(e)
                     )
 
         logger.info(
-            "boot plugins terminé",
-            chargés=len(report["loaded"]),
-            échecs=len(report["failed"]),
-            ignorés=len(report["skipped"]),
+            "plugins boot complete",
+            loaded=len(report["loaded"]),
+            failed=len(report["failed"]),
+            skipped=len(report["skipped"]),
         )
 
         if self._events:
@@ -176,10 +176,10 @@ class PluginSupervisor:
                     )
                     self._rate.register(name, config)
                     logger.debug(
-                        "rate limit enregistré",
+                        "rate limit registered",
                         plugin=name,
-                        appels=rl.calls,
-                        période_s=rl.period_seconds,
+                        calls=rl.calls,
+                        period_s=rl.period_seconds,
                     )
             except Exception as e:
                 logger.error(
@@ -192,7 +192,7 @@ class PluginSupervisor:
         if not plugin_name:
             return
 
-        logger.debug("configuration réactive", plugin=plugin_name)
+        logger.debug("reactive configuration triggered", plugin=plugin_name)
 
         # 1. Chargement des permissions
         self._load_permissions([plugin_name])
@@ -213,11 +213,9 @@ class PluginSupervisor:
                 manifest = getattr(handler, "manifest", None)
                 raw_permissions = getattr(manifest, "permissions", None)
                 self._permissions.load_from_manifest(name, raw_permissions)
-                logger.debug("permissions chargées", plugin=name)
+                logger.debug("permissions loaded", plugin=name)
             except Exception as e:
-                logger.error(
-                    "erreur chargement permissions", plugin=name, erreur=str(e)
-                )
+                logger.error("permissions load error", plugin=name, error=str(e))
                 # Fail-closed : si on ne peut pas charger, deny all
                 self._permissions.load_from_manifest(name, None)
 
@@ -300,7 +298,7 @@ class PluginSupervisor:
             )
         self._pipeline.add_middleware(middleware, first=first)
         logger.info(
-            "middleware enregistré dynamiquement",
+            "middleware registered dynamically",
             middleware=middleware.__class__.__name__,
         )
 

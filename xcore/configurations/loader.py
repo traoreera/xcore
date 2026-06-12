@@ -8,11 +8,11 @@ ConfigLoader v2 — load xcore.yaml with :
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 from typing import Any
 
+from ..kernel.observability import get_logger
 from .helper import _resolve
 from .sections import (
     AppConfig,
@@ -35,7 +35,7 @@ from .sections import (
     XcoreConfig,
 )
 
-logger = logging.getLogger("xcore.config")
+logger = get_logger("xcore.config")
 
 
 class ConfigLoader:
@@ -83,7 +83,7 @@ class ConfigLoader:
 
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
-                logger.info(f"conf loaded : {candidate}")
+                logger.info("config file loaded", path=str(candidate))
                 return data
             except ImportError:
                 logger.warning("pyyaml not installed — pip install pyyaml")
@@ -102,7 +102,7 @@ class ConfigLoader:
             return
         path = Path(dotenv_file)
         if not path.exists():
-            logger.warning("dotenv not found")
+            logger.warning("dotenv file not found", path=str(path))
             return
         try:
             from dotenv import load_dotenv
@@ -218,7 +218,7 @@ class ConfigLoader:
         result = []
         for mw in d:
             if not isinstance(mw, dict) or "name" not in mw:
-                logger.warning(f"Middleware invalid (ignored) : {mw}")
+                logger.warning("invalid middleware config, skipped", middleware=str(mw))
                 continue
             raw_params = mw.get("config", [])
             if isinstance(raw_params, list):

@@ -11,12 +11,13 @@ Le registry permet de :
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("xcore.schema.registry")
+from ..observability import get_logger
+
+logger = get_logger("xcore.schema.registry")
 
 
 @dataclass
@@ -65,7 +66,7 @@ class SchemaRegistry:
 
     def register(self, schema: ActionSchema) -> None:
         self._schemas[schema.key] = schema
-        logger.debug("Schema enregistré : %s v%s", schema.key, schema.version)
+        logger.debug("schema registered", key=schema.key, version=schema.version)
 
     def get(self, plugin: str, action: str) -> ActionSchema | None:
         return self._schemas.get(f"{plugin}:{action}")
@@ -84,7 +85,7 @@ class SchemaRegistry:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {key: s.to_dict() for key, s in self._schemas.items()}
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        logger.info("Schemas sauvegardés : %s (%d actions)", path, len(data))
+        logger.info("schemas saved", path=str(path), actions=len(data))
 
     @classmethod
     def load(cls, path: str | Path) -> "SchemaRegistry":
@@ -97,8 +98,8 @@ class SchemaRegistry:
             try:
                 registry._schemas[key] = ActionSchema.from_dict(d)
             except Exception as exc:
-                logger.warning("Schema ignoré '%s' : %s", key, exc)
-        logger.info("Schemas chargés : %s (%d actions)", path, len(registry._schemas))
+                logger.warning("schema skipped", key=key, error=str(exc))
+        logger.info("schemas loaded", path=str(path), actions=len(registry._schemas))
         return registry
 
     def summary(self) -> dict[str, Any]:

@@ -5,10 +5,11 @@ redis.py — Backend cache Redis pour CacheService.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
-logger = logging.getLogger("xcore.services.cache.redis")
+from ....kernel.observability import get_logger
+
+logger = get_logger("xcore.services.cache.redis")
 
 
 class RedisCacheBackend:

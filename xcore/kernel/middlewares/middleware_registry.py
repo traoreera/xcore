@@ -4,13 +4,14 @@ middleware_registry.py — Registry for managing and creating middleware pipelin
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, Callable
+
+from ..observability import get_logger
 
 if TYPE_CHECKING:
     from .middleware import Middleware, MiddlewarePipeline
 
-logger = logging.getLogger("xcore.runtime.middleware_registry")
+logger = get_logger("xcore.runtime.middleware_registry")
 
 
 class MiddlewareRegistry:
@@ -28,7 +29,7 @@ class MiddlewareRegistry:
     ) -> None:
         """Registers a middleware factory."""
         self._factories[name] = factory
-        logger.debug(f"Middleware factory registered: {name}")
+        logger.debug("middleware factory registered", name=name)
 
     def create_pipeline(
         self, names: list[str], context: dict[str, Any], final_handler: Callable
@@ -45,8 +46,8 @@ class MiddlewareRegistry:
                     middleware = self._factories[name](context)
                     middlewares.append(middleware)
                 except Exception as e:
-                    logger.error(f"Error creating middleware '{name}': {e}")
+                    logger.error("middleware creation error", name=name, error=str(e))
             else:
-                logger.warning(f"Middleware factory not found: {name}")
+                logger.warning("middleware factory not found", name=name)
 
         return MiddlewarePipeline(middlewares=middlewares, final_handler=final_handler)

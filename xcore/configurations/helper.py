@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from typing import Any
 
+from ..kernel.observability import get_logger
+
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
-logger = logging.getLogger("xcore.config")
+logger = get_logger("xcore.config")
 
 
 def _resolve(value: Any) -> Any:
