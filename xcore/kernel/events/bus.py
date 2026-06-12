@@ -154,29 +154,45 @@ class EventBus:
         to_remove: list[_HandlerEntry] = []
 
         if gather:
-            # Wrap synchronous handlers in coroutines only when gathering
-            async def _call_sync(h, e):
-                return h(e)
-
-            tasks = [
-                (
-                    entry.handler(event)
-                    if entry.is_async
-                    else _call_sync(entry.handler, event)
-                )
-                for entry in matched_handlers
-            ]
-
-            raw = await asyncio.gather(*tasks, return_exceptions=True)
-            for entry, result in zip(matched_handlers, raw):
-                if isinstance(result, Exception):
-                    logger.error(
-                        f"Handler '{entry.name}' erreur pour '{event_name}': {result}"
-                    )
-                else:
+            # Fast-path: only one handler
+            if len(matched_handlers) == 1:
+                entry = matched_handlers[0]
+                try:
+                    if entry.is_async:
+                        result = await entry.handler(event)
+                    else:
+                        result = entry.handler(event)
                     results.append(result)
+                except Exception as e:
+                    logger.error(
+                        f"Handler '{entry.name}' erreur pour '{event_name}': {e}"
+                    )
                 if entry.once:
                     to_remove.append(entry)
+            else:
+                # Multiple handlers: parallel execution
+                async def _call_sync(h, e):
+                    return h(e)
+
+                tasks = [
+                    (
+                        entry.handler(event)
+                        if entry.is_async
+                        else _call_sync(entry.handler, event)
+                    )
+                    for entry in matched_handlers
+                ]
+
+                raw = await asyncio.gather(*tasks, return_exceptions=True)
+                for entry, result in zip(matched_handlers, raw):
+                    if isinstance(result, Exception):
+                        logger.error(
+                            f"Handler '{entry.name}' erreur pour '{event_name}': {result}"
+                        )
+                    else:
+                        results.append(result)
+                    if entry.once:
+                        to_remove.append(entry)
         else:
             for entry in matched_handlers:
                 if not event.propagate or event.cancelled:

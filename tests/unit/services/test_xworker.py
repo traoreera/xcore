@@ -402,7 +402,7 @@ class TestWorkerService:
 
         with (
             patch("xcore.services.xworker.xworker._celery_worker", None),
-            pytest.raises(RuntimeError, match="WorkerService non initialisé"),
+            pytest.raises(RuntimeError, match="WorkerService not initialized"),
         ):
             svc.send("xcore.ping")
 

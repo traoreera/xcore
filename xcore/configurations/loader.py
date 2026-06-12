@@ -19,6 +19,7 @@ from .sections import (
     CacheConfig,
     CORSConfig,
     DatabaseConfig,
+    EphemeralConfig,
     LoggingConfig,
     MarketplaceConfig,
     MetricsConfig,
@@ -88,7 +89,8 @@ class ConfigLoader:
                 logger.warning("pyyaml not installed — pip install pyyaml")
                 return {}
             except Exception as e:
-                logger.error(f"error reading {candidate} : {e}")
+                logger.error("error reading %s", candidate)
+                logger.warning("using empty dict", exc_info=e)
                 return {}
         logger.info("No config file found. Using defaults.")
         return {}
@@ -100,13 +102,13 @@ class ConfigLoader:
             return
         path = Path(dotenv_file)
         if not path.exists():
-            logger.warning(f"dotenv introuvable : {path}")
+            logger.warning("dotenv not found")
             return
         try:
             from dotenv import load_dotenv
 
             load_dotenv(dotenv_path=path, override=False)
-            logger.info(f".env loaded : {path}")
+            logger.info(".env loaded")
         except ImportError:
             logger.warning("python-dotenv not installed — pip install python-dotenv")
 
@@ -203,6 +205,7 @@ class ConfigLoader:
                     "hidden": True,
                 },
             ),
+            ephemeral=EphemeralConfig.from_dict(d.get("ephemeral", {})),
         )
 
     @classmethod
@@ -215,7 +218,7 @@ class ConfigLoader:
         result = []
         for mw in d:
             if not isinstance(mw, dict) or "name" not in mw:
-                logger.warning(f"Middleware invalide (ignoré) : {mw}")
+                logger.warning(f"Middleware invalid (ignored) : {mw}")
                 continue
             raw_params = mw.get("config", [])
             if isinstance(raw_params, list):

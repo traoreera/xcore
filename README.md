@@ -19,13 +19,13 @@
     <img src="https://github.com/traoreera/xcore/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
   </a>
   <a href="https://github.com/traoreera/xcore/releases">
-    <img src="https://img.shields.io/badge/version-2.3.0-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-2.3.2-blue.svg" alt="Version" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
   </a>
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python Support" />
+    <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python Support" />
   </a>
   <a href="https://fastapi.tiangolo.com/">
     <img src="https://img.shields.io/badge/FastAPI-0.135+-green.svg" alt="FastAPI" />
@@ -39,7 +39,9 @@
 ## ✨ Key Features
 
 - 🔌 **Plugin-First Architecture**: Everything is a plugin. Keep your core lean and your features modular.
-- 🛡️ **Advanced Sandboxing**: AST-based scanning and resource restriction to run untrusted code safely.
+- ⚡ **High-Performance Runtime**: Optimized EventBus and Warm Pool for minimal latency (Ephemeral/Serverless mode).
+- 🛡️ **Advanced Sandboxing**: AST-based scanning, resource restriction, and C++ security core.
+- 🌐 **Native Multi-tenancy**: Resource isolation (DB/Cache) and tenant-aware routing out of the box.
 - 🚀 **Built on FastAPI**: Leverage the speed and ecosystem of one of the fastest Python frameworks.
 - 📦 **Service Container**: Seamless management of Databases (SQLAlchemy), Cache (Redis), and Schedulers.
 - 🛠️ **Dev-Friendly CLI**: Hot-reload plugins, sign manifests, and verify system health with one command.

@@ -148,6 +148,7 @@ class HookManager:
                         hook_info.func(event), timeout=hook_info.timeout
                     )
                 else:
+                    # Sync with timeout still needs a thread to avoid blocking the loop
                     result = await asyncio.wait_for(
                         asyncio.to_thread(hook_info.func, event),
                         timeout=hook_info.timeout,
@@ -156,7 +157,8 @@ class HookManager:
                 if hook_info.is_async:
                     result = await hook_info.func(event)
                 else:
-                    result = await asyncio.to_thread(hook_info.func, event)
+                    # Fast-path for sync hooks without timeout
+                    result = hook_info.func(event)
             return HookResult(
                 hook_name=hook_name,
                 event_name=event.name,

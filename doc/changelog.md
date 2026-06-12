@@ -10,6 +10,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-06-08
+
+### Added
+- **Mode Éphémère (Ephemeral Mode)**: Introduced a new execution mode for plugins that optimizes RAM usage on the host machine during hot reloads. This enables fully stateless plugins and reduces resource footprints.
+- **Plugin Warm Pool**: Implemented a warm pool mechanism to accelerate plugin activation and lifecycle transitions.
+
+### Changed
+- **Event Bus Performance**: Optimized the `EventBus` for single-handler dispatch, reducing overhead for simple event flows.
+- **Hot Reloading**: Optimized the hot reloading process to be more memory-efficient by leveraging ephemeral handlers.
+- **Runtime Supervisor**: Updated the supervisor to manage ephemeral plugin instances and warm pools efficiently.
+- **Internalization**: Updated RBAC error messages to English for better consistency.
+
+### Fixed
+- **Resource Management**: Addressed potential memory leaks during repeated hot reloads by implementing strict ephemeral lifecycle management.
+
 ## [2.3.2] - 2026-06-05
 
 ### Added

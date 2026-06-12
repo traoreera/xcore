@@ -786,11 +786,6 @@ if __name__ == "__main__":
 
     plugin_dir = Path(sys.argv[1]).resolve()
     if not plugin_dir.is_dir():
-        print(
-            json.dumps(
-                {"status": "error", "msg": f"plugin_dir introuvable : {plugin_dir}"}
-            )
-        )
         sys.exit(1)
 
     try:

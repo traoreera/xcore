@@ -98,9 +98,6 @@ class PluginSupervisor:
         # ── 1. Pipeline initialisée AVANT load_all ─────────────
         from .middlewares.ipc_auth import IPCAuthMiddleware
 
-        tenancy_cfg = getattr(self._ctx.config, "tenancy", None)
-        enforce_ipc = getattr(tenancy_cfg, "enforce_ipc", False)
-
         mw_context = {
             "tracer": self._tracer,
             "metrics": self._metrics,
@@ -113,8 +110,13 @@ class PluginSupervisor:
             final_handler=self._dispatch,
         )
         # IPC auth en premier : bloque avant tout le reste
+        tenancy = getattr(self._config, "tenancy", None)
         self._pipeline.add_middleware(
-            IPCAuthMiddleware(self._loader, enforce=enforce_ipc), first=True
+            IPCAuthMiddleware(
+                self._loader,
+                enforce=tenancy.enforce_ipc if tenancy and tenancy.enabled else False,
+            ),
+            first=True,
         )
 
         # ── 2. KernelHandler enregistré AVANT load_all ─────────
@@ -128,7 +130,15 @@ class PluginSupervisor:
         # ── 3. Chargement des plugins (peuvent appeler xcore.*) ─
         report = await self._loader.load_all()
 
-        # ── 4. Enregistrement services noyau (inchangé) ─────────
+        # ── 4. Chargement explicite des configs (fix race condition) ──
+        # Les handlers réactifs existent toujours pour les load/reload individuels,
+        # mais ici on garantit que tout est prêt avant la fin du boot.
+        loaded_names = report.get("loaded", [])
+        if loaded_names:
+            self._load_permissions(loaded_names)
+            self._register_rate_limits(loaded_names)
+
+        # ── 5. Enregistrement services noyau (inchangé) ─────────
         if self._registry:
             for name, svc in self._services.as_dict().items():
                 try:

@@ -69,8 +69,8 @@ class MigrationRunner:
 
         if not self.migrations_dir.exists():
             raise MigrationError(
-                f"Le dossier de migrations '{self.migrations_dir}' n'existe pas. "
-                "Lancez d'abord `alembic init <dossier>` pour initialiser la structure."
+                f"The migrations directory '{self.migrations_dir}' does not exist. "
+                "Run `alembic init <directory>` first to initialize the structure."
             )
 
         # Vérifie si des révisions existent déjà
@@ -83,8 +83,8 @@ class MigrationRunner:
             ]
             if existing:
                 logger.info(
-                    f"{len(existing)} migration(s) déjà existante(s) — init ignoré. "
-                    "Utilisez `revision()` pour créer une nouvelle révision."
+                    f"{len(existing)} migration(s) already exist — init ignored. "
+                    "Use `revision()` to create a new revision."
                 )
                 return
 
@@ -103,13 +103,13 @@ class MigrationRunner:
 
             await engine.dispose()
             logger.info(
-                f"Première révision '{message}' générée (async, autogenerate={autogenerate})"
+                f"First revision '{message}' generated (async, autogenerate={autogenerate})"
             )
             return
 
         command.revision(config=self._get_config(), **kwargs)
         logger.info(
-            f"Première révision '{message}' générée (sync, autogenerate={autogenerate})"
+            f"First revision '{message}' generated (sync, autogenerate={autogenerate})"
         )
 
     async def upgrade(self, revision: str = "head") -> None:
@@ -119,7 +119,7 @@ class MigrationRunner:
         if self._is_async():
             engine = create_async_engine(self.db_url)
             async with engine.begin() as conn:
-                logger.info("Migration asynchrone demare")
+                logger.info("Starting asynchronous migration")
 
                 def do_upgrade(sync_conn):
                     cfg = self._get_config()
@@ -128,7 +128,7 @@ class MigrationRunner:
 
                 await conn.run_sync(do_upgrade)
             await engine.dispose()
-            logger.info("Migration faite avec sucess")
+            logger.info("Migration completed successfully")
             return
 
         logger.info(f"Migration sync upgrade → {revision}")

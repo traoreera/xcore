@@ -132,7 +132,7 @@ class MarketplaceClient:
         scheme = urlparse(url).scheme
         if scheme not in ("http", "https"):
             raise MarketplaceError(
-                f"Sécurité : protocole '{scheme}' non autorisé pour {url}"
+                f"Security: protocol '{scheme}' not authorized for {url}"
             )
         req = Request(url, headers=self._headers())
         try:
@@ -141,15 +141,15 @@ class MarketplaceClient:
         except HTTPError as e:
             raise MarketplaceError(f"HTTP {e.code} : {url}") from e
         except URLError as e:
-            raise MarketplaceError(f"Connexion impossible : {e.reason}") from e
+            raise MarketplaceError(f"Connection failed: {e.reason}") from e
         except Exception as e:
-            raise MarketplaceError(f"Erreur réseau : {e}") from e
+            raise MarketplaceError(f"Network error: {e}") from e
 
     def _http_post(self, url: str, body: dict) -> Any:
         scheme = urlparse(url).scheme
         if scheme not in ("http", "https"):
             raise MarketplaceError(
-                f"Sécurité : protocole '{scheme}' non autorisé pour {url}"
+                f"Security: protocol '{scheme}' not authorized for {url}"
             )
         data = json.dumps(body).encode("utf-8")
         req = Request(
@@ -166,7 +166,7 @@ class MarketplaceClient:
         except HTTPError as e:
             raise MarketplaceError(f"HTTP {e.code} : {url}") from e
         except URLError as e:
-            raise MarketplaceError(f"Connexion impossible : {e.reason}") from e
+            raise MarketplaceError(f"Connection failed: {e.reason}") from e
 
     def _headers(self) -> dict:
         h = {"Accept": "application/json", "User-Agent": "xcore-cli/2.0"}

@@ -26,7 +26,12 @@ from xcore.registry.resolver import (
 from ...kernel.observability import get_logger
 from ...kernel.security.validation import ManifestValidator
 from ..api.contract import PluginHandler
-from .activator import ActivatorRegistry, SandboxedActivator, TrustedActivator
+from .activator import (
+    ActivatorRegistry,
+    EphemeralActivator,
+    SandboxedActivator,
+    TrustedActivator,
+)
 
 logger = get_logger("xcore.runtime.loader")
 
@@ -51,7 +56,7 @@ class PluginLoader:
     def __init__(
         self,
         ctx: "KernelContext",
-        caller=None,
+        caller: Any = None,
     ) -> None:
         from ...kernel.api.contract import ExecutionMode
 
@@ -74,6 +79,7 @@ class PluginLoader:
         self._activators.register(ExecutionMode.TRUSTED, TrustedActivator())
         self._activators.register(ExecutionMode.SANDBOXED, SandboxedActivator())
         self._activators.register(ExecutionMode.LEGACY, TrustedActivator())
+        self._activators.register(ExecutionMode.EPHEMERAL, EphemeralActivator())
 
         self._validator = ManifestValidator()
 
@@ -86,12 +92,14 @@ class PluginLoader:
         Entre chaque vague, propage les services exposés (flush)
         pour que la vague suivante y ait accès.
         """
-        loaded, failed, skipped = [], [], []
+        loaded: list[str] = []
+        failed: list[str] = []
+        skipped: list[str] = []
         manifests = []
 
         plugin_dir = Path(self._config.directory)
         if not plugin_dir.exists():
-            logger.warning("dossier plugins introuvable", chemin=str(plugin_dir))
+            logger.warning("plugins_folder_not_found", path=str(plugin_dir))
             return {"loaded": [], "failed": [], "skipped": []}
 
         for d in sorted(plugin_dir.iterdir()):
@@ -105,30 +113,34 @@ class PluginLoader:
                     manifests.append(manifest)
                 else:
                     logger.warning(
-                        "version framework incompatible",
+                        "framework_version_incompatible",
                         plugin=manifest.name,
-                        requise=manifest.framework_version,
-                        actuelle=frameversion,
+                        required=manifest.framework_version,
+                        current=frameversion,
                     )
             except Exception as e:
-                logger.warning("manifeste invalide", plugin=d.name, erreur=str(e))
+                logger.warning("invalid_manifest", plugin=d.name, error=str(e))
                 skipped.append(d.name)
 
         if not manifests:
             return {"loaded": [], "failed": [], "skipped": skipped}
 
         try:
-            ordered = self._topo_sort(manifests)
+            ordered = _topo_sort(manifests)
         except ValueError as e:
-            logger.error("erreur tri des dépendances", erreur=str(e))
+            logger.error("dependency_sort_error", error=str(e))
             return {
                 "loaded": [],
                 "failed": [m.name for m in manifests],
                 "skipped": skipped,
             }
 
+        # FIX #2 : deux ensembles distincts — "chargé avec succès" vs "traité"
+        # resolved  = plugins chargés avec succès (leurs services sont disponibles)
+        # processed = tous les plugins déjà traités (succès OU échec), pour filtrer `remaining`
         resolved: set[str] = set()
-        resolved_versions: dict[str, str] = {}  # name -> version
+        resolved_versions: dict[str, str] = {}
+        processed: set[str] = set()
         remaining = list(ordered)
 
         while remaining:
@@ -139,14 +151,13 @@ class PluginLoader:
                     if dep.name not in resolved:
                         deps_ok = False
                         break
-                    # Vérifie la contrainte de version
                     if not dep.is_compatible(resolved_versions.get(dep.name, "1.0")):
                         logger.error(
-                            "version de dépendance incompatible",
+                            "incompatible_dependency_version",
                             plugin=m.name,
                             dep=dep.name,
-                            version_disponible=resolved_versions[dep.name],
-                            contrainte=dep.version_constraint,
+                            available_version=resolved_versions[dep.name],
+                            constraint=dep.version_constraint,
                         )
                         deps_ok = False
                         break
@@ -156,13 +167,13 @@ class PluginLoader:
             if not wave:
                 stuck = [m.name for m in remaining]
                 logger.error(
-                    "chargement bloqué — dépendances manquantes ou incompatibles",
-                    plugins_bloqués=stuck,
+                    "loading_blocked",
+                    blocked_plugins=stuck,
                 )
                 failed.extend(stuck)
                 break
 
-            logger.info("chargement de la vague", plugins=[m.name for m in wave])
+            logger.info("loading_wave", plugins=[m.name for m in wave])
 
             results = await asyncio.gather(
                 *[self._try_load(m) for m in wave],
@@ -172,6 +183,7 @@ class PluginLoader:
             wave_loaded = []
             for manifest, ok in results:
                 name = manifest.name
+                processed.add(name)
                 if ok:
                     loaded.append(name)
                     resolved.add(name)
@@ -184,67 +196,77 @@ class PluginLoader:
                         m.name
                         for m in remaining
                         if any(dep.name == name for dep in m.requires)
-                        and m.name not in failed
+                        and m.name not in processed
                     ]
                     if cascade:
                         logger.error(
-                            "échec en cascade", plugin=name, dépendants=cascade
+                            "cascading_failure", plugin=name, dependents=cascade
                         )
                         failed.extend(cascade)
-                        resolved.update(cascade)
+                        processed.update(cascade)
 
-            # Flush des services après chaque vague
+            # Flush des services après chaque vague (uniquement les plugins réussis)
             self._flush_services(wave_loaded)
 
-            remaining = [
-                m for m in remaining if m.name not in resolved and m.name not in failed
-            ]
+            remaining = [m for m in remaining if m.name not in processed]
 
         logger.info(
-            "bilan chargement plugins",
-            chargés=len(loaded),
-            échecs=len(failed),
-            ignorés=len(skipped),
+            "plugin_loading_report",
+            loaded=len(loaded),
+            failed=len(failed),
+            skipped=len(skipped),
         )
         return {"loaded": loaded, "failed": failed, "skipped": skipped}
 
-    async def _try_load(self, manifest) -> tuple[Any, bool]:
+    async def _try_load(self, manifest: Any) -> tuple[Any, bool]:
         try:
             await self._activate(manifest)
             return manifest, True
         except Exception as e:
-            logger.error("échec activation plugin", plugin=manifest.name, erreur=str(e))
+            logger.error("plugin_activation_failed", plugin=manifest.name, error=str(e))
             return manifest, False
 
-    async def _activate(self, manifest) -> None:
+    async def _activate(self, manifest: Any) -> None:
         mode = manifest.execution_mode
         activator = self._activators.get(mode)
 
         if not activator:
-            raise ValueError(f"Aucun activateur trouvé pour le mode {mode}")
+            raise ValueError(f"No activator found for mode {mode}")
         handler = await activator.activate(manifest, self)
         self._handlers[manifest.name] = handler
-        logger.info("plugin activé", plugin=manifest.name, mode=mode.value)
+        logger.info("plugin_activated", plugin=manifest.name, mode=mode.value)
 
     # ── Chargement individuel ─────────────────────────────────
 
     async def load(self, plugin_name: str) -> None:
         plugin_dir = Path(self._config.directory) / plugin_name
         if not plugin_dir.is_dir():
-            raise FileNotFoundError(f"Dossier plugin introuvable : {plugin_dir}")
+            raise FileNotFoundError(f"Plugin folder not found: {plugin_dir}")
 
         manifest, valid, _ = self._validator.load_and_validate(plugin_dir)
         if not valid:
-            raise ValueError(f"Plugin '{plugin_name}' : version framework incompatible")
+            raise ValueError(f"Plugin '{plugin_name}': incompatible framework version")
+
+        # FIX #3 : vérification des contraintes de version, cohérente avec load_all()
         for dep in manifest.requires:
             dep_name = dep.name if hasattr(dep, "name") else str(dep)
             if dep_name not in self._handlers:
-                logger.info("chargement dépendance", plugin=plugin_name, dep=dep_name)
+                logger.info("loading_dependency", plugin=plugin_name, dep=dep_name)
                 await self.load(dep_name)
+            else:
+                dep_handler = self._handlers[dep_name]
+                dep_version = getattr(
+                    getattr(dep_handler, "manifest", None), "version", "1.0"
+                )
+                if not dep.is_compatible(dep_version):
+                    raise ValueError(
+                        f"Plugin '{plugin_name}': dependency '{dep_name}' version "
+                        f"'{dep_version}' does not satisfy constraint '{dep.version_constraint}'"
+                    )
 
         await self._activate(manifest)
         self._flush_services([plugin_name])
-        logger.info("plugin chargé", plugin=plugin_name)
+        logger.info("plugin_loaded", plugin=plugin_name)
 
     async def reload(self, plugin_name: str) -> None:
         if plugin_name not in self._handlers:
@@ -252,36 +274,41 @@ class PluginLoader:
             return
 
         handler = self._handlers[plugin_name]
+
+        # FIX #5 : supprimer l'ancien handler avant de tenter le rechargement
+        # pour éviter de laisser un handler en état cassé si stop() échoue
         if hasattr(handler, "reload") and callable(handler.reload):
             await handler.reload()
-            self._flush_services([plugin_name])
         else:
-            manifest = handler.manifest
-            await handler.stop()
+            manifest = getattr(handler, "manifest", getattr(handler, "_manifest", None))
+            del self._handlers[plugin_name]  # retrait préventif avant stop
+            try:
+                await handler.stop()
+            except Exception as e:
+                logger.error("error_stopping_plugin", plugin=plugin_name, error=str(e))
+            # Réactivation quoi qu'il arrive (le handler précédent est déjà retiré)
             await self._activate(manifest)
-            self._flush_services([plugin_name])
+        self._flush_services([plugin_name])
 
     async def unload(self, plugin_name: str) -> None:
-        if plugin_name in self._handlers:
-            await self._handlers[plugin_name].stop()
-            del self._handlers[plugin_name]
-        else:
-            raise KeyError(f"Plugin '{plugin_name}' non chargé")
+        if plugin_name not in self._handlers:
+            raise KeyError(f"Plugin '{plugin_name}' not loaded")
+        await self._handlers[plugin_name].stop()
+        del self._handlers[plugin_name]
 
     # ── Accès ─────────────────────────────────────────────────
 
     def get(self, name: str) -> PluginHandler:
         if name in self._handlers:
             return self._handlers[name]
-        available = sorted(list(self._handlers.keys()))
-        raise KeyError(f"Plugin '{name}' non trouvé. Disponibles : {available}")
+        # FIX #7 : pas de sorted() inutile dans le message d'erreur
+        available = list(self._handlers.keys())
+        raise KeyError(f"Plugin '{name}' not found. Available: {available}")
 
-    def get_manifest(self, name: str):
+    def get_manifest(self, name: str) -> Any | None:
         """Retourne le PluginManifest d'un plugin chargé, ou None."""
         handler = self._handlers.get(name)
-        if handler is None:
-            return None
-        return getattr(handler, "manifest", None)
+        return None if handler is None else getattr(handler, "manifest", None)
 
     def has(self, name: str) -> bool:
         return name in self._handlers
@@ -295,43 +322,42 @@ class PluginLoader:
     # ── Flush services ────────────────────────────────────────
 
     def _flush_services(self, plugin_names: list[str]) -> None:
-        """Propage les services exposés par chaque plugin vers le container partagé."""
+        """
+        Propage les services exposés par chaque plugin vers le container partagé.
+        N'est appelé que pour les plugins chargés avec succès.
+        """
         for name in plugin_names:
             handler = self._handlers.get(name)
             if handler and hasattr(handler, "propagate_services"):
                 updated = handler.propagate_services(is_reload=False)
                 logger.debug(
-                    "services propagés", plugin=name, services=sorted(updated.keys())
+                    "services_propagated", plugin=name, services=sorted(updated.keys())
                 )
 
-    # ── Tri topologique (Kahn) ────────────────────────────────
-    @staticmethod
-    def _topo_sort(manifests: list) -> list:
-        manifest_map = {m.name: m for m in manifests}
-        resolver = DependencyResolver()
-        for m in manifests:
-            requires = [
-                dep.name if hasattr(dep, "name") else str(dep) for dep in m.requires
-            ]
-            resolver.add(m.name, requires)
-        try:
-            ordered_names = resolver.resolve()
-        except (CircularDependencyError, MissingDependencyError) as e:
-            raise ValueError(str(e)) from e
-        return [manifest_map[name] for name in ordered_names]
+    # ── Arrêt ─────────────────────────────────────────────────
 
     async def shutdown(self) -> None:
-        """Décharge tous les plugins proprement."""
-        tasks = [h.stop() for h in self._handlers.values()]
+        """Décharge tous les plugins proprement, en parallèle avec timeout individuel."""
 
-        for coro in tasks:
+        # FIX #1 : gather avec timeout par handler, return_exceptions=True pour ne pas
+        # interrompre les autres plugins si l'un d'eux échoue
+        async def _stop_one(name: str, handler: PluginHandler) -> None:
             try:
-                await asyncio.wait_for(coro, timeout=10.0)
+                await asyncio.wait_for(handler.stop(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.error("plugin_stop_timeout", plugin=name)
             except Exception as e:
-                logger.error("erreur lors du déchargement", erreur=str(e))
+                logger.error("plugin_stop_error", plugin=name, error=str(e))
+
+        await asyncio.gather(
+            *[_stop_one(name, h) for name, h in self._handlers.items()],
+            return_exceptions=True,
+        )
 
         self._handlers.clear()
-        logger.info("tous les plugins déchargés")
+        logger.info("all_plugins_unloaded")
+
+    # ── Collecte routes / middlewares ─────────────────────────
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
         """
@@ -342,26 +368,43 @@ class PluginLoader:
 
         Utilisé par Xcore._attach_router() pour monter les routes sur l'app FastAPI.
         """
-        routers = []
-        for name, handler in self._handlers.items():
-            if hasattr(handler, "plugin_router") and handler.plugin_router is not None:
-                routers.append((name, handler.plugin_router))
-        return routers
+        return [
+            (name, handler.plugin_router)
+            for name, handler in self._handlers.items()
+            if getattr(handler, "plugin_router", None) is not None
+        ]
 
     def collect_app_state(self) -> list[Any]:
         """
         Collecte tous les middlewares exposés par les plugins chargés.
 
-        Retourne une liste de middlewares pour chaque plugin ayant implémenté add_middlewares().
+        Retourne une liste de (plugin_name, middleware) pour chaque plugin
+        ayant implémenté add_middlewares().
+
+        FIX #4 : retourne des tuples (name, middleware) comme collect_plugin_routers,
+        pour une API symétrique et un meilleur support du debug.
 
         Utilisé par Xcore._attach_middlewares() pour monter les middlewares sur l'app FastAPI.
         """
-        middlewares = []
-        for name, handler in self._handlers.items():
-            if (
-                hasattr(handler, "plugin_middlewares")
-                and handler.plugin_middlewares is not None
-            ):
-                middlewares.append(handler.plugin_middlewares)
+        return [
+            {"name": name, "states": handler.plugin_middlewares}
+            for name, handler in self._handlers.items()
+            if getattr(handler, "plugin_middlewares", None) is not None
+        ]
 
-        return middlewares
+
+# FIX #8 : fonction module-level (pas de méthode statique) — n'a pas besoin de l'instance
+def _topo_sort(manifests: list[Any]) -> list[Any]:
+    """Tri topologique des manifestes selon leurs dépendances (algorithme de Kahn)."""
+    manifest_map = {m.name: m for m in manifests}
+    resolver = DependencyResolver()
+    for m in manifests:
+        requires = [
+            dep.name if hasattr(dep, "name") else str(dep) for dep in m.requires
+        ]
+        resolver.add(m.name, requires)
+    try:
+        ordered_names = resolver.resolve()
+    except (CircularDependencyError, MissingDependencyError) as e:
+        raise ValueError(str(e)) from e
+    return [manifest_map[name] for name in ordered_names]

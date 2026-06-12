@@ -77,7 +77,7 @@ class DependencyResolver:
         if len(result) != len(all_names):
             remaining = sorted(all_names - set(result))
             raise CircularDependencyError(
-                f"Dépendances circulaires détectées : {remaining}"
+                f"Circular dependencies detected: {remaining}"
             )
 
         return result
@@ -100,7 +100,7 @@ class DependencyResolver:
             )
             if not wave:
                 raise CircularDependencyError(
-                    f"Dépendances circulaires : {sorted(remaining)}"
+                    f"Circular dependencies: {sorted(remaining)}"
                 )
             result.append(wave)
             resolved.update(wave)

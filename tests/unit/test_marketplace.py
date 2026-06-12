@@ -60,12 +60,12 @@ class TestMarketplaceClientInit:
 class TestHashKey:
     def test_http_get_invalid_scheme(self, tmp_path):
         client = _make_simple_client(tmp_path)
-        with pytest.raises(MarketplaceError, match="protocole"):
+        with pytest.raises(MarketplaceError, match="protocol"):
             client._http_get("ftp://bad.url/plugins")
 
     def test_http_post_invalid_scheme(self, tmp_path):
         client = _make_simple_client(tmp_path)
-        with pytest.raises(MarketplaceError, match="protocole"):
+        with pytest.raises(MarketplaceError, match="protocol"):
             client._http_post("ftp://bad.url/plugins/x/rate", {"score": 5})
 
     def test_http_get_http_error(self, tmp_path):
@@ -78,13 +78,13 @@ class TestHashKey:
     def test_http_get_url_error(self, tmp_path):
         client = _make_simple_client(tmp_path)
         with patch("xcore.marketplace.client.urlopen", side_effect=URLError("connection refused")):
-            with pytest.raises(MarketplaceError, match="Connexion"):
+            with pytest.raises(MarketplaceError, match="Connection"):
                 client._http_get("https://mp.example.com/plugins")
 
     def test_http_get_generic_error(self, tmp_path):
         client = _make_simple_client(tmp_path)
         with patch("xcore.marketplace.client.urlopen", side_effect=RuntimeError("boom")):
-            with pytest.raises(MarketplaceError, match="réseau"):
+            with pytest.raises(MarketplaceError, match="Network"):
                 client._http_get("https://mp.example.com/plugins")
 
     def test_http_post_http_error(self, tmp_path):
@@ -97,7 +97,7 @@ class TestHashKey:
     def test_http_post_url_error(self, tmp_path):
         client = _make_simple_client(tmp_path)
         with patch("xcore.marketplace.client.urlopen", side_effect=URLError("timeout")):
-            with pytest.raises(MarketplaceError, match="Connexion"):
+            with pytest.raises(MarketplaceError, match="Connection"):
                 client._http_post("https://mp.example.com/p/rate", {"score": 5})
 
     def test_http_get_success(self, tmp_path):
