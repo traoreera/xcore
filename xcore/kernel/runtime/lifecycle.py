@@ -17,6 +17,7 @@ import time
 import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+import collections.abc  
 
 if TYPE_CHECKING:
     from ..context import KernelContext
@@ -187,6 +188,20 @@ class LifecycleManager:
             # rétro-compatibilité v1
             await self._instance.env_variable(self.manifest.env)
 
+        # ── Injection déclarative (champ `inject` du manifeste) ───────────
+        # Exemple plugin.yaml :
+        #   inject:
+        #     - name: db
+        #       type: database
+        #       required: true
+        #     - name: cache
+        #       type: cache
+        #       required: false
+        #
+        # Chaque entrée injecte automatiquement ctx.services[name] comme
+        # attribut sur l'instance, sans que le plugin ait à écrire on_load.
+        self._inject_declared_services(ctx)
+
         await self._invoke_hooks(["on_init", "on_load", "on_start"])
 
         # Enregistre les schémas @schema dans le SchemaRegistry global
@@ -317,6 +332,95 @@ class LifecycleManager:
                 sys.modules.pop(mod_name, None)
         self._instance = None
         self._module = None
+
+    # ── Injection déclarative de services ────────────────────
+
+    def _inject_declared_services(self, ctx: "PluginContext") -> None:
+        """
+        Injecte automatiquement les services déclarés dans le champ `inject`
+        du manifeste directement comme attributs de l'instance du plugin.
+
+        Cela permet aux développeurs de plugins d'éviter le boilerplate
+        répétitif dans on_load() :
+
+            # Avant (boilerplate)
+            async def on_load(self):
+                self.db = self.get_service("db")
+                self.cache = self.get_service("cache")
+
+            # Après (plugin.yaml)
+            inject:
+              - name: db
+                type: database
+                required: true
+              - name: cache
+                type: cache
+                required: false
+
+        Si `required: true` et que le service est absent, une LoadError est levée.
+        Si `required: false` et que le service est absent, l'attribut est mis à None
+        et un warning est émis (le plugin peut faire `if self.cache:` sans crash).
+        """
+        if self._instance is None:
+            return
+
+        inject_spec = getattr(self.manifest, "inject", None) or []
+        if not inject_spec:
+            return
+
+        services: dict = {}
+        if ctx.services is not None:
+            # ServiceContainer expose as_dict() ou un mapping direct
+            if hasattr(ctx.services, "as_dict"):
+                services = ctx.services.as_dict()
+            elif isinstance(ctx.services, dict):
+                services = ctx.services
+
+        for entry in inject_spec:
+            # Accepte dict brut (depuis YAML) ou objet avec attributs
+            if isinstance(entry, collections.abc.Mapping):
+                svc_name = entry.get("name")
+                required = entry.get("required", True)
+                # `type` est parsé mais non contraint pour l'instant ;
+                # réservé pour une validation de compatibilité de service future.
+                _svc_type = entry.get("type")
+            else:
+                svc_name = getattr(entry, "name", None)
+                required = getattr(entry, "required", True)
+
+            if not svc_name:
+                logger.warning(
+                    "injection déclarative : entrée sans 'name' ignorée",
+                    plugin=self.manifest.name,
+                )
+                continue
+
+            service = services.get(svc_name)
+
+            if service is None and required:
+                raise LoadError(
+                    f"[{self.manifest.name}] Service requis '{svc_name}' introuvable "
+                    f"dans le conteneur. Vérifiez la configuration ou ajoutez "
+                    f"'required: false' dans le manifeste."
+                )
+
+            if service is None:
+                logger.warning(
+                    "service optionnel absent, attribut mis à None",
+                    plugin=self.manifest.name,
+                    service=svc_name,
+                )
+
+            # Ne pas écraser un attribut déjà positionné (ex: on_init a pris les
+            # devants) — on ne surprend pas le développeur.
+            if not hasattr(self._instance, svc_name) or getattr(self._instance, svc_name) is None:
+                setattr(self._instance, svc_name, service)
+                logger.debug(
+                    "service injecté déclarativement",
+                    plugin=self.manifest.name,
+                    attribut=svc_name,
+                    present=service is not None,
+                )
 
     # ── Router HTTP custom ────────────────────────────────────
 
