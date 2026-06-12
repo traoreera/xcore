@@ -85,7 +85,10 @@ class LifecycleManager:
 
     def _on_state_change(self, old: PluginState, new: PluginState) -> None:
         logger.debug(
-            "transition d'état", plugin=self.manifest.name, de=old.value, vers=new.value
+            "state transition",
+            plugin=self.manifest.name,
+            from_state=old.value,
+            to_state=new.value,
         )
         if self._events:
             self._events.emit_sync(
@@ -113,14 +116,14 @@ class LifecycleManager:
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
             logger.info(
-                "plugin chargé",
+                "plugin loaded",
                 plugin=self.manifest.name,
                 timeout_s=self.manifest.resources.timeout_seconds,
             )
         except Exception as e:
             self._sm.transition("error")
             logger.exception(
-                "échec chargement plugin", plugin=self.manifest.name, erreur=str(e)
+                "plugin load failed", plugin=self.manifest.name, error=str(e)
             )
             raise LoadError(f"[{self.manifest.name}] Échec chargement : {e}") from e
 
@@ -287,7 +290,7 @@ class LifecycleManager:
             self.propagate_services(is_reload=True)
             self._sm.transition("ok")
             self._loaded_at = time.monotonic()
-            logger.info("plugin rechargé", plugin=self.manifest.name)
+            logger.info("plugin reloaded", plugin=self.manifest.name)
         except Exception as e:
             self._sm.transition("error")
             raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
@@ -299,7 +302,7 @@ class LifecycleManager:
         try:
             await self._do_unload()
             self._sm.transition("ok")
-            logger.info("plugin déchargé", plugin=self.manifest.name)
+            logger.info("plugin unloaded", plugin=self.manifest.name)
         except Exception:
             self._sm.transition("error")
             raise
@@ -338,13 +341,13 @@ class LifecycleManager:
             if router is not None:
                 self.plugin_router = router
                 logger.info(
-                    "router HTTP collecté",
+                    "http router collected",
                     plugin=self.manifest.name,
                     routes=len(getattr(router, "routes", [])),
                 )
         except Exception as e:
             logger.error(
-                "erreur collecte router HTTP", plugin=self.manifest.name, erreur=str(e)
+                "http router collection error", plugin=self.manifest.name, error=str(e)
             )
 
     def _collect_middlewares(self) -> None:
@@ -360,13 +363,13 @@ class LifecycleManager:
             if middlewares is not None:
                 self.plugin_middlewares.update(middlewares)
                 logger.info(
-                    "middlewares collectés",
+                    "middlewares collected",
                     plugin=self.manifest.name,
                     count=len(self.plugin_middlewares),
                 )
         except Exception as e:
             logger.error(
-                "erreur collecte middlewares", plugin=self.manifest.name, erreur=str(e)
+                "middlewares collection error", plugin=self.manifest.name, error=str(e)
             )
 
     # ── Propagation des services (fix #3 v1) ──────────────────
@@ -442,7 +445,7 @@ class LifecycleManager:
         if is_reload:
             self._services.update(instance_services)
             logger.info(
-                "services mis à jour (rechargement)",
+                "services updated on reload",
                 plugin=self.manifest.name,
                 services=sorted(instance_services.keys()),
             )
@@ -452,7 +455,7 @@ class LifecycleManager:
                 self._services[k] = instance_services[k]
             if new_keys:
                 logger.info(
-                    "services disponibles",
+                    "services registered",
                     plugin=self.manifest.name,
                     services=sorted(new_keys),
                 )

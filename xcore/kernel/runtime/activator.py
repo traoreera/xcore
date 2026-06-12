@@ -4,15 +4,16 @@ activator.py — Stratégies d'activation des plugins.
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
+
+from ..observability import get_logger
 
 if TYPE_CHECKING:
     from ..api.contract import PluginHandler
     from .loader import PluginLoader
 
-logger = logging.getLogger("xcore.runtime.activator")
+logger = get_logger("xcore.runtime.activator")
 
 
 class ActivatorRegistry:
@@ -23,7 +24,7 @@ class ActivatorRegistry:
 
     def register(self, mode: Any, activator: PluginActivator) -> None:
         self._activators[mode] = activator
-        logger.debug("Activateur enregistré pour un mode d'exécution.")
+        logger.debug("activator registered", mode=str(mode))
 
     def get(self, mode: Any) -> PluginActivator | None:
         return self._activators.get(mode)
@@ -60,7 +61,9 @@ class TrustedActivator(PluginActivator):
             entry_point=manifest.entry_point,
         )
         if not scan.passed:
-            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
+            logger.warning(
+                "AST scan warning (non-blocking)", plugin=manifest.name, scan=str(scan)
+            )
 
         lm = LifecycleManager(
             manifest,

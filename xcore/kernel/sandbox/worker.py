@@ -22,6 +22,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from xcore.kernel.observability import get_logger
+
 # ContextVar par tâche asyncio — évite les race conditions entre coroutines
 # qui partageraient le même FilesystemGuard (requis pour la sécurité sandbox).
 _sandbox_in_guard: ContextVar[bool] = ContextVar("sandbox_in_guard", default=False)
@@ -31,7 +33,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] worker: %(message)s",
     stream=sys.stderr,
 )
-logger = logging.getLogger("xcore.worker")
+logger = get_logger("xcore.worker")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -51,7 +53,7 @@ def _apply_resource_limits() -> None:
                 resource.setrlimit(resource.RLIMIT_DATA, (limit, limit))
             with contextlib.suppress(Exception):
                 resource.setrlimit(resource.RLIMIT_RSS, (limit, limit))
-            logger.debug(f"Limite mémoire : {max_mb}MB (DATA+RSS)")
+            logger.debug("memory limit applied", max_mb=max_mb, resource="DATA+RSS")
 
         # ── CPU ───────────────────────────────────────────────────────────
         max_cpu_s = int(os.environ.get("_SANDBOX_MAX_CPU_SEC", "0"))
@@ -61,10 +63,10 @@ def _apply_resource_limits() -> None:
             soft = max_cpu_s
             hard = max_cpu_s + 5  # 5s de grâce pour un éventuel cleanup
             resource.setrlimit(resource.RLIMIT_CPU, (soft, hard))
-            logger.debug(f"Limite CPU : {soft}s soft / {hard}s hard")
+            logger.debug("cpu limit applied", soft_s=soft, hard_s=hard)
 
     except Exception as e:
-        logger.warning(f"Impossible d'appliquer les limites ressources : {e}")
+        logger.warning("failed to apply resource limits", error=str(e))
 
 
 builtins_open = _builtins_module.open
@@ -103,11 +105,13 @@ class FilesystemGuard:
                         results.append(resolved)
                     else:
                         logger.warning(
-                            f"[sandbox:SECURITY] Tentative de traversal via manifest : {p!r}"
+                            "sandbox path traversal attempt via manifest", path=repr(p)
                         )
                 except Exception as e:
                     logger.warning(
-                        f"[sandbox:SECURITY] Erreur résolution manifest path {p!r} : {e}"
+                        "sandbox manifest path resolution error",
+                        path=repr(p),
+                        error=str(e),
                     )
             return results
 
@@ -164,9 +168,10 @@ class FilesystemGuard:
             self._in_guard = False
 
         logger.debug(
-            f"[sandbox] Guard installé (4 couches) — "
-            f"allowed={[str(p) for p in self._allowed]}, "
-            f"denied={[str(p) for p in self._denied]}"
+            "sandbox filesystem guard installed",
+            layers=4,
+            allowed=[str(p) for p in self._allowed],
+            denied=[str(p) for p in self._denied],
         )
 
     def _install_impl(self) -> None:
@@ -530,7 +535,7 @@ class _PluginImportHook:
             root.__path__ = [str(self._src_dir)]
             root.__package__ = self._pkg_prefix
             sys.modules[self._pkg_prefix] = root
-        logger.debug(f"[{self._uid}] Import hook installé (src={self._src_dir})")
+        logger.debug("import hook installed", uid=self._uid, src=str(self._src_dir))
 
     def uninstall(self) -> None:
         if self in sys.meta_path:
@@ -543,7 +548,7 @@ class _PluginImportHook:
         for key in to_remove:
             del sys.modules[key]
         logger.debug(
-            f"[{self._uid}] Import hook retiré ({len(to_remove)} modules purgés)"
+            "import hook removed", uid=self._uid, purged_modules=len(to_remove)
         )
 
 
@@ -593,8 +598,10 @@ def _load_plugin(plugin_dir: Path, manifest: "_PluginManifest"):
     instance._import_hook = hook
 
     logger.info(
-        f"Plugin chargé : {plugin_dir.name} "
-        f"(entry={manifest.entry_point!r}) → namespace {pkg_name}"
+        "plugin loaded in sandbox",
+        plugin=plugin_dir.name,
+        entry=manifest.entry_point,
+        namespace=pkg_name,
     )
     return instance
 
@@ -617,9 +624,9 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         try:
             return _extracted_from__load_manifest_20(fname, manifest_path, manifest)
         except Exception as e:
-            logger.warning(f"Impossible de lire le manifeste ({fname}) : {e}")
+            logger.warning("cannot read manifest file", file=fname, error=str(e))
 
-    logger.warning(f"Aucun manifeste trouvé dans {plugin_dir} — valeurs par défaut")
+    logger.warning("no manifest found, using defaults", plugin_dir=str(plugin_dir))
     return manifest
 
 
@@ -648,8 +655,10 @@ def _extracted_from__load_manifest_20(fname, manifest_path, manifest: _PluginMan
         manifest.configuration = cp
 
     logger.debug(
-        f"Manifeste chargé : entry_point={manifest.entry_point!r}, "
-        f"allowed={manifest.allowed_paths}, denied={manifest.denied_paths}"
+        "manifest loaded",
+        entry_point=manifest.entry_point,
+        allowed=manifest.allowed_paths,
+        denied=manifest.denied_paths,
     )
     return manifest
 
@@ -708,7 +717,7 @@ async def _run(plugin_dir: Path) -> None:
 
     transport, _ = await loop.connect_write_pipe(_StdoutProtocol, sys.stdout)
 
-    logger.info("Worker prêt — écoute sur stdin")
+    logger.info("sandbox worker ready, listening on stdin")
 
     while True:
         try:
@@ -744,7 +753,7 @@ async def _run(plugin_dir: Path) -> None:
                 )
 
         except PermissionError as e:
-            logger.error(f"[sandbox] Violation filesystem : {e}")
+            logger.error("sandbox filesystem violation", error=str(e))
             response = {
                 "status": "error",
                 "msg": str(e),
@@ -757,7 +766,7 @@ async def _run(plugin_dir: Path) -> None:
                 "code": "json_error",
             }
         except Exception as e:
-            logger.exception(f"Erreur handle({action})")
+            logger.exception("handler error", action=action)
             response = {"status": "error", "msg": str(e), "code": "handler_error"}
 
         _send(transport, response)
@@ -771,7 +780,7 @@ async def _run(plugin_dir: Path) -> None:
     if hasattr(plugin, "_import_hook"):
         plugin._import_hook.uninstall()
 
-    logger.info("Worker arrêté")
+    logger.info("sandbox worker stopped")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

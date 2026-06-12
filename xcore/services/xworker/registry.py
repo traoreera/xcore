@@ -14,13 +14,13 @@ Usage :
 
 from __future__ import annotations
 
-import logging
 from functools import wraps
 from typing import Any, Callable
 
 from ...configurations.sections import WorkerConfig
+from ...kernel.observability import get_logger
 
-logger = logging.getLogger("xcore.worker.registry")
+logger = get_logger("xcore.worker.registry")
 
 _app: Any = None
 task_registry: dict[str, Any] = {}
@@ -89,7 +89,7 @@ def register_pending_tasks(app: Any) -> None:
             **meta.get("celery_kwargs", {}),
         )
         task_registry[meta["name"]] = registered
-        logger.debug("Tâche enregistrée : %s → queue=%s", meta["name"], meta["queue"])
+        logger.debug("task registered", name=meta["name"], queue=meta["queue"])
 
 
 def task(
@@ -142,7 +142,7 @@ def task(
                 **celery_kwargs,
             )
             task_registry[task_name] = registered
-            logger.debug("Tâche enregistrée immédiatement : %s", task_name)
+            logger.debug("task registered immediately", name=task_name)
 
         return wrapper
 

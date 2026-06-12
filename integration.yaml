@@ -164,7 +164,7 @@ observability:
     file: log/app.log
     max_bytes: 52428800 # 50 MB par fichier
     backup_count: 10 # 10 fichiers de rotation = 500 MB max
-    output: text
+    output: json # text
   metrics:
     enabled: true
     backend: prometheus # memory | prometheus | statsd

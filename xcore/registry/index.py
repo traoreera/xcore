@@ -7,13 +7,14 @@ Permet la découverte, l'introspection et les dépendances inter-plugins.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
+
+from ..kernel.observability import get_logger
 
 if TYPE_CHECKING:
     from ..configurations.sections import PluginConfig
 
-logger = logging.getLogger("xcore.registry")
+logger = get_logger("xcore.registry")
 
 
 class PluginRegistry:
@@ -56,7 +57,7 @@ class PluginRegistry:
             "author": getattr(manifest, "author", "unknown"),
             **(metadata or {}),
         }
-        logger.debug(f"[registry] enregistré : '{name}'")
+        logger.debug("plugin registered", name=name)
 
     def unregister(self, name: str) -> None:
         # Nettoie aussi les services exportés par ce plugin
@@ -92,7 +93,7 @@ class PluginRegistry:
             **(metadata or {}),
         }
         logger.debug(
-            f"[registry] service '{service_name}' enregistré par '{plugin_name}' (scope: {scope})"
+            "service registered", service=service_name, plugin=plugin_name, scope=scope
         )
 
     def register_core_service(

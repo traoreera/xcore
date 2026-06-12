@@ -4,15 +4,15 @@ Extension Worker Xcore — file de tâches Celery asynchrones.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from xcore.services.base import BaseService, ServiceStatus
 
 from ...configurations.sections import WorkerConfig
+from ...kernel.observability import get_logger
 from .registry import build_app, register_pending_tasks, set_app
 
-logger = logging.getLogger("xcore.worker")
+logger = get_logger("xcore.worker")
 
 
 def _make_app_from_env(cfg: "WorkerConfig") -> Any:
@@ -70,9 +70,9 @@ class WorkerService(BaseService):
             for module in self._cfg.modules:
                 try:
                     importlib.import_module(module)
-                    logger.debug("Module de tâches chargé : %s", module)
+                    logger.debug("task module loaded", module=module)
                 except ImportError:
-                    logger.exception("Module de tâches introuvable : %s", module)
+                    logger.exception("task module not found", module=module)
             register_pending_tasks(_celery_worker)
 
     async def init(self) -> None:
@@ -81,7 +81,7 @@ class WorkerService(BaseService):
         self._status = ServiceStatus.INITIALIZING
 
         if _celery_worker is None:
-            logger.error("celery non installé — uv add 'celery[redis]'")
+            logger.error("celery not installed", hint="uv add 'celery[redis]'")
             self._status = ServiceStatus.FAILED
             return
 
@@ -95,19 +95,19 @@ class WorkerService(BaseService):
             conn.ensure_connection(max_retries=3)
             conn.release()
             logger.info(
-                "WorkerService prêt → broker=%s queues=%s concurrency=%d",
-                self._cfg.broker_url,
-                self._cfg.queues,
-                self._cfg.concurrency,
+                "worker service ready",
+                broker=self._cfg.broker_url,
+                queues=self._cfg.queues,
+                concurrency=self._cfg.concurrency,
             )
             self._status = ServiceStatus.READY
         except Exception as exc:
-            logger.warning("Worker : broker inaccessible (%s) → mode dégradé", exc)
+            logger.warning("broker unreachable, degraded mode", error=str(exc))
             self._status = ServiceStatus.DEGRADED
 
     async def shutdown(self) -> None:
         self._status = ServiceStatus.STOPPED
-        logger.info("WorkerService arrêté")
+        logger.info("worker service stopped")
 
     async def health_check(self) -> tuple[bool, str]:
         if _celery_worker is None:

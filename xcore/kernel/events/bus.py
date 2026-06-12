@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import fnmatch
 import inspect
-import logging
 import re
 from typing import TYPE_CHECKING, Any, Callable, Pattern
 
@@ -21,8 +20,9 @@ from .section import Event, _HandlerEntry
 if TYPE_CHECKING:
     from ...services.cache import CacheService
 
+from ...kernel.observability import get_logger
 
-logger = logging.getLogger("xcore.events.bus")
+logger = get_logger("xcore.events.bus")
 
 
 class EventBus:
@@ -171,7 +171,10 @@ class EventBus:
             for entry, result in zip(matched_handlers, raw):
                 if isinstance(result, Exception):
                     logger.error(
-                        f"Handler '{entry.name}' erreur pour '{event_name}': {result}"
+                        "event handler error",
+                        handler=entry.name,
+                        event=event_name,
+                        error=str(result),
                     )
                 else:
                     results.append(result)
@@ -188,7 +191,9 @@ class EventBus:
                         result = entry.handler(event)
                     results.append(result)
                 except Exception as e:
-                    logger.error(f"Handler '{entry.name}' erreur : {e}")
+                    logger.error(
+                        "event handler error", handler=entry.name, error=str(e)
+                    )
                 if entry.once:
                     to_remove.append(entry)
 

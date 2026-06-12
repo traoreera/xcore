@@ -8,13 +8,13 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import inspect
-import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ..observability import get_logger
 from .section import Event, HookInfo, HookResult
 
-logger = logging.getLogger("xcore.events.hooks")
+logger = get_logger("xcore.events.hooks")
 
 
 class HookError(Exception):

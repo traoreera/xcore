@@ -4,13 +4,14 @@ mongodb.py — Adaptateur MongoDB via Motor (asyncio).
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
+
+from ....kernel.observability import get_logger
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
 
-logger = logging.getLogger("xcore.services.database.mongodb")
+logger = get_logger("xcore.services.database.mongodb")
 
 
 class MongoDBAdapter:
@@ -45,7 +46,7 @@ class MongoDBAdapter:
         self._db = self._client[self._db_name]
         # Vérification connexion
         await self._client.admin.command("ping")
-        logger.info(f"[{self.name}] MongoDB connecté → {self._db_name}")
+        logger.info("mongodb connected", adapter=self.name, database=self._db_name)
 
     async def disconnect(self) -> None:
         if self._client:

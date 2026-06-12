@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from typing import Any
 
+from ..kernel.observability import get_logger
+
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
-logger = logging.getLogger("xcore.config")
+logger = get_logger("xcore.config")
 
 
 def _resolve(value: Any) -> Any:
@@ -18,7 +19,7 @@ def _resolve(value: Any) -> Any:
             var = m.group(1)
             resolved = os.environ.get(var)
             if resolved is None:
-                logger.warning(f"Variable d'environnement non définie : ${{{var}}}")
+                logger.warning("undefined environment variable", var=var)
                 return ""
             return resolved
 

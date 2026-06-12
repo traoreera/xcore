@@ -47,10 +47,10 @@ class DatabaseManager(BaseService):
             try:
                 await adapter.connect()
                 self.adapters[name] = adapter
-                logger.info("connexion établie", adapteur=name, type=cfg.type)
+                logger.info("connection established", adapter=name, type=cfg.type)
             except Exception as e:
                 logger.error(
-                    "connexion échouée", adapteur=name, type=cfg.type, erreur=str(e)
+                    "connection failed", adapter=name, type=cfg.type, error=str(e)
                 )
                 # Ne bloque pas les autres connexions
 
@@ -82,9 +82,9 @@ class DatabaseManager(BaseService):
         for name, adapter in self.adapters.items():
             try:
                 await adapter.disconnect()
-                logger.info("déconnexion réussie", adapteur=name)
+                logger.info("disconnected", adapter=name)
             except Exception as e:
-                logger.error("erreur déconnexion", adapteur=name, erreur=str(e))
+                logger.error("disconnection error", adapter=name, error=str(e))
         self.adapters.clear()
         self._status = ServiceStatus.STOPPED
 

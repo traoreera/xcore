@@ -4,10 +4,11 @@ isolation.py — Isolation des ressources disque et mémoire pour les subprocess
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
-logger = logging.getLogger("xcore.sandbox.isolation")
+from ..observability import get_logger
+
+logger = get_logger("xcore.sandbox.isolation")
 
 
 class DiskQuotaExceeded(Exception):
@@ -61,7 +62,7 @@ class MemoryLimiter:
         import sys
 
         if sys.platform == "win32":
-            logger.warning("Limite mémoire non supportée sous Windows")
+            logger.warning("memory limit not supported on Windows")
             return
         try:
             import resource
@@ -69,4 +70,4 @@ class MemoryLimiter:
             limit = max_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
         except Exception as e:
-            logger.warning(f"Impossible d'appliquer la limite mémoire : {e}")
+            logger.warning("failed to apply memory limit", error=str(e))

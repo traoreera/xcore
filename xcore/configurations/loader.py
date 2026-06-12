@@ -8,11 +8,11 @@ ConfigLoader v2 — load xcore.yaml with :
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 from typing import Any
 
+from ..kernel.observability import get_logger
 from .helper import _resolve
 from .sections import (
     AppConfig,
@@ -34,7 +34,7 @@ from .sections import (
     XcoreConfig,
 )
 
-logger = logging.getLogger("xcore.config")
+logger = get_logger("xcore.config")
 
 
 class ConfigLoader:
@@ -82,13 +82,15 @@ class ConfigLoader:
 
                     with open(candidate, encoding="utf-8") as f:
                         data = json.load(f)
-                logger.info(f"conf loaded : {candidate}")
+                logger.info("config file loaded", path=str(candidate))
                 return data
             except ImportError:
                 logger.warning("pyyaml not installed — pip install pyyaml")
                 return {}
             except Exception as e:
-                logger.error(f"error reading {candidate} : {e}")
+                logger.error(
+                    "error reading config file", path=str(candidate), error=str(e)
+                )
                 return {}
         logger.info("No config file found. Using defaults.")
         return {}
@@ -100,13 +102,13 @@ class ConfigLoader:
             return
         path = Path(dotenv_file)
         if not path.exists():
-            logger.warning(f"dotenv introuvable : {path}")
+            logger.warning("dotenv file not found", path=str(path))
             return
         try:
             from dotenv import load_dotenv
 
             load_dotenv(dotenv_path=path, override=False)
-            logger.info(f".env loaded : {path}")
+            logger.info(".env loaded", path=str(path))
         except ImportError:
             logger.warning("python-dotenv not installed — pip install python-dotenv")
 
@@ -215,7 +217,7 @@ class ConfigLoader:
         result = []
         for mw in d:
             if not isinstance(mw, dict) or "name" not in mw:
-                logger.warning(f"Middleware invalide (ignoré) : {mw}")
+                logger.warning("invalid middleware config, skipped", middleware=str(mw))
                 continue
             raw_params = mw.get("config", [])
             if isinstance(raw_params, list):

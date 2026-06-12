@@ -5,12 +5,12 @@ retry.py — Middleware de tentatives (retry) pour les appels de plugins.
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Callable
 
+from ..observability import get_logger
 from .middleware import Middleware
 
-logger = logging.getLogger("xcore.runtime.middleware.retry")
+logger = get_logger("xcore.runtime.middleware.retry")
 
 
 class RetryMiddleware(Middleware):
@@ -55,14 +55,21 @@ class RetryMiddleware(Middleware):
                 last_err = e
                 if attempt < max_attempts:
                     logger.warning(
-                        f"[{plugin_name}] Tentative {attempt}/{max_attempts} échouée, "
-                        f"retry dans {backoff}s : {e}"
+                        "call failed, retrying",
+                        plugin=plugin_name,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        backoff_s=backoff,
+                        error=str(e),
                     )
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 60.0)
 
         logger.error(
-            f"[{plugin_name}] Toutes les tentatives ({max_attempts}) ont échoué : {last_err}"
+            "all retries exhausted",
+            plugin=plugin_name,
+            attempts=max_attempts,
+            error=str(last_err),
         )
         return {
             "status": "error",

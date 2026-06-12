@@ -4,13 +4,12 @@ permissions.py — Middleware for plugin permission checks.
 
 from __future__ import annotations
 
-import logging
-
 from xcore.kernel.permissions.engine import PermissionDenied
 
+from ..observability import get_logger
 from .middleware import Middleware
 
-logger = logging.getLogger("xcore.runtime.middlewares.permissions")
+logger = get_logger("xcore.runtime.middlewares.permissions")
 
 
 class PermissionMiddleware(Middleware):
@@ -24,6 +23,6 @@ class PermissionMiddleware(Middleware):
         try:
             self._permissions.check(plugin_name, resource, "execute")
         except PermissionDenied as e:
-            logger.warning(f"[{plugin_name}] Appel refusé : {e}")
+            logger.warning("call denied", plugin=plugin_name, error=str(e))
             return {"status": "error", "msg": str(e), "code": "permission_denied"}
         return await next_call(plugin_name, action, payload, handler, **kwargs)

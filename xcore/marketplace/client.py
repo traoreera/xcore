@@ -20,7 +20,6 @@ Contrat API attendu (REST JSON) :
 from __future__ import annotations
 
 import json
-import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -28,7 +27,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
-logger = logging.getLogger("xcore.marketplace.client")
+from ..kernel.observability import get_logger
+
+logger = get_logger("xcore.marketplace.client")
 
 DEFAULT_URL = "https://marketplace.xcore.dev"
 DEFAULT_TIMEOUT = 10

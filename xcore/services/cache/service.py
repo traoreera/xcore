@@ -64,7 +64,7 @@ class CacheService(BaseService):
             )
 
         self._status = ServiceStatus.READY
-        logger.info("cache prêt", backend=backend_type)
+        logger.info("cache ready", backend=backend_type)
 
     # ── API ───────────────────────────────────────────────────
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import sys
 import time
 from dataclasses import dataclass
@@ -15,13 +14,15 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..observability import get_logger
+
 if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
 
 from .ipc import IPCChannel, IPCProcessDead
 from .isolation import DiskQuotaExceeded, DiskWatcher
 
-logger = logging.getLogger("xcore.sandbox.process_manager")
+logger = get_logger("xcore.sandbox.process_manager")
 
 
 class ProcessState(Enum):
@@ -101,7 +102,9 @@ class SandboxProcessManager:
                 name=f"health-{self.manifest.name}",
             )
         logger.info(
-            f"[{self.manifest.name}] ✅ Subprocess démarré (PID={self._process.pid})"
+            "subprocess started",
+            plugin=self.manifest.name,
+            pid=self._process.pid,
         )
 
         self._ctx._events.emit_sync(
@@ -185,7 +188,7 @@ class SandboxProcessManager:
         code = await self._process.wait()
         if self._state == ProcessState.STOPPED:
             return
-        logger.warning(f"[{self.manifest.name}] Subprocess terminé (code={code})")
+        logger.warning("subprocess exited", plugin=self.manifest.name, exit_code=code)
         if self._process.stderr:
             with contextlib.suppress(Exception):
                 err = await asyncio.wait_for(
@@ -193,7 +196,9 @@ class SandboxProcessManager:
                 )
                 if err:
                     logger.error(
-                        f"[{self.manifest.name}] stderr: {err.decode('utf-8', 'replace').strip()}"
+                        "subprocess stderr output",
+                        plugin=self.manifest.name,
+                        stderr=err.decode("utf-8", "replace").strip(),
                     )
         await self._handle_crash()
 
@@ -205,13 +210,15 @@ class SandboxProcessManager:
                     self._channel.call("ping", {}), timeout=timeout
                 )
                 if not resp.success:
-                    logger.warning(f"[{self.manifest.name}] Health dégradé")
+                    logger.warning("health check degraded", plugin=self.manifest.name)
             except asyncio.TimeoutError:
-                logger.error(f"[{self.manifest.name}] Health timeout")
+                logger.error("health check timeout", plugin=self.manifest.name)
                 await self._handle_crash()
                 return
             except Exception as e:
-                logger.error(f"[{self.manifest.name}] Health erreur : {e}")
+                logger.error(
+                    "health check error", plugin=self.manifest.name, error=str(e)
+                )
                 await self._handle_crash()
                 return
             await asyncio.sleep(interval)
@@ -231,7 +238,11 @@ class SandboxProcessManager:
             self._restarts += 1
             delay = min(self.config.restart_delay * (2 ** (self._restarts - 1)), 60.0)
             logger.info(
-                f"[{self.manifest.name}] Restart {self._restarts}/{self.config.max_restarts} dans {delay:.1f}s"
+                "restarting subprocess",
+                plugin=self.manifest.name,
+                attempt=self._restarts,
+                max_restarts=self.config.max_restarts,
+                delay_s=round(delay, 1),
             )
             await asyncio.sleep(delay)
 
@@ -247,7 +258,7 @@ class SandboxProcessManager:
                 await self._spawn()
                 # await self._ping_check()
             except Exception as e:
-                logger.error(f"[{self.manifest.name}] Spawn/ping échoué : {e}")
+                logger.error("spawn failed", plugin=self.manifest.name, error=str(e))
                 continue
 
             self._state = ProcessState.RUNNING
@@ -261,12 +272,18 @@ class SandboxProcessManager:
                     self._health_loop(hc.interval_seconds, hc.timeout_seconds),
                     name=f"health-{self.manifest.name}",
                 )
-            logger.info(f"[{self.manifest.name}] ✅ Redémarré")
+            logger.info(
+                "subprocess restarted",
+                plugin=self.manifest.name,
+                attempt=self._restarts,
+            )
             return
 
         self._state = ProcessState.FAILED
         logger.error(
-            f"[{self.manifest.name}] ❌ FAILED après {self._restarts} tentative(s)"
+            "subprocess failed permanently",
+            plugin=self.manifest.name,
+            attempts=self._restarts,
         )
 
     async def stop(self) -> None:
@@ -286,7 +303,7 @@ class SandboxProcessManager:
             except asyncio.TimeoutError:
                 self._process.kill()
             except Exception:
-                logger.exception(f"[{self.manifest.name}] _kill() erreur")
+                logger.exception("subprocess kill error", plugin=self.manifest.name)
 
     def status(self) -> dict:
         return {

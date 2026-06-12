@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import logging
 from pathlib import Path
 
-logger = logging.getLogger("xcore.security.signature")
+from ..observability import get_logger
+
+logger = get_logger("xcore.security.signature")
 SIG_FILENAME = "plugin.sig"
 
 SECURITY_IGNORE = {
@@ -107,7 +108,7 @@ def sign_plugin(manifest, secret_key: bytes) -> Path:
     }
 
     sig_path.write_text(json.dumps(sig_data, indent=2))
-    logger.info(f"[{manifest.name}] Signature écrite : {sig_path}")
+    logger.info("plugin signature written", plugin=manifest.name, path=str(sig_path))
 
     return sig_path
 
@@ -140,7 +141,7 @@ def verify_plugin(manifest, secret_key: bytes) -> None:
             f"[{manifest.name}] ❌ Signature invalide — contenu modifié."
         )
 
-    logger.info(f"[{manifest.name}] ✅ Signature vérifiée")
+    logger.info("plugin signature verified", plugin=manifest.name)
 
 
 def is_signed(manifest) -> bool:

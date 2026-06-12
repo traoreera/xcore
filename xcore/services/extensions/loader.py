@@ -21,12 +21,12 @@ Le service doit hériter de BaseService ou exposer init()/shutdown()/health_chec
 from __future__ import annotations
 
 import importlib
-import logging
 from typing import Any
 
+from ...kernel.observability import get_logger
 from ..base import BaseService, ServiceStatus
 
-logger = logging.getLogger("xcore.services.extensions")
+logger = get_logger("xcore.services.extensions")
 
 
 class ExtensionLoader(BaseService):
@@ -46,13 +46,13 @@ class ExtensionLoader(BaseService):
                     await svc.init()
                 if svc._status == ServiceStatus.READY:
                     self.extensions[name] = svc
-                    logger.info(f"Extension '{name}' ✅")
+                    logger.info("extension started", name=name)
                 else:
                     logger.info(
-                        f"Extension '{name} as not started (status: {svc._status})'"
+                        "extension not started", name=name, status=str(svc._status)
                     )
             except Exception as e:
-                logger.error(f"Extension '{name}' ❌ : {e}")
+                logger.error("extension failed to start", name=name, error=str(e))
         self._status = (
             ServiceStatus.READY if self.extensions else ServiceStatus.DEGRADED
         )
@@ -83,7 +83,7 @@ class ExtensionLoader(BaseService):
                 try:
                     await svc.shutdown()
                 except Exception as e:
-                    logger.error(f"Extension '{name}' shutdown error : {e}")
+                    logger.error("extension shutdown error", name=name, error=str(e))
         self.extensions.clear()
         self._status = ServiceStatus.STOPPED
 

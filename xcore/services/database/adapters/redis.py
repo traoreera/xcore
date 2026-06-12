@@ -4,13 +4,14 @@ redis.py — Adaptateur Redis asynchrone (redis-py ≥ 4.2).
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
+
+from ....kernel.observability import get_logger
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
 
-logger = logging.getLogger("xcore.services.database.redis")
+logger = get_logger("xcore.services.database.redis")
 
 
 class RedisAdapter:
@@ -42,7 +43,7 @@ class RedisAdapter:
         )
         self._client = aioredis.Redis(connection_pool=pool)
         await self._client.ping()
-        logger.info(f"[{self.name}] Redis connecté → {self.url[:10]}…")
+        logger.info("redis connected", adapter=self.name, url_prefix=self.url[:10])
 
     async def disconnect(self) -> None:
         if self._client:
