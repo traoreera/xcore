@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .ephemeral_handler import EphemeralHandler
     from .loader import PluginLoader
 
-logger = get_logger(__name__)
+logger = get_logger("xcore.runtime.activator")
 
 
 class ActivatorRegistry:
@@ -25,7 +25,7 @@ class ActivatorRegistry:
 
     def register(self, mode: Any, activator: PluginActivator) -> None:
         self._activators[mode] = activator
-        logger.debug(f"Activateur enregistré pour le mode : {mode}")
+        logger.debug("activator registered", mode=str(mode))
 
     def get(self, mode: Any) -> PluginActivator | None:
         return self._activators.get(mode)
@@ -61,7 +61,9 @@ class TrustedActivator(PluginActivator):
             entry_point=manifest.entry_point,
         )
         if not scan.passed:
-            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
+            logger.warning(
+                "AST scan warning (non-blocking)", plugin=manifest.name, scan=str(scan)
+            )
 
         lm = LifecycleManager(
             manifest,

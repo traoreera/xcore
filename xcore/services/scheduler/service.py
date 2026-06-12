@@ -75,9 +75,9 @@ async def _dispatch_job(job_id: str) -> None:
     fn = _JOB_REGISTRY.get(job_id)
     if fn is None:
         logger.warning(
-            "job introuvable dans le registre",
+            "job not found in registry",
             job_id=job_id,
-            raison="plugin unloaded ?",
+            reason="plugin may have been unloaded",
         )
         return
 
@@ -86,7 +86,7 @@ async def _dispatch_job(job_id: str) -> None:
         acquired = await _REDIS_LOCK_CLIENT.set(lock_key, "1", nx=True, ex=_LOCK_TTL)
         if not acquired:
             logger.debug(
-                "job ignoré — déjà en cours sur un autre worker", job_id=job_id
+                "job skipped, already running on another worker", job_id=job_id
             )
             return
         try:
@@ -116,9 +116,7 @@ class SchedulerService(BaseService):
             from apscheduler.jobstores.memory import MemoryJobStore
             from apscheduler.schedulers.asyncio import AsyncIOScheduler
         except ImportError:
-            logger.warning(
-                "APScheduler non installé", conseil="pip install apscheduler"
-            )
+            logger.warning("APScheduler not installed", hint="pip install apscheduler")
             self._status = ServiceStatus.DEGRADED
             return
 
@@ -144,9 +142,11 @@ class SchedulerService(BaseService):
                     encoding="utf-8",
                     decode_responses=True,
                 )
-                logger.debug("lock distribué activé", backend="redis")
+                logger.debug("distributed lock enabled", backend="redis")
             except ImportError:
-                logger.warning("apscheduler[redis] non installé — repli sur mémoire")
+                logger.warning(
+                    "apscheduler[redis] not installed, falling back to memory"
+                )
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
@@ -164,7 +164,7 @@ class SchedulerService(BaseService):
         self._scheduler.start()
         self._status = ServiceStatus.READY
         logger.info(
-            "scheduler démarré",
+            "scheduler started",
             timezone=self._config.timezone,
             backend=self._config.backend,
         )
@@ -189,9 +189,9 @@ class SchedulerService(BaseService):
             )
         except Exception as e:
             logger.error(
-                "impossible de charger le job depuis la config",
+                "failed to load job from config",
                 job=job_cfg.get("id"),
-                erreur=str(e),
+                error=str(e),
             )
 
     # ── API publique ──────────────────────────────────────────

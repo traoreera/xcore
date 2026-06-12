@@ -1,5 +1,6 @@
 """
-Tests unitaires pour le service xworker (Celery).
+Tests for xworker service — WorkerConfig, WorkerService, task registry,
+XWorkerServiceProvider integration.
 """
 
 from __future__ import annotations

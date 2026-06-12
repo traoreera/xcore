@@ -288,9 +288,9 @@ class ServiceContainer:
                 await asyncio.wait_for(svc.shutdown(), timeout=10.0)
                 logger.info("service stopped", service=name)
             except asyncio.TimeoutError:
-                logger.error("timeout stopping service", service=name)
+                logger.error("service shutdown timeout", service=name)
             except Exception as e:
-                logger.error("error stopping service", service=name, error=str(e))
+                logger.error("service shutdown error", service=name, error=str(e))
         self._services.clear()
         self._raw.clear()
 
