@@ -77,6 +77,8 @@ async def get_user(self, payload: dict) -> dict:
 
 En cas d'exception, le span est marqué `status="error"` avant que l'exception soit relancée.
 
+**Propagation automatique** : si le Plugin A ouvre un span et appelle ensuite `self.caller("plugin_b", "action", {})`, le span créé dans le Plugin B partage automatiquement le même `trace_id`. Aucune configuration manuelle requise — la propagation se fait via `ContextVar`.
+
 **Paramètres**
 
 | Nom | Type | Défaut | Description |
@@ -157,9 +159,10 @@ Les checks sont enregistrés automatiquement dans `self.ctx.health` au `on_load(
 
 **Paramètres**
 
-| Nom | Type | Description |
-|-----|------|-------------|
-| `check_name` | `str` | Identifiant exposé dans `GET /ipc/health` |
+| Nom | Type | Défaut | Description |
+|-----|------|--------|-------------|
+| `check_name` | `str` | — | Identifiant exposé dans `GET {prefix}/ipc/health` |
+| `kind` | `str` | `"readiness"` | `"liveness"` (état interne du plugin) ou `"readiness"` (dépendances externes, trafic) |
 
 ---
 

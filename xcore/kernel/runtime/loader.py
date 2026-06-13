@@ -230,6 +230,12 @@ class PluginLoader:
             raise ValueError(f"No activator found for mode {mode}")
         handler = await activator.activate(manifest, self)
         self._handlers[manifest.name] = handler
+
+        # Enregistrement dans le profiler
+        if self._ctx.profiler:
+            pid = getattr(handler, "pid", None)
+            self._ctx.profiler.register(manifest.name, pid)
+
         logger.info("plugin activated", plugin=manifest.name, mode=mode.value)
 
     # ── Chargement individuel ─────────────────────────────────
@@ -291,6 +297,8 @@ class PluginLoader:
             raise KeyError(f"Plugin '{plugin_name}' not loaded")
         await self._handlers[plugin_name].stop()
         del self._handlers[plugin_name]
+        if self._ctx.profiler:
+            self._ctx.profiler.unregister(plugin_name)
 
     # ── Accès ─────────────────────────────────────────────────
 

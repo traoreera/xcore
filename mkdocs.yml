@@ -67,6 +67,7 @@ copyright: |
 
 nav:
   - Introduction: index.md
+  - Pourquoi xcore ?: why-xcore.md
   - Getting Started:
       - Installation: installation.md
       - Quickstart: quickstart.md
@@ -88,6 +89,7 @@ nav:
       - Scheduler: services/scheduler.md
       - XWorker: services/xworker.md
       - Custom Services: services/custom-services.md
+  - Observability: observability/observability.md
   - Advanced Features:
       - Multi-Tenancy: advanced/multi-tenancy.md
       - Plugin Registry: advanced/registry.md
@@ -97,6 +99,7 @@ nav:
       - Xcore Configuration: reference/xcore-config.md
   - Examples:
       - Overview: examples/overview.md
+      - Application complète: examples/full-app.md
       - User Management: examples/auth-example.md
       - Secure Sandbox: examples/sandbox-example.md
       - Multi-Tenant Analytics: examples/tenancy-example.md

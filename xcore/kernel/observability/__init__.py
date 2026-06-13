@@ -8,7 +8,15 @@ from .metrics import (
     PrometheusMetricsRegistry,
     create_metrics_registry,
 )
-from .tracing import Span, Tracer, noop_tracer
+from .profiler import PluginProfiler
+from .tracing import (
+    Span,
+    Tracer,
+    create_tracer,
+    get_current_span_id,
+    get_current_trace_id,
+    noop_tracer,
+)
 
 __all__ = [
     "get_logger",
@@ -22,6 +30,10 @@ __all__ = [
     "Tracer",
     "Span",
     "noop_tracer",
+    "create_tracer",
+    "get_current_trace_id",
+    "get_current_span_id",
     "HealthChecker",
     "HealthStatus",
+    "PluginProfiler",
 ]

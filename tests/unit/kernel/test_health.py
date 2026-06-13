@@ -12,7 +12,9 @@ class TestHealthChecker:
         hc = HealthChecker()
         result = await hc.run_all()
         assert result["status"] == "healthy"
-        assert result["checks"] == {}
+        # HealthChecker auto-registers process + event_loop liveness checks
+        assert "process" in result["checks"]
+        assert "event_loop" in result["checks"]
 
     @pytest.mark.asyncio
     async def test_register_and_run_async(self):
@@ -73,7 +75,7 @@ class TestHealthChecker:
 
         result = await hc.run_all(timeout=0.01)
         assert result["checks"]["slow"]["status"] == "unhealthy"
-        assert "Timeout" in result["checks"]["slow"]["message"]
+        assert "timeout" in result["checks"]["slow"]["message"].lower()
 
     @pytest.mark.asyncio
     async def test_overall_unhealthy_takes_priority_over_degraded(self):

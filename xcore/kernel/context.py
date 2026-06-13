@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .events.hooks import HookManager
     from .observability.health import HealthChecker
     from .observability.metrics import MetricsRegistry
+    from .observability.profiler import PluginProfiler
     from .observability.tracing import Tracer
 
 
@@ -33,6 +34,7 @@ class KernelContext:
     metrics: MetricsRegistry | None = None
     tracer: Tracer | None = None
     health: HealthChecker | None = None
+    profiler: PluginProfiler | None = None
 
     def as_plugin_context_params(
         self, plugin_name: str, caller: Any = None

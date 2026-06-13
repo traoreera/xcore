@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# CLAUDE.md — xcore
+# xcore
 
 ## Présentation
 
@@ -22,24 +22,27 @@ Charge, isole et gère des plugins modulaires dans un environnement sandboxé.
 ```bash
 # Démarrer l'API en dev
 poetry run xcli worker start api
+make dev   # alternative directe : uvicorn avec reload sur 0.0.0.0:8000
 
 # Tests
-make test                                                       # suite complète avec coverage
-make test-cov                                                   # tests + rapport HTML de coverage
-poetry run pytest tests/ -x -q                                  # rapide, stoppe au 1er échec
-poetry run pytest tests/unit/kernel/test_supervisor.py -x -q   # fichier unique
-poetry run pytest tests/ -k "test_boot" -x                     # filtrer par nom
+make test                                                  # suite complète
+poetry run pytest tests/ -x -q                            # rapide, stoppe au 1er échec
+poetry run pytest tests/unit/test_foo.py::test_bar -xvs  # test unique
 
 # Lint & format
-make lint-fix    # auto-corrige (black + isort)
+make lint-fix    # auto-corrige (black + isort + autoflake)
 make lint-check  # vérifie sans modifier (utilisé par CI)
+
+# Reproduire le pipeline CI en local
+make ci-local    # lint + tests (STRICT=1) + sécurité + build
 
 # Build docs
 poetry run mkdocs build
 poetry run mkdocs serve          # preview local
 
 # Sécurité
-make auto-security               # Bandit scan
+make security        # audit Bandit (génère reports/bandit.json)
+make security-check  # vérifie .env et mots de passe en dur
 ```
 
 ---
@@ -50,15 +53,21 @@ make auto-security               # Bandit scan
 xcore/
 ├── kernel/
 │   ├── api/           # contract.py (TrustedBase, BasePlugin), context.py (PluginContext)
-│   ├── observability/ # logging.py (XcoreLogger), metrics.py, tracing.py, health.py
+│   ├── observability/ # logging.py, metrics.py, tracing.py, health.py, profiler.py
 │   ├── runtime/       # lifecycle.py, loader.py, supervisor.py, activator.py
-│   │                  # ephemeral_handler.py, warm_pool.py (pool d'instances préchauffées)
 │   ├── tenancy/       # middleware.py, services.py (TenantAwareDB/Cache/Scheduler)
-│   └── permissions/   # engine.py
+│   ├── permissions/   # engine.py
+│   ├── sandbox/       # process_manager.py, worker.py, ipc.py (mode sandboxed)
+│   ├── security/      # validation.py, scanner_core (extension C compilée)
+│   ├── events/        # bus.py, hooks.py
+│   └── schema/        # validation des payloads
 ├── services/
 │   ├── scheduler/     # service.py — APScheduler + lock Redis distribué
 │   ├── cache/         # service.py + backends/
-│   └── database/      # manager.py + adapters/
+│   ├── database/      # manager.py + adapters/
+│   └── xworker/       # worker process management
+├── marketplace/       # registre et distribution de plugins
+├── registry/          # catalogue interne des plugins chargés
 ├── configurations/    # loader.py, sections.py
 └── sdk/               # base classes + décorateurs pour développeurs de plugins
 ```
@@ -100,10 +109,28 @@ class Plugin(TrustedBase):
             span.set_attribute("action", action)
             result = await self._process(payload)
 
-        @self.health.register("shop.db")
+        @self.health.register("shop.db", kind="readiness")
         async def check():
             return await self.get_service("db").health_check()
 ```
+
+**Propagation du trace_id** : `self.tracer.span()` lit/écrit un `ContextVar` — les appels inter-plugins via `supervisor.call()` partagent automatiquement le même `trace_id`. Pas de configuration manuelle.
+
+**Health checks** : `kind="liveness"` pour l'état interne du plugin, `kind="readiness"` (défaut) pour les dépendances externes. Les services (`db`, `cache`) sont enregistrés automatiquement en readiness.
+
+### Modes d'exécution des plugins
+
+Trois modes définis dans `ExecutionMode` (`kernel/api/contract.py`) :
+
+| | `trusted` | `sandboxed` | `legacy` |
+|---|---|---|---|
+| **Processus** | in-process | subprocess isolé | in-process (alias trusted) |
+| **Accès services** | direct via `get_service()` | IPC JSON uniquement | direct |
+| **Scan AST** | optionnel (warning) | obligatoire (bloquant) | optionnel |
+
+`legacy` est le défaut si `execution_mode` est absent du manifest.
+
+Le mode `sandboxed` applique 4 couches de restriction dans le worker : filesystem guard, blocage `exec`/`eval`/43 modules système, importlib hook, ctypes bloqué. Limites de ressources (mémoire, CPU, disque, timeout) configurables dans `plugin.yaml`.
 
 ### Scheduler — pattern _JOB_REGISTRY
 
@@ -146,6 +173,13 @@ observability:
     file: log/app.log
   metrics:
     backend: prometheus # "memory" | "prometheus"
+  tracing:
+    enabled: true
+    backend: opentelemetry  # "noop" | "opentelemetry"
+    service_name: my-service
+    endpoint: otel-collector:4317  # gRPC — ou http://host:4318/v1/traces pour HTTP
+    use_grpc: true
+    # Dépendances: pip install "xcore[otel]"
 
 tenancy:
   enabled: false        # true pour activer l'isolation multi-tenant
@@ -181,7 +215,7 @@ class Plugin(TrustedBase):
     async def nightly_cleanup(self):
         ...
 
-    @health_check("mon_plugin.db")
+    @health_check("mon_plugin.db")          # kind="readiness" par défaut
     async def check_db(self) -> tuple[bool, str]:
         try:
             await self.db.execute("SELECT 1")
@@ -237,6 +271,6 @@ Le cache `.venv` est clé sur `poetry.lock` — un changement de dépendances in
 - **`make lint-check`** — le Makefile s'appelle `makefile` (minuscule), mais `make` le trouve sur Linux.
 - **Dossiers `extensions/` et `plugins/`** — n'existent pas dans le repo racine. Ne pas les référencer dans les outils CI/bandit.
 - **`logging.getLogger()`** — NE PAS utiliser. Toujours `get_logger()` de `xcore.kernel.observability`.
-- **Branche principale** : `main`. Ne pas confondre avec les branches de feature (`add-ephemeral`, etc.).
-- **Seuil de coverage** : `fail_under = 80` dans `pyproject.toml` (`branch = true`). Le CI échoue en dessous. Patcher les imports locaux dans `boot()` au niveau du module source (`xcore.services.container.ServiceContainer`) et non au niveau `xcore`.
-- **`asyncio_mode = auto`** dans `pyproject.toml` — pas besoin de `@pytest.mark.asyncio` sur chaque test async.
+- **`execution_mode: ephemeral`** — mentionné dans certains exemples, mais non implémenté. Seuls `trusted`, `sandboxed`, `legacy` sont valides.
+- **`scanner_core`** — extension C dans `xcore/kernel/security/`. Compiler avec `make scanner-core` si absente après un clone. Le mode sandboxed tombe sur le fallback Python si elle manque.
+- **Branche principale** : `main`.

@@ -66,6 +66,7 @@ class SandboxProcessManager:
         self._health_task: asyncio.Task | None = None
         data_dir = manifest.plugin_dir / "data"
         self._ctx = ctx
+        self._profiler = getattr(ctx, "profiler", None)
 
         self._disk = DiskWatcher(data_dir, manifest.resources.max_disk_mb)
 
@@ -80,6 +81,10 @@ class SandboxProcessManager:
     @property
     def uptime(self) -> float | None:
         return None if self._started_at is None else time.monotonic() - self._started_at
+
+    @property
+    def pid(self) -> int | None:
+        return self._process.pid if self._process else None
 
     async def start(self) -> None:
         if self._state == ProcessState.FAILED:
@@ -106,6 +111,9 @@ class SandboxProcessManager:
             plugin=self.manifest.name,
             pid=self._process.pid,
         )
+
+        if self._profiler:
+            self._profiler.register(self.manifest.name, pid=self._process.pid)
 
         self._ctx._events.emit_sync(
             f"plugin.{self.manifest.name}.services_registered",
@@ -272,6 +280,8 @@ class SandboxProcessManager:
                     self._health_loop(hc.interval_seconds, hc.timeout_seconds),
                     name=f"health-{self.manifest.name}",
                 )
+            if self._profiler:
+                self._profiler.update_pid(self.manifest.name, self._process.pid)
             logger.info(
                 "subprocess restarted",
                 plugin=self.manifest.name,
