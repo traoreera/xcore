@@ -326,6 +326,7 @@ class ConfigLoader:
                 backend=tr.get("backend", "noop"),
                 service_name=tr.get("service_name", "xcore"),
                 endpoint=tr.get("endpoint"),
+                use_grpc=tr.get("use_grpc", True),
             ),
         )
 

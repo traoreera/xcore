@@ -69,7 +69,9 @@ class PluginSupervisor:
         """Registers default middleware factories."""
         self._middleware_registry.register(
             "tracing",
-            lambda ctx: TracingMiddleware(ctx.get("tracer"), ctx.get("metrics")),
+            lambda ctx: TracingMiddleware(
+                ctx.get("tracer"), ctx.get("metrics"), ctx.get("events")
+            ),
         )
         self._middleware_registry.register(
             "rate_limit", lambda ctx: RateLimitMiddleware(ctx.get("rate"))
@@ -104,6 +106,7 @@ class PluginSupervisor:
         mw_context = {
             "tracer": self._tracer,
             "metrics": self._metrics,
+            "events": self._events,
             "rate": self._rate,
             "permissions": self._permissions,
         }

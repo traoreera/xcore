@@ -164,17 +164,40 @@ observability:
     file: log/app.log
     max_bytes: 52428800 # 50 MB par fichier
     backup_count: 10 # 10 fichiers de rotation = 500 MB max
-    output: json # text
+    output: text
   metrics:
     enabled: true
     backend: prometheus # memory | prometheus | statsd
     prefix: myapp
 
+  health:
+    enabled: true
+  profiler:
+    enabled: true
+    interval_seconds: 15
+  alerts:
+    enabled: true
+    max_errors_default: 10
+  notifications:
+    enabled: true
+    backends: ["log", "webhook"]
+    webhooks:
+      slack_dev:
+        url: "https://hooks.slack.com/services/XXXX"
+        headers: {"X-Custom": "value"}
+
+
+
+
   tracing:
     enabled: false
-    backend: noop # noop | opentelemetry | jaeger
+    backend: noop       # "noop" | "opentelemetry"
     service_name: my-app
-    endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
+    # OTLP gRPC  : host:4317  (Jaeger, Tempo, OTel Collector)
+    # OTLP HTTP  : http://host:4318/v1/traces
+    endpoint: null
+    use_grpc: true      # true = OTLP gRPC, false = OTLP HTTP
+    # Installer les deps: pip install "xcore[otel]"
 
 # ── Sécurité ──────────────────────────────────────────────────
 security:

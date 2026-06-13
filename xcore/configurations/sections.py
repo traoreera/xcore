@@ -240,9 +240,45 @@ class MetricsConfig:
 @dataclass
 class TracingConfig:
     enabled: bool = False
-    backend: str = "noop"  # noop | opentelemetry | jaeger
+    backend: str = "noop"  # "noop" | "opentelemetry"
     service_name: str = "xcore"
-    endpoint: str | None = None
+    endpoint: str | None = (
+        None  # OTLP gRPC: host:4317  HTTP: http://host:4318/v1/traces
+    )
+    use_grpc: bool = True  # True = OTLP gRPC, False = OTLP HTTP
+
+
+@dataclass
+class HealthConfig:
+    enabled: bool = True
+    timeout: float = 5.0
+
+
+@dataclass
+class ProfilerConfig:
+    enabled: bool = False
+    interval_seconds: float = 15.0
+
+
+@dataclass
+class AlertsConfig:
+    enabled: bool = False
+    max_errors_default: int = 10
+    window_seconds_default: int = 60
+
+
+@dataclass
+class WebhookConfig:
+    url: str | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class NotificationConfig:
+    enabled: bool = False
+    # Liste de types de notifications : "log", "webhook"
+    backends: list[str] = field(default_factory=lambda: ["log"])
+    webhooks: dict[str, WebhookConfig] = field(default_factory=dict)
 
 
 @dataclass
@@ -250,6 +286,10 @@ class ObservabilityConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
     tracing: TracingConfig = field(default_factory=TracingConfig)
+    health: HealthConfig = field(default_factory=HealthConfig)
+    profiler: ProfilerConfig = field(default_factory=ProfilerConfig)
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
+    notifications: NotificationConfig = field(default_factory=NotificationConfig)
 
 
 @dataclass

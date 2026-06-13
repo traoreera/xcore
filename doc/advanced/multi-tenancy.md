@@ -13,7 +13,7 @@ Xcore is built from the ground up to support multi-tenant applications. It provi
 ### Prerequisites
 
 - [x] [Service Container](./services.md) overview understood
-- [x] [PostgreSQL](./database.md) (required for schema-based isolation)
+- [x] PostgreSQL **obligatoire** si `isolate_db: true` (voir [compatibilité](#compatibilité-des-bases-de-données))
 
 ---
 
@@ -91,6 +91,13 @@ When `isolate_db` is `true`, Xcore executes `SET search_path TO <tenant_id>, pub
 - You must ensure that a schema named `<tenant_id>` exists in your database.
 - Tables in the `public` schema act as shared data across all tenants.
 
+!!! danger "PostgreSQL uniquement — isolation DB non supportée sur MySQL / SQLite"
+    `SET search_path` est une commande PostgreSQL. Sur MySQL ou SQLite, cette commande échoue **silencieusement** : l'isolation n'a pas lieu, toutes les requêtes tombent dans le schéma `public`, et les données de tous les tenants se mélangent **sans aucun message d'erreur**.
+
+    **`isolate_db: true` avec MySQL ou SQLite = fuite de données inter-tenants.**
+
+    Voir [Compatibilité des bases de données](#compatibilité-des-bases-de-données) pour les alternatives.
+
 #### Cache (Key Prefixing)
 When `isolate_cache` is `true`, the `CacheService` wraps the backend and prefixes all keys:
 - `cache.get("settings")` → `acme:settings`
@@ -118,13 +125,35 @@ If `isolate_scheduler` is `true`, job IDs are prefixed with the tenant ID. This 
     If `isolate_db` is enabled but the schema for a tenant does not exist, PostgreSQL will not raise an error immediately, but your queries will fail if they try to access tables that only exist in the tenant schema.
     **Fix**: Automate schema creation when a new tenant is provisioned.
 
-!!! warning "Non-PostgreSQL Databases"
-    `SET search_path` is a PostgreSQL-specific feature. If you use MySQL or SQLite, `isolate_db` will have no effect.
-    **Fix**: You must manually prefix your table names or use separate database connections for each tenant.
+!!! danger "MySQL / SQLite : isolation DB non fonctionnelle"
+    `SET search_path` est spécifique à PostgreSQL. Sur MySQL ou SQLite, la commande échoue silencieusement — **l'isolation n'a pas lieu**, les données de tous les tenants partagent le même schéma.
+    **Ne pas activer `isolate_db: true` avec ces bases de données.**
+    Alternatives : préfixer manuellement les noms de tables, ou utiliser des connexions DB séparées par tenant.
 
 !!! failure "Shared Cache Corruption"
     If you disable `isolate_cache` but use the same Redis instance for all tenants, one tenant can overwrite or read another tenant's data.
     **Fix**: Always keep `isolate_cache: true` in production.
+
+---
+
+### Compatibilité des bases de données
+
+| Base de données | `isolate_db: true` | Mécanisme | Comportement si activé à tort |
+|-----------------|-------------------|-----------|-------------------------------|
+| **PostgreSQL** | ✅ Supporté | `SET search_path TO <tenant>, public` | — |
+| **MySQL / MariaDB** | ❌ Non supporté | — | Échec silencieux — toutes les requêtes dans le schéma par défaut |
+| **SQLite** | ❌ Non supporté | — | Échec silencieux — base unique partagée |
+
+**PostgreSQL est la seule base de données supportant l'isolation par tenant via `isolate_db`.**
+
+Pour les autres bases, les options sont :
+
+1. **Préfixage des tables** — convention de nommage `<tenant>_<table>` gérée manuellement dans chaque plugin.
+2. **Connexions séparées** — une URL de connexion par tenant, géré au niveau du `ServiceContainer`.
+3. **Désactiver `isolate_db`** et assurer l'isolation applicativement (filtres `WHERE tenant_id = ...`).
+
+!!! note "Cache et Scheduler"
+    `isolate_cache` (préfixage des clés) et `isolate_scheduler` (préfixage des job IDs) fonctionnent avec tous les backends — ils ne dépendent pas de PostgreSQL.
 
 ---
 
