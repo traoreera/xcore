@@ -55,6 +55,7 @@ class LifecycleManager:
         self._metrics = ctx.metrics
         self._tracer = ctx.tracer
         self._health = ctx.health
+        self._profiler = getattr(ctx, "profiler", None)
         self._caller = caller
 
         self._instance: BasePlugin | None = None
@@ -82,6 +83,10 @@ class LifecycleManager:
     @property
     def uptime(self) -> float | None:
         return None if self._loaded_at is None else time.monotonic() - self._loaded_at
+
+    @property
+    def pid(self) -> int | None:
+        return None
 
     def _on_state_change(self, old: PluginState, new: PluginState) -> None:
         logger.debug(
@@ -125,7 +130,11 @@ class LifecycleManager:
             logger.exception(
                 "plugin load failed", plugin=self.manifest.name, error=str(e)
             )
-            raise LoadError(f"[{self.manifest.name}] Loading failed: {e}") from e
+            raise LoadError(f"[{self.manifest.name}] Échec chargement : {e}") from e
+        else:
+            if self._profiler:
+                # Trusted plugins run in-process — pid=None, profiler reads main proc
+                self._profiler.register(self.manifest.name, pid=None)
 
     async def _do_load(self) -> None:
         entry = self.manifest.plugin_dir / self.manifest.entry_point
@@ -306,6 +315,9 @@ class LifecycleManager:
         except Exception:
             self._sm.transition("error")
             raise
+        finally:
+            if self._profiler:
+                self._profiler.unregister(self.manifest.name)
 
     async def _do_unload(self) -> None:
         if self._instance:

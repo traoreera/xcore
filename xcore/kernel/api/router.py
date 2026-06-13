@@ -75,6 +75,7 @@ def build_router(
     tags: list[str] | None = None,
     metrics_registry: MetricsRegistry | None = None,
     health_checker: HealthChecker | None = None,
+    prometus_config: bool = False,
     **kwargs,
 ) -> APIRouter:
     """
@@ -155,6 +156,14 @@ def build_router(
     async def plugins_status() -> dict[str, Any]:
         return supervisor.status()
 
+    @router.get("/plugins/metrics")
+    async def plugins_resource_metrics() -> dict[str, Any]:
+        """Retourne un instantané RSS/CPU par plugin (si profiler activé)."""
+        profiler = getattr(supervisor._ctx, "profiler", None)
+        if profiler is None:
+            return {"status": "disabled", "plugins": {}}
+        return {"status": "enabled", "plugins": profiler.snapshot()}
+
     @router.post("/{plugin_name}/reload")
     async def reload_plugin(plugin_name: str) -> dict[str, str]:
         await supervisor.reload(plugin_name)
@@ -176,8 +185,25 @@ def build_router(
             return {"status": "healthy", "checks": {}}
         return await health_checker.run_all()
 
-    @router.get("/metrics")
-    async def metrics_snapshot() -> dict:
+    @router.get("/health/live")
+    async def liveness_check() -> dict:
+        if health_checker is None:
+            return {"status": "healthy"}
+        return await health_checker.run_liveness()
+
+    @router.get("/health/ready")
+    async def readiness_check() -> dict:
+        if health_checker is None:
+            return {"status": "healthy"}
+        return await health_checker.run_readiness()
+
+    @router.get("/metrics", tags=["metrics"])
+    async def metrics_snapshot():
+        if prometus_config:
+            from fastapi import Response
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+            return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
         if metrics_registry is None:
             return {}
         return metrics_registry.snapshot()

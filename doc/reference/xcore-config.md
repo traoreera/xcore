@@ -92,21 +92,49 @@ Configure multi-tenant isolation strategies.
 | `enabled` | `bool`| `false` | Enable/disable multi-tenancy. |
 | `header` | `str` | `"X-Tenant-ID"`| HTTP header for tenant extraction. |
 | `subdomain`| `bool`| `false` | Extract tenant from subdomain. |
-| `isolate_db`| `bool`| `true` | PostgreSQL schema isolation. |
+| `isolate_db`| `bool`| `true` | Isolation par schéma PostgreSQL (`SET search_path`). **PostgreSQL uniquement** — échec silencieux sur MySQL/SQLite. |
 | `isolate_cache`| `bool`| `true` | Key prefixing isolation. |
 | `enforce_ipc`| `bool`| `true` | Verify caller authorization on every call. |
 
 ---
 
 ### `observability` Section
-Logging, metrics, and tracing settings.
+Logging, metrics, tracing, health checks, profiling, and alerting.
 
 #### `logging`
 | Key | Type | Default | Description |
 |:--- | :--- | :--- | :--- |
 | `level` | `str` | `"INFO"` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-| `format`| `str` | `"text"` | `text` or `json`. |
+| `output`| `str` | `"text"` | `text` or `json`. |
 | `file` | `str` | `null` | Path to log file (enables file rotation). |
+| `max_bytes` | `int` | `10485760` | Max size of log file before rotation. |
+| `backup_count` | `int` | `5` | Number of backup log files to keep. |
+
+#### `metrics`
+| Key | Type | Default | Description |
+|:--- | :--- | :--- | :--- |
+| `enabled` | `bool`| `false` | Enable/disable metrics collection. |
+| `backend` | `str` | `"memory"` | `memory` or `prometheus`. |
+
+#### `tracing`
+| Key | Type | Default | Description |
+|:--- | :--- | :--- | :--- |
+| `enabled` | `bool` | `false` | Enable/disable distributed tracing. |
+| `backend` | `str` | `"noop"` | `"noop"` (in-memory) or `"opentelemetry"` (OTLP export). |
+| `service_name` | `str` | `"xcore"` | Service name reported in traces. |
+| `endpoint` | `str` | `null` | OTLP gRPC: `host:4317` — OTLP HTTP: `http://host:4318/v1/traces`. Required when `backend=opentelemetry`. |
+| `use_grpc` | `bool` | `true` | `true` = OTLP gRPC, `false` = OTLP HTTP. |
+
+!!! note "Dépendances OTel"
+    `backend: opentelemetry` nécessite `pip install "xcore[otel]"` (ou `opentelemetry-sdk` + `opentelemetry-exporter-otlp-proto-grpc`).
+
+#### `health`
+
+Les health checks sont toujours actifs — il n'y a pas de clé de configuration dédiée. Les services (`db`, `cache`) sont automatiquement enregistrés en readiness. Voir les [endpoints exposés](../observability/observability.md#4-health-checks-liveness--readiness).
+
+#### `profiler`
+
+Le profilage CPU/mémoire par plugin est toujours actif (intervalle : 15 s). Il n'y a pas de clé de configuration dédiée pour le désactiver. Voir [Profilage](../observability/observability.md#5-profilage-cpu--mémoire-par-plugin).
 
 ---
 

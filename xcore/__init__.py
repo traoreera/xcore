@@ -47,6 +47,7 @@ from .kernel.observability import (
     create_metrics_registry,
     get_logger,
 )
+from .kernel.observability.tracing import create_tracer
 from .kernel.runtime.lifecycle import LifecycleManager
 from .kernel.runtime.loader import PluginLoader
 from .kernel.runtime.supervisor import PluginSupervisor
@@ -77,6 +78,7 @@ __all__ = [
     "get_current_user",
     "register_auth_backend",
     "unregister_auth_backend",
+    "Tracer",
 ]
 
 
@@ -174,8 +176,11 @@ class Xcore:
         # etape intermediare
         # configuration de l'observabilite
         self.metrics = create_metrics_registry(self._config.observability.metrics)
-        self.tracer = Tracer(self._config.observability.tracing.service_name)
+        self.tracer = create_tracer(self._config.observability.tracing)
         self.health = HealthChecker()
+        from .kernel.observability.profiler import PluginProfiler
+
+        self.profiler = PluginProfiler(metrics=self.metrics)
 
         # 1. Services (BDD, cache, scheduler)
         from .services import ServiceContainer
@@ -210,10 +215,12 @@ class Xcore:
             metrics=self.metrics,
             tracer=self.tracer,
             health=self.health,
+            profiler=self.profiler,
         )
         self.plugins = PluginSupervisor(ctx)
 
         await self.plugins.boot()
+        await self.profiler.start(interval_seconds=15)
         self.plugins_lists = self.plugins.list_plugins()
 
         # 5. Attache le router FastAPI si une app est fournie
@@ -232,6 +239,8 @@ class Xcore:
         if not self._booted:
             return
         self._logger.info("xcore shutting down")
+        if hasattr(self, "profiler"):
+            await self.profiler.stop()
         if self.plugins:
             await self.plugins.shutdown()
         if self.services:
@@ -256,6 +265,10 @@ class Xcore:
             health_checker=self.health,  # ← nouveau
             metrics_registry=self.metrics,  # ← nouveau
             tags=(self._config.app.plugin_tags or []) + (tags or []),
+            prometus_config=(
+                getattr(self._config.observability.metrics, "backend", "memory")
+                == "prometheus"
+            ),
         )
         app.include_router(system_router)
 
@@ -296,23 +309,6 @@ class Xcore:
                         key=f"{middleware['name']}_{key}",
                     )
 
-        # Endpoint /metrics Prometheus (seulement si backend=prometheus)
-        if (
-            getattr(self._config.observability.metrics, "backend", "memory")
-            == "prometheus"
-        ):
-            with contextlib.suppress(ImportError):
-                from fastapi import APIRouter as _AR
-                from fastapi import Response
-                from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-
-                _metrics_router = _AR()
-
-                @_metrics_router.get("/metrics")
-                async def prometheus_metrics():
-                    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-                app.include_router(_metrics_router)
         app.openapi_schema = None  # force la regen du schéma OpenAPI
 
     def _validate_secret_keys(self) -> None:

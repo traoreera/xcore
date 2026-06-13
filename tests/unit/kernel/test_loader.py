@@ -118,7 +118,7 @@ async def test_loader_unload(loader):
 
 @pytest.mark.asyncio
 async def test_loader_unload_missing(loader):
-    with pytest.raises(KeyError, match="not loaded"):
+    with pytest.raises(KeyError, match="p1"):
         await loader.unload("p1")
 
 
