@@ -158,7 +158,7 @@ class _PrometheusGauge:
             return self._prom.labels(**self._label_values)
         return self._prom
 
-    def set(self, v: float) -> None:
+    def set(self, v: float, labels=None) -> None:
         self._labeled().set(v)
 
     def inc(self, v: float = 1.0) -> None:

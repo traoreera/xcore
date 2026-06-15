@@ -204,8 +204,6 @@ def build_router(
             from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
             return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-        if metrics_registry is None:
-            return {}
-        return metrics_registry.snapshot()
+        return {} if metrics_registry is None else metrics_registry.snapshot()
 
     return router
