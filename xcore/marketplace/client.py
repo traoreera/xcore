@@ -114,7 +114,7 @@ class MarketplaceClient:
                 return cached
 
         url = self._base_url + path
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, lambda: self._http_get(url))
 
         if cache_key:
@@ -126,7 +126,7 @@ class MarketplaceClient:
         import asyncio
 
         url = self._base_url + path
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: self._http_post(url, body))
 
     def _http_get(self, url: str) -> Any:
