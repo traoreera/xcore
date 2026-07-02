@@ -180,6 +180,16 @@ class MigrationRunner:
 
         command.revision(config=self._get_config(), **kwargs)
 
+    async def revison(self, **kwargs) -> None:
+        """Ancien nom — utiliser revision() à la place."""
+        import warnings
+        warnings.warn(
+            "revison() is deprecated, use revision() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return await self.revision(**kwargs)
+
     async def status(self, **kwargs) -> None:
         """Affiche les migrations appliquées et en attente."""
         from alembic import command  # type: ignore
