@@ -43,7 +43,6 @@ test.py
 
 _build
 site
-plugins
 orchestra.db
 analyse.md
 .coverage
@@ -56,3 +55,4 @@ main.py
 summaries.json
 /IAdocs
 scanner_core.cpython-312-x86_64-linux-gnu.so
+xcore-knowledge.md
