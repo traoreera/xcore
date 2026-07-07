@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine  # type: ignore
 
 from ...kernel.observability import get_logger
@@ -47,14 +48,7 @@ class MigrationRunner:
         return cfg
 
     def _is_async(self) -> bool:
-        """Détecte si l'URL utilise un driver async."""
-        async_markers = (
-            "+asyncpg",
-            "+aiosqlite",
-            "+aiomysql",
-            "+asyncmy",
-        )
-        return any(marker in self.db_url for marker in async_markers)
+        return make_url(self.db_url).get_dialect().is_async
 
     async def init(self, autogenerate: bool = True, message: str = "init") -> None:
         """
