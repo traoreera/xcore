@@ -184,6 +184,7 @@ class MigrationRunner:
     async def revison(self, **kwargs) -> None:
         """Ancien nom — utiliser revision() à la place."""
         import warnings
+
         warnings.warn(
             "revison() is deprecated, use revision() instead",
             DeprecationWarning,
