@@ -16,6 +16,11 @@ class TestMigrationRunner:
         runner = MigrationRunner("sqlite:///./test.db", migrations_dir=tmp_path)
         assert runner.db_url == "sqlite:///./test.db"
         assert runner.migrations_dir == tmp_path
+        assert runner._is_async_driver is False
+
+    def test_invalid_url_raises_migration_error(self):
+        with pytest.raises(MigrationError, match="Cannot parse database URL"):
+            MigrationRunner("not-a-valid-url://???")
 
     @pytest.mark.parametrize("url", [
         "postgresql+asyncpg://host/db",

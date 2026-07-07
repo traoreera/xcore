@@ -35,6 +35,13 @@ class MigrationRunner:
     ) -> None:
         self.db_url = db_url
         self.migrations_dir = Path(migrations_dir).resolve()
+        try:
+            self._is_async_driver: bool = make_url(db_url).get_dialect().is_async
+        except Exception as e:
+            raise MigrationError(
+                f"Cannot parse database URL — check the format "
+                f"(e.g. 'postgresql+asyncpg://host/db'): {e}"
+            ) from e
 
     def _get_config(self):
         try:
@@ -48,7 +55,7 @@ class MigrationRunner:
         return cfg
 
     def _is_async(self) -> bool:
-        return make_url(self.db_url).get_dialect().is_async
+        return self._is_async_driver
 
     async def init(self, autogenerate: bool = True, message: str = "init") -> None:
         """
