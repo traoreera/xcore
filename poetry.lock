@@ -4222,7 +4222,7 @@ typer = ">=0.25.1"
 type = "git"
 url = "https://github.com/xcore-team/xcoreCli.git"
 reference = "main"
-resolved_reference = "fae9528d8fb26edc8c64826394250720aa62a0e2"
+resolved_reference = "a898a1cd308724dfb6ec696905d7690e7f48a562"
 
 [[package]]
 name = "xcoresdk"
