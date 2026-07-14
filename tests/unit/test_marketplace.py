@@ -6,6 +6,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
 from xcore.marketplace.client import MarketplaceClient, MarketplaceError
 
@@ -45,7 +46,7 @@ def _make_simple_client(tmp_path, api_key="test-key"):
 class TestMarketplaceClientInit:
     def test_init_reads_config(self, tmp_path):
         client = _make_simple_client(tmp_path)
-        assert "mp.example.com" in client._base_url
+        assert urlparse(client._base_url).hostname == "mp.example.com"
 
     def test_init_default_url(self, tmp_path):
         class _Cfg:
