@@ -129,6 +129,10 @@ class Xcore:
         self.plugins: PluginSupervisor | None = None
         self.registry: PluginRegistry | None = None
 
+        self._app: "FastAPI | None" = (
+            None  # référence conservée pour remount après reload
+        )
+
         self._logger = get_logger("xcore")
 
     def setup(self, app: "FastAPI") -> "Xcore":
@@ -223,8 +227,16 @@ class Xcore:
         await self.profiler.start(interval_seconds=15)
         self.plugins_lists = self.plugins.list_plugins()
 
+        # Remonte les routes FastAPI après tout reload programmatique
+        async def _on_plugin_reloaded(event):
+            plugin_name = event.name.split(".")[1]
+            self._remount_plugin_router(plugin_name)
+
+        self.events.subscribe("plugin.*.reloaded", _on_plugin_reloaded)
+
         # 5. Attache le router FastAPI si une app est fournie
         if app is not None:
+            self._app = app
             self._attach_router(
                 app,
                 prefix=self._config.app.plugin_prefix,
@@ -248,6 +260,50 @@ class Xcore:
         self._booted = False
         self._logger.info("xcore stopped")
 
+    def _remount_plugin_router(self, plugin_name: str) -> None:
+        """Re-monte les routes FastAPI d'un plugin après un hot-reload."""
+        app = self._app
+        if app is None or self.plugins is None:
+            return
+
+        prefix = self._config.app.plugin_prefix or "/plugins"
+        plugin_prefix = f"{prefix}/{plugin_name}"
+
+        # Retire toutes les routes qui appartiennent à ce plugin
+        app.routes = [
+            r
+            for r in app.routes
+            if not getattr(r, "path", "").startswith(plugin_prefix)
+        ]
+
+        # Récupère le nouveau router depuis le handler rechargé
+        try:
+            handler = self.plugins._loader.get(plugin_name)
+        except KeyError:
+            return
+
+        plugin_router = getattr(handler, "plugin_router", None)
+        if plugin_router is None:
+            return
+
+        from fastapi import APIRouter
+
+        wrapper = APIRouter(
+            prefix=plugin_prefix,
+            tags=(self._config.app.plugin_tags or []),
+        )
+        wrapper.include_router(plugin_router)
+        app.include_router(wrapper)
+        app.openapi_schema = None  # force regen du schéma OpenAPI
+
+        n_routes = len(getattr(plugin_router, "routes", []))
+        self._logger.info(
+            "plugin routes remounted after reload",
+            plugin=plugin_name,
+            routes=n_routes,
+            prefix=plugin_prefix,
+        )
+
     def _attach_router(
         self,
         app,
@@ -262,8 +318,8 @@ class Xcore:
             secret_key=self._config.app.secret_key,
             server_key=self._config.app.server_key,
             prefix=self._config.app.plugin_prefix,
-            health_checker=self.health,  # ← nouveau
-            metrics_registry=self.metrics,  # ← nouveau
+            health_checker=self.health,
+            metrics_registry=self.metrics,
             tags=(self._config.app.plugin_tags or []) + (tags or []),
             prometus_config=(
                 getattr(self._config.observability.metrics, "backend", "memory")

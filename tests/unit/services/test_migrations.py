@@ -16,21 +16,29 @@ class TestMigrationRunner:
         runner = MigrationRunner("sqlite:///./test.db", migrations_dir=tmp_path)
         assert runner.db_url == "sqlite:///./test.db"
         assert runner.migrations_dir == tmp_path
+        assert runner._is_async_driver is False
 
-    def test_is_async_asyncpg(self):
-        assert MigrationRunner("postgresql+asyncpg://host/db")._is_async() is True
+    def test_invalid_url_raises_migration_error(self):
+        with pytest.raises(MigrationError, match="Cannot parse database URL"):
+            MigrationRunner("not-a-valid-url://???")
 
-    def test_is_async_aiosqlite(self):
-        assert MigrationRunner("sqlite+aiosqlite:///./db")._is_async() is True
+    @pytest.mark.parametrize("url", [
+        "postgresql+asyncpg://host/db",
+        "sqlite+aiosqlite:///./db",
+        "mysql+aiomysql://host/db",
+        "mysql+asyncmy://host/db",
+    ])
+    def test_is_async_async_drivers(self, url):
+        assert MigrationRunner(url)._is_async() is True
 
-    def test_is_async_aiomysql(self):
-        assert MigrationRunner("mysql+aiomysql://host/db")._is_async() is True
-
-    def test_is_async_asyncmy(self):
-        assert MigrationRunner("mysql+asyncmy://host/db")._is_async() is True
-
-    def test_is_async_sync_driver(self):
-        assert MigrationRunner("sqlite:///./test.db")._is_async() is False
+    @pytest.mark.parametrize("url", [
+        "postgresql://host/db",
+        "sqlite:///./test.db",
+        "mysql://host/db",
+        "postgresql+psycopg2://host/db",
+    ])
+    def test_is_async_sync_drivers(self, url):
+        assert MigrationRunner(url)._is_async() is False
 
     def test_get_config_no_alembic_raises(self, tmp_path):
         runner = _make_runner(tmp_path)
