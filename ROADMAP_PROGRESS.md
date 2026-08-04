@@ -7,7 +7,7 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 | Version | Focus | État | Progression |
 | :--- | :--- | :--- | :--- |
 | **V1** | Fondation Kernel | **Terminé** | 100% |
-| **V2** | Industrialisation | **Avancé** | 70% |
+| **V2** | Industrialisation | **Avancé** | 85% |
 | **V3** | Distribution | **Démarré** | 25% |
 | **V4** | Cloud Native | **Concept** | 5% |
 | **V5** | Intelligence Native | **Concept** | 0% |
@@ -39,15 +39,15 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 
 | Fonctionnalité | État | Localisation / Note |
 | :--- | :---: | :--- |
-| ExecutionMode.EPHEMERAL | ❌ | Non implémenté |
-| Warm Pool Plugins | ❌ | Non implémenté |
+| ExecutionMode.EPHEMERAL | ✅ | `xcore/kernel/runtime/ephemeral_handler.py` + `EphemeralActivator` |
+| Warm Pool Plugins | ✅ | `xcore/kernel/runtime/warm_pool.py` (idle sweeper, semaphore, cold boot) |
 | Schema Registry | ✅ | `xcore/kernel/schema/registry.py` |
 | Validation automatique des contrats | ✅ | `xcore/kernel/schema/checker.py` |
-| OpenTelemetry complet | ⚠️ | Base présente dans `tracing.py`, stubs à lier |
-| Tracing distribué | ⚠️ | Middleware `TracingMiddleware` prêt |
-| Métriques Prometheus | ✅ | `xcore/kernel/observability/metrics.py` |
+| OpenTelemetry complet | ⚠️ | `tracing.py` = tracer maison noop, pas d'intégration OTel native |
+| Tracing distribué | ⚠️ | `TracingMiddleware` présent, backend noop |
+| Métriques Prometheus | ✅ | `xcore/kernel/observability/metrics.py` (wrapper + fallback memory) |
 | Plugin Registry privé | ✅ | `xcore/registry/index.py` |
-| Hot Cache avancé | ❌ | Services de cache basiques uniquement |
+| Hot Cache avancé | ⚠️ | `services/cache/` avec backends Redis + Memory, pas de TTL/LRU avancé |
 | Optimisations loader | ✅ | Tri topologique par vagues implémenté |
 
 ---
@@ -102,8 +102,12 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 - **Modularité (V1)** : Le cœur est extrêmement solide avec une isolation propre (Sandbox) et une gestion des dépendances par tri topologique.
 - **Contrats (V2)** : Le `SchemaRegistry` et le `BreakingChangeDetector` permettent déjà d'assurer la stabilité des APIs entre plugins.
 - **Tenancy (V3)** : Etonnamment, le multi-tenant est déjà bien intégré avec des wrappers pour la DB et le Cache, ce qui est normalement une feature plus tardive.
+- **Éphémère (V2)** : Le mode EPHEMERAL avec Warm Pool est pleinement fonctionnel (cold boot, idle sweeper, backpressure via semaphore).
+
+### Points d'Attention
+- **Code dupliqué** : `xcore/kernel/middlewares/` et `xcore/kernel/runtime/middlewares/` contiennent les mêmes fichiers. Le supervisor utilise `runtime/middlewares/`. L'autre dossier semble orphelin — à supprimer ou consolider.
 
 ### Chantiers Prioritaires
-1. **Observabilité (V2)** : Finaliser l'intégration native d'OpenTelemetry (actuellement en noop).
-2. **Éphémère (V2)** : Implémenter le mode d'exécution EPHEMERAL pour les fonctions Serverless-like.
+1. **Observabilité (V2)** : Finaliser l'intégration native d'OpenTelemetry (actuellement tracer maison noop).
+2. **Nettoyage code** : Supprimer `xcore/kernel/middlewares/` (doublon de `kernel/runtime/middlewares/`).
 3. **Distribution (V3)** : Commencer le clustering pour permettre la communication entre plusieurs instances XCore.

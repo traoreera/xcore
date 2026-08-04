@@ -530,3 +530,33 @@ class TestActivatorCoverage:
                 handler = await activator.activate(manifest, loader)
 
         assert handler._config is global_config
+
+    async def test_ephemeral_activator_uses_extra_manifest_config(self):
+        """Si le bloc `ephemeral:` est dans manifest.extra (PluginManifest), il est utilisé."""
+        from xcore.kernel.runtime.activator import EphemeralActivator
+
+        manifest = _manifest(pool_size=0)
+        manifest.ephemeral = None
+        # Le PluginManifest ne parse pas `ephemeral:` → il tombe dans extra
+        manifest.extra = {"ephemeral": {"pool_size": 4, "max_concurrent": 7}}
+
+        loader = MagicMock()
+        loader._config.strict_trusted = False
+        loader._ctx = _ctx()
+        loader._caller = None
+
+        mock_lm = _make_lm()
+
+        with patch("xcore.kernel.security.validation.ASTScanner") as mock_scanner_cls:
+            scanner = MagicMock()
+            scan_result = MagicMock()
+            scan_result.passed = True
+            scanner.scan.return_value = scan_result
+            mock_scanner_cls.return_value = scanner
+
+            with patch("xcore.kernel.runtime.lifecycle.LifecycleManager", return_value=mock_lm):
+                activator = EphemeralActivator()
+                handler = await activator.activate(manifest, loader)
+
+        assert handler._config.pool_size == 4
+        assert handler._config.max_concurrent == 7

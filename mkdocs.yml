@@ -79,6 +79,7 @@ nav:
       - Plugin Anatomy: plugins/plugin-anatomy.md
       - Trusted Plugins: plugins/trusted-plugins.md
       - Sandboxed Plugins: plugins/sandboxed-plugins.md
+      - Ephemeral Plugins: plugins/ephemeral-plugins.md
       - Events & Hooks: plugins/events-hooks.md
       - Permissions & Policies: plugins/permissions.md
   - Services:

@@ -1,26 +1,28 @@
 ---
 title: Execution Modes
-description: Comparison between Trusted and Sandboxed execution modes in Xcore.
+description: Comparison between Trusted, Sandboxed, and Ephemeral execution modes in Xcore.
 icon: material/shield-sync
 ---
 
 # Execution Modes
 
-Xcore supports two primary execution modes for plugins: **Trusted** and **Sandboxed**. The choice depends on the source of the plugin and the required level of performance versus security.
+Xcore supports three execution modes for plugins: **Trusted**, **Sandboxed**, and **Ephemeral**. The choice depends on the source of the plugin and the required level of performance, security, and isolation.
 
 ---
 
 ### Comparison Table
 
-| Feature | Trusted Mode | Sandboxed Mode |
-|---------|--------------|----------------|
-| **Process** | Main Process | Isolated Subprocess |
-| **Performance** | Native (Fast) | IPC Overhead (Medium) |
-| **Security** | None (Full Access) | High (Restricted) |
-| **Filesystem** | Full Access | Restricted (FilesystemGuard) |
-| **Imports** | All Python modules | Whitelisted modules only |
-| **Resource Limits** | Shared with App | CPU, Memory & Disk Quotas |
-| **Use Case** | Core business logic | 3rd-party, Untrusted, or Experimental |
+| Feature | Trusted Mode | Sandboxed Mode | Ephemeral Mode |
+|---------|--------------|----------------|----------------|
+| **Process** | Main Process | Isolated Subprocess | Main Process |
+| **Lifetime** | Persistent | Persistent | Per-call |
+| **Performance** | Native (Fast) | IPC Overhead (Medium) | Native (Fast) |
+| **Security** | None (Full Access) | High (Restricted) | None (Full Access) |
+| **State** | Persistent | Persistent | Stateless (zero) |
+| **Filesystem** | Full Access | Restricted (FilesystemGuard) | Full Access |
+| **Imports** | All Python modules | Whitelisted modules only | All Python modules |
+| **Resource Limits** | Shared with App | CPU, Memory & Disk Quotas | Bounded by WarmPool |
+| **Use Case** | Core business logic | 3rd-party, Untrusted, or Experimental | Serverless-style, hot reloads |
 
 ---
 
@@ -82,6 +84,29 @@ sequenceDiagram
 
 ---
 
+### Ephemeral Mode
+
+Ephemeral plugins run in the main process but are **created per call and destroyed right after**. No instance survives between two calls, giving zero implicit state, bounded memory, and per-call isolation — at near-native speed.
+
+This is the recommended mode for serverless-style actions and for plugins that are hot-reloaded frequently, since repeated reloads no longer leak memory.
+
+```yaml title="plugin.yaml"
+name: "image_processor"
+version: "1.0.0"
+execution_mode: "ephemeral"
+entry_point: "src/main.py"
+
+ephemeral:              # optional — falls back to plugins.ephemeral
+  pool_size: 2
+  max_idle_seconds: 60
+  max_concurrent: 10
+  boot_timeout: 5.0
+```
+
+See the [Ephemeral Plugins](../plugins/ephemeral-plugins.md) guide for the full lifecycle, configuration reference, and tuning advice.
+
+---
+
 ### Configuration
 
 #### Declaring Mode in `plugin.yaml`
@@ -98,7 +123,7 @@ resources:
   max_memory_mb: 256
 ```
 
-1.  Accepted values: `trusted` | `sandboxed`.
+1.  Accepted values: `trusted` | `sandboxed` | `ephemeral`. (`legacy` is deprecated.)
 
 ---
 
@@ -114,6 +139,10 @@ resources:
 !!! failure "DiskQuotaExceeded"
     If the `data/` directory exceeds `max_disk_mb`, the `SandboxProcessManager` will block further `call()` attempts.
     **Fix**: Clean up temporary files or increase the quota in `plugin.yaml`.
+
+!!! danger "Ephemeral: Boot Timeout"
+    If an ephemeral plugin's `on_load()` takes longer than `boot_timeout`, the instance boot fails.
+    **Fix**: Move heavy initialization out of `on_load()` or raise `boot_timeout` in the `ephemeral:` block.
 
 ---
 

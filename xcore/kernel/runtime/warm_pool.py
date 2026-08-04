@@ -19,14 +19,15 @@ Aucune mutation sans le lock — safe pour les appels concurrents.
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .lifecycle import LifecycleManager
 
-logger = logging.getLogger("xcore.runtime.warm_pool")
+from ..observability import get_logger
+
+logger = get_logger("xcore.runtime.warm_pool")
 
 
 class _PoolEntry:
@@ -103,7 +104,7 @@ class WarmPool:
     async def start(self) -> None:
         """Pré-charge pool_size instances. Appelé par EphemeralActivator au boot."""
         if self._pool_size <= 0:
-            logger.debug("[%s] warm pool désactivé (pool_size=0)", self._manifest.name)
+            logger.debug("warm pool desabled", plugin=self._manifest.name, pool_size=0)
             return
 
         boots = [self._boot_one() for _ in range(self._pool_size)]
@@ -113,16 +114,16 @@ class WarmPool:
         for r in results:
             if isinstance(r, Exception):
                 logger.warning(
-                    "[%s] warm pool : échec boot initial : %s",
-                    self._manifest.name,
-                    r,
+                    "warm pool échec boot initial",
+                    plugin=self._manifest.name,
+                    erreur=str(r),
                 )
 
         logger.info(
-            "[%s] warm pool prêt — %d/%d instance(s)",
-            self._manifest.name,
-            ok,
-            self._pool_size,
+            "warm pool prêt",
+            plugin=self._manifest.name,
+            ready=ok,
+            total=self._pool_size,
         )
 
         # Démarrage du worker de nettoyage idle
@@ -153,7 +154,7 @@ class WarmPool:
         # Tente de prendre depuis le pool sans bloquer
         try:
             entry = self._available.get_nowait()
-            logger.debug("[%s] warm pool hit", self._manifest.name)
+            logger.debug("warm pool hit", plugin=self._manifest.name)
             return entry.manager
         except asyncio.QueueEmpty:
             pass
@@ -182,7 +183,9 @@ class WarmPool:
             entry.touch()
             await self._available.put(entry)
             self._semaphore.release()
-            logger.debug("[%s] warm pool release → retour au pool", self._manifest.name)
+            logger.debug(
+                "warm pool release → retour au pool", plugin=self._manifest.name
+            )
         else:
             # Pool plein → décharge
             await self._safe_unload(mgr)
@@ -190,7 +193,7 @@ class WarmPool:
                 self._total -= 1
             self._semaphore.release()
             logger.debug(
-                "[%s] warm pool release → décharge (pool plein)", self._manifest.name
+                "warm pool release → décharge (pool plein)", plugin=self._manifest.name
             )
 
     async def discard(self, mgr: "LifecycleManager") -> None:
@@ -267,7 +270,7 @@ class WarmPool:
             raise
 
         self._cold_boot_count += 1
-        logger.debug("[%s] cold boot OK (total=%d)", self._manifest.name, self._total)
+        logger.debug("cold boot OK", plugin=self._manifest.name, total=self._total)
         return lm
 
     async def _safe_unload(self, mgr: "LifecycleManager") -> None:
@@ -276,9 +279,9 @@ class WarmPool:
             await mgr.unload()
         except Exception as e:
             logger.warning(
-                "[%s] erreur déchargement instance : %s",
-                self._manifest.name,
-                e,
+                "erreur déchargement instance",
+                plugin=self._manifest.name,
+                erreur=str(e),
             )
 
     # ── Worker de nettoyage idle ──────────────────────────────────────────────
@@ -323,16 +326,16 @@ class WarmPool:
                 async with self._lock:
                     self._total -= 1
                 logger.debug(
-                    "[%s] idle sweep : instance déchargée (idle=%.0fs)",
-                    self._manifest.name,
-                    entry.idle_seconds,
+                    "idle sweep : instance déchargée",
+                    plugin=self._manifest.name,
+                    idle_s=round(entry.idle_seconds),
                 )
 
             if to_discard:
                 logger.info(
-                    "[%s] idle sweep : %d instance(s) déchargée(s)",
-                    self._manifest.name,
-                    len(to_discard),
+                    "idle sweep : instances déchargées",
+                    plugin=self._manifest.name,
+                    count=len(to_discard),
                 )
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
@@ -361,9 +364,9 @@ class WarmPool:
             self._total = 0
 
         logger.info(
-            "[%s] warm pool arrêté (%d instance(s) déchargée(s))",
-            self._manifest.name,
-            count,
+            "warm pool arrêté",
+            plugin=self._manifest.name,
+            unloaded=count,
         )
 
     # ── Stats ─────────────────────────────────────────────────────────────────

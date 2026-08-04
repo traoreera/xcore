@@ -1,14 +1,17 @@
----
-title: Changelog
-icon: material/history
----
-
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.3.4] - 2026-08-04
+
+### Fixed
+- **warm_pool.py**: Replaced `logging.getLogger()` with `get_logger()` from `xcore.kernel.observability` to comply with project logging conventions. Converted all 11 logger calls from `%s` stdlib style to structured kwargs logging.
+
+### Documentation
+- **ROADMAP_PROGRESS.md**: Updated V2 progress from 70% to 85% — Ephemeral mode and Warm Pool were already implemented but marked as not done. Corrected status for Hot Cache (now ⚠️). Added "Points d'Attention" section noting duplicate `kernel/middlewares/` directory.
 
 ## [2.3.3] - 2026-06-08
 

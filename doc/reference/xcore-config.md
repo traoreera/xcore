@@ -48,6 +48,26 @@ Configuration for the plugin supervisor and loader.
 | `strict_trusted`| `bool`| `true` | Enforce signature check for Trusted plugins. |
 | `interval` | `int` | `2` | Polling interval (seconds) for hot-reload. |
 | `entry_point` | `str` | `"src/main.py"`| Default entry point filename. |
+| `ephemeral` | `dict` | *See below* | Default warm pool config for Ephemeral plugins. |
+
+#### `plugins.ephemeral`
+Global defaults for [Ephemeral plugins](../plugins/ephemeral-plugins.md). Applied to every ephemeral plugin that does not declare its own `ephemeral:` block in `plugin.yaml`.
+
+| Key | Type | Default | Description |
+|:--- | :--- | :--- | :--- |
+| `pool_size` | `int` | `0` | Warm instances pre-loaded at boot. `0` = cold boot per call. |
+| `max_idle_seconds` | `int` | `60` | Seconds before an idle instance is unloaded. |
+| `max_concurrent` | `int` | `10` | Max simultaneous instances (pool + cold boot). |
+| `boot_timeout` | `float` | `5.0` | Seconds allowed for a single instance boot. |
+
+```yaml
+plugins:
+  ephemeral:
+    pool_size: 2
+    max_idle_seconds: 60
+    max_concurrent: 10
+    boot_timeout: 5.0
+```
 
 ---
 
