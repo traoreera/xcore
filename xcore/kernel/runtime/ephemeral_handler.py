@@ -117,7 +117,7 @@ class EphemeralHandler:
                 await lm.unload()
 
         logger.info(
-            "plugin éphémère prêt",
+            "ephemeral plugin ready",
             plugin=self._manifest.name,
             pool_size=self._config.pool_size,
         )
@@ -125,7 +125,7 @@ class EphemeralHandler:
     async def stop(self) -> None:
         """Arrête le warm pool et décharge toutes les instances."""
         await self._pool.shutdown()
-        logger.info("plugin éphémère arrêté", plugin=self._manifest.name)
+        logger.info("ephemeral plugin stopped", plugin=self._manifest.name)
 
     # ── Appel ─────────────────────────────────────────────────────────────────
 
@@ -153,10 +153,10 @@ class EphemeralHandler:
             await self._pool.discard(mgr)
 
             logger.error(
-                "erreur appel éphémère",
+                "ephemeral call error",
                 plugin=self._manifest.name,
                 action=action,
-                erreur=str(e),
+                error=str(e),
             )
             raise
 
