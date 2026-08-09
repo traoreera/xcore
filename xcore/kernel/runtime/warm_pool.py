@@ -104,7 +104,11 @@ class WarmPool:
     async def start(self) -> None:
         """Pré-charge pool_size instances. Appelé par EphemeralActivator au boot."""
         if self._pool_size <= 0:
-            logger.debug("warm pool disabled (pool_size=0)", plugin=self._manifest.name, pool_size=0)
+            logger.debug(
+                "warm pool disabled (pool_size=0)",
+                plugin=self._manifest.name,
+                pool_size=0,
+            )
             return
 
         boots = [self._boot_one() for _ in range(self._pool_size)]
