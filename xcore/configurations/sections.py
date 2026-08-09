@@ -186,6 +186,7 @@ class SchedulerConfig:
     backend: str = "memory"  # memory | redis | database
     url: str = "redis://localhost:6379/0"
     timezone: str = "UTC"
+    misfire_grace_time: float = 60
     jobs: list[dict[str, Any]] = field(default_factory=list)
 
 

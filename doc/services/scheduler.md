@@ -121,7 +121,7 @@ services:
     backend: "memory"       # str — "memory" | "redis". Default: "memory"
     timezone: "UTC"         # str — Standard IANA timezone. Default: "UTC"
     url: ~                  # str — Required when backend is "redis"
-
+    misfire_grace_time: float # execution grace time+++
     jobs:                   # (1)!
       - id: "global_sync"
         func: "myapp.tasks:sync_data"

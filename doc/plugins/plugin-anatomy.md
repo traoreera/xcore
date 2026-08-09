@@ -111,6 +111,19 @@ extra:  # (2)!
 1.  Resolved from the host system's environment variables.
 2.  Available inside the plugin via `self.ctx.config`.
 
+#### 6. Ephemeral Settings
+Relevant only for `execution_mode: ephemeral`. Falls back to the global `plugins.ephemeral:` configuration.
+
+```yaml linenums="36"
+ephemeral:
+  pool_size: 2           # warm instances pre-loaded at boot
+  max_idle_seconds: 60   # unload idle instances after 60s
+  max_concurrent: 10     # max simultaneous instances
+  boot_timeout: 5.0      # seconds allowed for one boot
+```
+
+See the [Ephemeral Plugins](./ephemeral-plugins.md) guide for details.
+
 ---
 
 ### Manifest Reference
@@ -120,10 +133,11 @@ extra:  # (2)!
 | `name` | `str` | **Required** | Unique identifier for the plugin. |
 | `version` | `str` | **Required** | Plugin version (SemVer). |
 | `framework_version`| `str` | `"*"` | Minimum Xcore version required. |
-| `execution_mode` | `str` | `"legacy"` | `trusted` or `sandboxed`. |
+| `execution_mode` | `str` | `"legacy"` | `trusted`, `sandboxed`, or `ephemeral`. |
 | `entry_point` | `str` | `"src/main.py"` | Path to the file containing `class Plugin`. |
 | `requires` | `list` | `[]` | List of dependency objects (name + version). |
 | `permissions` | `list` | `[]` | Explicit permissions for services and IPC. |
+| `ephemeral` | `dict` | `{}` | Warm pool settings (only for `execution_mode: ephemeral`). |
 | `extra` | `dict` | `{}` | Arbitrary configuration parameters. |
 
 ---

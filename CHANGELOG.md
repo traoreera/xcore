@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-08-04
+
+### Added
+- **Ephemeral documentation**: New `doc/plugins/ephemeral-plugins.md` guide covering what Ephemeral mode is, when to use it, the warm pool lifecycle, configuration (per-plugin + global), plugin authoring, monitoring, and tuning advice. Registered in `mkdocs.yml`. Updated `execution-modes.md` (3-mode comparison table + Ephemeral section), `plugin-anatomy.md` (manifest reference), and `xcore-config.md` (`plugins.ephemeral` section).
+
+### Fixed
+- **Ephemeral per-plugin config**: `EphemeralActivator` now reads the `ephemeral:` block from `manifest.extra` when the manifest has no `ephemeral` attribute (the SDK's `PluginManifest` does not parse it as a field). Per-plugin config in `plugin.yaml` now works as documented, with global fallback preserved.
+- **warm_pool.py**: Replaced `logging.getLogger()` with `get_logger()` from `xcore.kernel.observability` to comply with project logging conventions. Converted all 11 logger calls from `%s` stdlib style to structured kwargs logging.
+
+### Documentation
+- **ROADMAP_PROGRESS.md**: Updated V2 progress from 70% to 85% — Ephemeral mode and Warm Pool were already implemented but marked as not done. Corrected status for Hot Cache (now ⚠️). Added "Points d'Attention" section noting duplicate `kernel/middlewares/` directory.
+
 ## [2.3.3] - 2026-06-08
 
 ### Added

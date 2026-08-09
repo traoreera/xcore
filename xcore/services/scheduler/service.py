@@ -153,7 +153,7 @@ class SchedulerService(BaseService):
             job_defaults={
                 "coalesce": True,  # fusionne les déclenchements manqués en un seul
                 "max_instances": 1,  # pas d'exécutions parallèles du même job
-                "misfire_grace_time": 60,
+                "misfire_grace_time": self._config.misfire_grace_time,
             },
             timezone=self._config.timezone,
         )

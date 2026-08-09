@@ -139,6 +139,11 @@ class EphemeralActivator(PluginActivator):
 
         # Résolution de la config : manifest > global > défaut
         eph_raw = getattr(manifest, "ephemeral", None)
+        if eph_raw is None:
+            # Le PluginManifest ne parse pas le bloc `ephemeral:` → il est dans extra
+            extra = getattr(manifest, "extra", {})
+            if isinstance(extra, dict):
+                eph_raw = extra.get("ephemeral")
         if isinstance(eph_raw, dict):
             config = EphemeralConfig.from_dict(eph_raw)
         elif isinstance(eph_raw, EphemeralConfig):
