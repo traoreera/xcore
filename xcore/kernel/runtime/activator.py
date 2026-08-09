@@ -89,7 +89,7 @@ class SandboxedActivator(PluginActivator):
         )
 
         if not scan.passed:
-            raise ValueError(f"[{manifest.name}] Scan AST échoué : {scan}")
+            raise ValueError(f"[{manifest.name}] AST Scan failed: {scan}")
 
         mgr = SandboxProcessManager(manifest=manifest, ctx=loader)
         await mgr.start()
@@ -135,7 +135,7 @@ class EphemeralActivator(PluginActivator):
             entry_point=manifest.entry_point,
         )
         if not scan.passed:
-            logger.warning(f"[{manifest.name}] Scan AST (non bloquant) : {scan}")
+            logger.warning(f"[{manifest.name}] AST Scan (non-blocking): {scan}")
 
         # Résolution de la config : manifest > global > défaut
         eph_raw = getattr(manifest, "ephemeral", None)
@@ -161,7 +161,7 @@ class EphemeralActivator(PluginActivator):
         await handler.start()
 
         logger.info(
-            "plugin éphémère activé",
+            "ephemeral plugin activated",
             plugin=manifest.name,
             pool_size=config.pool_size,
             max_conc=config.max_concurrent,

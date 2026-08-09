@@ -20,13 +20,13 @@ class Middlewares:
         for mddw in self._config:
             if not mddw.module:
                 logger.warning(
-                    "Middleware '%s' ignoré : module non spécifié", mddw.name
+                    "Middleware '%s' ignored: module not specified", mddw.name
                 )
                 continue
             parts = mddw.module.split(":")
             if len(parts) != 2:
                 logger.warning(
-                    "Middleware '%s' ignoré : format module invalide (attendu 'pkg.mod:Class')",
+                    "Middleware '%s' ignored: invalid module format (expected 'pkg.mod:Class')",
                     mddw.name,
                 )
                 continue
@@ -35,7 +35,7 @@ class Middlewares:
                 cls = getattr(mod, parts[1])
             except (ImportError, AttributeError) as exc:
                 logger.error(
-                    "Middleware '%s' : impossible de charger '%s' — %s",
+                    "Middleware '%s': impossible to load '%s' — %s",
                     mddw.name,
                     mddw.module,
                     exc,
@@ -67,4 +67,4 @@ class Middlewares:
             return
         for mdw in self._build_instances(logger=logger):
             app.add_middleware(mdw["cls"], **mdw["config"])
-            logger.info("Middleware '%s' ajouté (%s)", mdw["name"], mdw["cls"].__name__)
+            logger.info("Middleware '%s' added (%s)", mdw["name"], mdw["cls"].__name__)

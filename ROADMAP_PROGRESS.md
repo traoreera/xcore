@@ -1,23 +1,23 @@
-# 🗺️ État d'avancement de la Roadmap XCore
+# 🗺️ XCore Roadmap Progress
 
-Ce document présente l'état actuel du framework XCore par rapport aux objectifs définis dans la roadmap (V1 à V5).
+This document outlines the current state of the XCore framework relative to the goals defined in the V1 to V5 roadmap.
 
-## 📊 Résumé Global
+## 📊 Global Summary
 
-| Version | Focus | État | Progression |
+| Version | Focus | State | Progress |
 | :--- | :--- | :--- | :--- |
-| **V1** | Fondation Kernel | **Terminé** | 100% |
-| **V2** | Industrialisation | **Avancé** | 85% |
-| **V3** | Distribution | **Démarré** | 25% |
-| **V4** | Cloud Native | **Concept** | 5% |
-| **V5** | Intelligence Native | **Concept** | 0% |
+| **V1** | Kernel Foundation | **Completed** | 100% |
+| **V2** | Industrialization | **Advanced** | 85% |
+| **V3** | Distribution | **Started** | 25% |
+| **V4** | Cloud Native | **Conceptual** | 5% |
+| **V5** | AI Native Intelligence | **Conceptual** | 0% |
 
 ---
 
-## 🚀 V1 — Fondation du Kernel
-**Objectif : Construire un framework plugin-first solide.**
+## 🚀 V1 — Kernel Foundation
+**Goal: Build a solid plugin-first framework.**
 
-| Fonctionnalité | État | Localisation / Note |
+| Feature | State | Location / Note |
 | :--- | :---: | :--- |
 | Plugin Loader | ✅ | `xcore/kernel/runtime/loader.py` |
 | Lifecycle Manager | ✅ | `xcore/kernel/runtime/lifecycle.py` |
@@ -25,89 +25,85 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 | Plugin Manifest (`plugin.yaml`) | ✅ | `xcore/kernel/security/validation.py` |
 | Trusted Plugins | ✅ | `xcore/kernel/runtime/activator.py` |
 | Sandbox Plugins | ✅ | `xcore/kernel/sandbox/` |
-| IPC interne | ✅ | `xcore/kernel/sandbox/ipc.py` |
+| Internal IPC | ✅ | `xcore/kernel/sandbox/ipc.py` |
 | Event Bus (XBus) | ✅ | `xcore/kernel/events/bus.py` |
-| Configuration centralisée | ✅ | `xcore/configurations/` |
-| Permissions système | ✅ | `xcore/kernel/permissions/` |
-| Hooks et Middleware | ✅ | `xcore/kernel/runtime/middlewares/` |
-| Scanner de sécurité AST | ✅ | `xcore/kernel/security/validation.py` |
+| Centralized Configuration | ✅ | `xcore/configurations/` |
+| System Permissions | ✅ | `xcore/kernel/permissions/` |
+| Hooks & Middleware | ✅ | `xcore/kernel/runtime/middlewares/` |
+| AST Security Scanner | ✅ | `xcore/kernel/security/validation.py` |
 
 ---
 
-## ⚡ V2 — Industrialisation
-**Objectif : Renforcer le runtime et préparer le distribué.**
+## ⚡ V2 — Industrialization
+**Goal: Harden the runtime and prepare for distributed architectures.**
 
-| Fonctionnalité | État | Localisation / Note |
+| Feature | State | Location / Note |
 | :--- | :---: | :--- |
-| ExecutionMode.EPHEMERAL | ✅ | `xcore/kernel/runtime/ephemeral_handler.py` + `EphemeralActivator` |
-| Warm Pool Plugins | ✅ | `xcore/kernel/runtime/warm_pool.py` (idle sweeper, semaphore, cold boot) |
+| ExecutionMode.EPHEMERAL | ✅ | `xcore/kernel/runtime/ephemeral_handler.py` |
+| Warm Pool Plugins | ✅ | `xcore/kernel/runtime/warm_pool.py` |
 | Schema Registry | ✅ | `xcore/kernel/schema/registry.py` |
-| Validation automatique des contrats | ✅ | `xcore/kernel/schema/checker.py` |
-| OpenTelemetry complet | ⚠️ | `tracing.py` = tracer maison noop, pas d'intégration OTel native |
-| Tracing distribué | ⚠️ | `TracingMiddleware` présent, backend noop |
-| Métriques Prometheus | ✅ | `xcore/kernel/observability/metrics.py` (wrapper + fallback memory) |
-| Plugin Registry privé | ✅ | `xcore/registry/index.py` |
-| Hot Cache avancé | ⚠️ | `services/cache/` avec backends Redis + Memory, pas de TTL/LRU avancé |
-| Optimisations loader | ✅ | Tri topologique par vagues implémenté |
+| Automatic Contract Validation | ✅ | `xcore/kernel/schema/checker.py` |
+| Full OpenTelemetry | ⚠️ | Base present in `tracing.py`, stubs to be linked |
+| Distributed Tracing | ⚠️ | Middleware `TracingMiddleware` ready |
+| Prometheus Metrics | ✅ | `xcore/kernel/observability/metrics.py` |
+| Private Plugin Registry | ✅ | `xcore/registry/index.py` |
+| Advanced Hot Cache | ⚠️ | Optimized TenantAwareCache, but single backend |
+| Loader Optimizations | ✅ | Topological sort by waves implemented |
 
 ---
 
 ## 🌐 V3 — Distribution
-**Objectif : Sortir du mono-processus.**
+**Goal: Scale out beyond a single process.**
 
-| Fonctionnalité | État | Localisation / Note |
+| Feature | State | Location / Note |
 | :--- | :---: | :--- |
-| Federation statique | ❌ | Non implémenté |
-| FederatedHandler | ❌ | Non implémenté |
-| Routage inter-nœuds | ❌ | Non implémenté |
-| Cluster IPC | ❌ | Non implémenté |
-| Distributed Event Bus | ❌ | Non implémenté |
-| Multi-tenancy complet | ✅ | `xcore/kernel/tenancy/` (Déjà très avancé) |
-| AgentBase IA | ❌ | Non implémenté |
-| Hot Reload Plugins | ✅ | `PluginLoader.reload` fonctionnel |
-| Service Hot-Swap | ⚠️ | Partiel via reload |
-| Circuit Breaker | ❌ | Non implémenté |
-| Failover | ❌ | Non implémenté |
+| Static Federation | ❌ | Not implemented |
+| FederatedHandler | ❌ | Not implemented |
+| Inter-node Routing | ❌ | Not implemented |
+| Cluster IPC | ❌ | Not implemented |
+| Distributed Event Bus | ❌ | Not implemented |
+| Comprehensive Multi-tenancy | ✅ | `xcore/kernel/tenancy/` (DB/Cache/Scheduler Wrappers) |
+| AgentBase IA | ❌ | Not implemented |
+| Hot Reload Plugins | ✅ | Functional via `PluginLoader.reload` |
+| Service Hot-Swap | ✅ | Partially supported via reload and dynamic Registry |
+| Circuit Breaker | ❌ | Not implemented |
+| Failover | ❌ | Not implemented |
 
 ---
 
 ## ☁️ V4 — Cloud Native Platform
-**Objectif : Transformer XCore en plateforme.**
+**Goal: Transform XCore into a full platform.**
 
-| Fonctionnalité | État | Localisation / Note |
+| Feature | State | Location / Note |
 | :--- | :---: | :--- |
-| Marketplace publique | ⚠️ | Client de base présent (`xcore/marketplace/`) |
-| Cluster Manager | ❌ | Prévu |
-| Auto-scaling | ❌ | Prévu |
-| Plugin Store | ❌ | Prévu |
-| XCore Hub | ❌ | Prévu |
+| Public Marketplace | ⚠️ | Basic client present (`xcore/marketplace/`) |
+| Cluster Manager | ❌ | Planned |
+| Auto-scaling | ❌ | Planned |
+| Plugin Store | ❌ | Planned |
+| XCore Hub | ❌ | Planned |
 
 ---
 
-## 🤖 V5 — Intelligence Native
-**Objectif : Faire de XCore une plateforme IA-native.**
+## 🤖 V5 — AI Native Intelligence
+**Goal: Make XCore an AI-native platform.**
 
-| Fonctionnalité | État | Localisation / Note |
+| Feature | State | Location / Note |
 | :--- | :---: | :--- |
-| XMind intégré au kernel | ❌ | Concept |
-| Agents distribués | ❌ | Concept |
-| MCP Native | ❌ | Concept |
-| AI Service Discovery | ❌ | Concept |
+| Integrated Kernel XMind | ❌ | Conceptual |
+| Distributed Agents | ❌ | Conceptual |
+| Native MCP | ❌ | Conceptual |
+| AI Service Discovery | ❌ | Conceptual |
 
 ---
 
-## 🔍 Analyse Technique
+## 🔍 Technical Analysis (Update v2.3.2)
 
-### Points Forts
-- **Modularité (V1)** : Le cœur est extrêmement solide avec une isolation propre (Sandbox) et une gestion des dépendances par tri topologique.
-- **Contrats (V2)** : Le `SchemaRegistry` et le `BreakingChangeDetector` permettent déjà d'assurer la stabilité des APIs entre plugins.
-- **Tenancy (V3)** : Etonnamment, le multi-tenant est déjà bien intégré avec des wrappers pour la DB et le Cache, ce qui est normalement une feature plus tardive.
-- **Éphémère (V2)** : Le mode EPHEMERAL avec Warm Pool est pleinement fonctionnel (cold boot, idle sweeper, backpressure via semaphore).
+### Strengths
+- **Advanced Runtime (V2)**: Support for ephemeral plugins with Warm Pool is a major technical achievement, enabling minimal "cold start" latency.
+- **Security & Performance**: Recent optimizations on the EventBus and the permission engine have successfully reduced latency on the critical path.
+- **Tenancy (V3)**: Resource isolation (DB/Cache) per tenant is mature and fully validated by integration tests.
 
-### Points d'Attention
-- **Code dupliqué** : `xcore/kernel/middlewares/` et `xcore/kernel/runtime/middlewares/` contiennent les mêmes fichiers. Le supervisor utilise `runtime/middlewares/`. L'autre dossier semble orphelin — à supprimer ou consolider.
-
-### Chantiers Prioritaires
-1. **Observabilité (V2)** : Finaliser l'intégration native d'OpenTelemetry (actuellement tracer maison noop).
-2. **Nettoyage code** : Supprimer `xcore/kernel/middlewares/` (doublon de `kernel/runtime/middlewares/`).
-3. **Distribution (V3)** : Commencer le clustering pour permettre la communication entre plusieurs instances XCore.
+### High-Priority Workstreams
+1. **Clustering (V3)**: This is the missing technological leap. The framework must support inter-node communication (Cluster IPC).
+2. **Observability (V2)**: Move beyond Opentelemetry "stubs" to allow true end-to-end trace propagation in distributed environments.
+3. **Resilience (V3)**: Implement Circuit Breaker and Failover patterns for inter-plugin stability.
