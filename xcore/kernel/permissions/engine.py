@@ -145,7 +145,7 @@ class PermissionEngine:
                 action=action,
                 resource=resource,
             )
-        if self._events:
+        if emit_event and self._events:
             self._events.emit_sync(f"permission.{effect.value}", entry)
 
     def audit_log(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
