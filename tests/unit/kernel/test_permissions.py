@@ -84,3 +84,35 @@ class TestPermissionEngine:
         p1_log = engine.audit_log(plugin_name="p1", limit=3)
         assert len(p1_log) == 3
         assert all(e["plugin"] == "p1" for e in p1_log)
+
+    def test_cache_hit_event_emission_optimized(self):
+        class FakeEventBus:
+            def __init__(self):
+                self.emitted = []
+
+            def emit_sync(self, event_name: str, data: dict) -> None:
+                self.emitted.append((event_name, data))
+
+        events = FakeEventBus()
+        engine = PermissionEngine(events=events)
+        engine.load_from_manifest(
+            "p1", [{"resource": "db.*", "actions": ["read"], "effect": "allow"}]
+        )
+
+        # First call: cache miss, should emit an event
+        engine.check("p1", "db.users", "read")
+        assert len(events.emitted) == 1
+        assert events.emitted[0][0] == "permission.allow"
+
+        # Second call: cache hit, should NOT emit another event
+        engine.check("p1", "db.users", "read")
+        assert len(events.emitted) == 1
+
+        # Check allows first call (cache hit for db.users, but cache miss for db.posts)
+        assert engine.allows("p1", "db.posts", "read") is True
+        assert len(events.emitted) == 2
+        assert events.emitted[1][0] == "permission.allow"
+
+        # Check allows second call (cache hit for db.posts)
+        assert engine.allows("p1", "db.posts", "read") is True
+        assert len(events.emitted) == 2
