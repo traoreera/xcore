@@ -24,7 +24,7 @@ XCore intègre quatre piliers d'observabilité disponibles sans configuration : 
 
 ## 1. Logging structuré
 
-Le logger accepte des kwargs arbitraires comme champs contextuels. En mode `text` ils sont appendés en fin de ligne ; en mode `json` ils deviennent des champs JSON.
+Le logger accepte des kwargs arbitraires comme champs contextuels. En mode `text` ils sont ajoutés en fin de ligne ; en mode `json` ils deviennent des champs JSON.
 
 ```python linenums="1"
 class Plugin(TrustedBase):
