@@ -1,234 +1,175 @@
 ---
-title: Observabilité SDK
-description: Décorateurs et mixin pour le logging, métriques, tracing et health checks dans les plugins.
-icon: material/eye-outline
+title: Observability SDK
+description: Decorators and mixins for logging, metrics, tracing, and health checks in plugins.
+icon: material/eye
 ---
 
-# Observabilité SDK
+# Observability SDK
 
-Le SDK fournit des décorateurs déclaratifs et des propriétés directes sur `TrustedBase` pour instrumenter vos plugins sans boilerplate.
-
-```python
-from xcore.sdk import traced, counted, timed, health_check, ObservabilityMixin
-```
+The SDK provides declarative decorators and direct properties on `TrustedBase` to instrument your plugins without boilerplate.
 
 ---
 
-## Propriétés TrustedBase
+## Direct Properties
 
-Tout plugin héritant de `TrustedBase` dispose de ces propriétés sans aucune configuration :
+Any plugin inheriting from `TrustedBase` has access to these properties without any configuration:
 
-| Propriété | Type | Description |
+| Property | Type | Description |
 |-----------|------|-------------|
-| `self.logger` | `XcoreLogger` | Logger structuré namespaced `xcore.plugin.<nom>` |
-| `self.metrics` | `MetricsRegistry` | Registry de métriques |
-| `self.tracer` | `Tracer` | Tracer pour les spans |
-| `self.health` | `HealthChecker` | Registre de health checks |
+| `self.logger` | `XcoreLogger` | Structured logger bound to the plugin namespace |
+| `self.metrics` | `MetricsRegistry` | Metrics registry |
+| `self.tracer` | `Tracer` | Tracer for spans |
+| `self.health` | `HealthChecker` | Health checks registry |
+
+---
+
+## 1. Structured Logging
+
+Structured logger — accepts arbitrary kwargs as contextual fields.
 
 ```python linenums="1"
 class Plugin(TrustedBase):
     async def handle(self, action, payload):
-        self.logger.info("action reçue", action=action)
-        self.metrics.counter("calls_total", labels={"plugin": "shop"}).inc()
-
-        with self.tracer.span("process") as span:
-            span.set_attribute("action", action)
-            result = await self._process(payload)
-
-        return ok(result=result)
+        self.logger.info("action executed", action=action, user_id=payload.get("user_id"))
 ```
 
----
-
-## self.logger
-
-Logger structuré — accepte des kwargs arbitraires comme champs contextuels.
-
-```python linenums="1"
-self.logger.info("commande créée", order_id="ORD-42", tenant="acme")
-self.logger.warning("stock faible", produit="SKU-99", quantité=3)
-self.logger.error("paiement échoué", raison="fonds insuffisants", code=402)
-self.logger.debug("cache hit", clé="user:123", ttl_restant=240)
-```
-
-En dehors d'un plugin, utiliser `get_logger` directement :
+Outside of a plugin, use `get_logger` directly:
 
 ```python
-from xcore.sdk import get_logger
-
-logger = get_logger("mon_module")
-logger.info("démarrage", version="1.0")
+from xcore.kernel.observability import get_logger
+logger = get_logger("my_namespace")
 ```
 
 ---
 
-## @traced
+## 2. Tracing Decorator
 
-Enveloppe une méthode dans un span de tracing. Sans effet si `self.tracer` est `None`.
+Wraps a method in a tracing span. No-op if `self.tracer` is `None`.
 
 ```python linenums="1"
 from xcore.sdk import traced
 
-@traced("get_user")
-async def get_user(self, payload: dict) -> dict:
-    user = await self.db.fetch_one("SELECT * FROM users WHERE id = :id", {"id": payload["id"]})
-    return ok(user=user)
+class Plugin(TrustedBase):
+    @traced("process_payment")
+    async def process(self, payload: dict):
+        ...
 ```
 
-En cas d'exception, le span est marqué `status="error"` avant que l'exception soit relancée.
+If an exception occurs, the span is marked as `status="error"` before the exception is re-raised.
 
-**Paramètres**
-
-| Nom | Type | Défaut | Description |
-|-----|------|--------|-------------|
-| `span_name` | `str \| None` | nom de la fonction | Nom du span dans le tracer |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `span_name` | `str \| None` | function name | Name of the span in the tracer |
 
 ---
 
-## @counted
+## 3. Metrics Decorators
 
-Incrémente un counter après chaque appel réussi. Sans effet si `self.metrics` est `None`.
+### `@counted`
+
+Increments a counter after each successful call. No-op if `self.metrics` is `None`.
 
 ```python linenums="1"
 from xcore.sdk import counted
 
-@counted("shop_orders_created_total", labels={"type": "standard"})
-async def create_order(self, payload: dict) -> dict:
-    ...
+class Plugin(TrustedBase):
+    @counted("payment_processed_total")
+    async def process(self, payload: dict):
+        ...
 ```
 
-**Paramètres**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metric_name` | `str` | — | Name of the counter in `self.metrics` |
 
-| Nom | Type | Défaut | Description |
-|-----|------|--------|-------------|
-| `metric_name` | `str` | — | Nom du counter dans `self.metrics` |
-| `labels` | `dict \| None` | `None` | Labels Prometheus |
+### `@timed`
 
----
-
-## @timed
-
-Enregistre la durée d'exécution dans un histogram. Sans effet si `self.metrics` est `None`.
+Records the execution duration in a histogram. No-op if `self.metrics` is `None`.
 
 ```python linenums="1"
 from xcore.sdk import timed
 
-@timed("shop_search_duration_seconds")
-async def search(self, payload: dict) -> dict:
-    results = await self.db.fetch_all("SELECT ...")
-    return ok(results=results)
+class Plugin(TrustedBase):
+    @timed("payment_duration_seconds")
+    async def process(self, payload: dict):
+        ...
 ```
 
-La durée est mesurée de l'entrée de la méthode au retour, incluant toute attente I/O.
+The duration is measured from method entry to exit, including any awaited I/O.
 
-**Paramètres**
-
-| Nom | Type | Description |
-|-----|------|-------------|
-| `metric_name` | `str` | Nom de l'histogram dans `self.metrics` |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `metric_name` | `str` | — | Name of the histogram in `self.metrics` |
 
 ---
 
-## @health_check
+## 4. Health Checks Decorator
 
-Marque une méthode comme health check. La méthode doit retourner `(bool, str)`.
+Marks a method as a health check. The method must return `(bool, str)`.
 
 ```python linenums="1"
 from xcore.sdk import health_check
 
-@health_check("shop.payment_gateway")
-async def check_gateway(self) -> tuple[bool, str]:
-    try:
-        await self._ping_gateway()
+class Plugin(TrustedBase):
+    @health_check("shop.inventory")
+    async def check_inventory(self) -> tuple[bool, str]:
+        # Return status and descriptive message
         return True, "ok"
-    except Exception as e:
-        return False, str(e)
-
-@health_check("shop.db")
-async def check_db(self) -> tuple[bool, str]:
-    try:
-        await self.get_service("db").execute("SELECT 1")
-        return True, "ok"
-    except KeyError:
-        return False, "service 'db' absent"
 ```
 
-Les checks sont enregistrés automatiquement dans `self.ctx.health` au `on_load()` via `ObservabilityMixin`.
+Checks are registered automatically in `self.ctx.health` during `on_load()` via `ObservabilityMixin`.
 
-**Paramètres**
-
-| Nom | Type | Description |
-|-----|------|-------------|
-| `check_name` | `str` | Identifiant exposé dans `GET /ipc/health` |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `check_name` | `str` | — | Identifier exposed in `GET /ipc/health` |
 
 ---
 
-## ObservabilityMixin
+## `ObservabilityMixin`
 
-Composé automatiquement par `AutoMixin`. Fournit :
+Provides:
 
-- Enregistrement automatique de tous les `@health_check` au `on_load()`
-- Désenregistrement automatique au `on_unload()`
+- Automatic registration of all `@health_check` methods during `on_load()`
+- Injection of `self.logger`, `self.metrics`, `self.tracer`, and `self.health`
 
-Sans `AutoMixin`, hériter explicitement :
-
-```python linenums="1"
+```python
 from xcore.sdk import ObservabilityMixin
-from xcore import TrustedBase
 
 class Plugin(ObservabilityMixin, TrustedBase):
-
-    @health_check("my_plugin.db")
-    async def check_db(self) -> tuple[bool, str]:
-        ...
-
-    async def handle(self, action, payload):
-        self.logger.info("handling", action=action)
-        return ok()
+    pass
 ```
 
 ---
 
-## Combinaison de décorateurs
+## Decorator Combination
 
-Les décorateurs se combinent. L'ordre recommandé : `@traced` → `@counted` → `@timed` (de l'extérieur vers l'intérieur).
+Decorators can be combined. Recommended order: `@traced` → `@counted` → `@timed` (from outside to inside).
 
 ```python linenums="1"
-from xcore.sdk import traced, counted, timed
-
 class Plugin(TrustedBase):
-
-    @traced("process_order")
-    @counted("shop_orders_processed_total", labels={"status": "success"})
-    @timed("shop_order_processing_seconds")
-    async def process_order(self, payload: dict) -> dict:
-        self.logger.info("traitement commande", order_id=payload["id"])
-
-        with self.tracer.span("validate") as span:
-            span.set_attribute("items", len(payload["items"]))
-            await self._validate(payload)
-
-        result = await self._persist(payload)
-        self.metrics.gauge("shop_pending_orders", labels={"region": "eu"}).dec()
-        return ok(result=result)
+    @traced("process_payment")
+    @counted("payment_processed_total")
+    @timed("payment_duration_seconds")
+    async def process(self, payload: dict):
+        ...
 ```
 
 ---
 
-## Accès direct aux métriques
+## Advanced Usage
 
-Pour des opérations non couvertes par les décorateurs :
+For operations not covered by decorators:
 
 ```python linenums="1"
-# Counter avec labels dynamiques
+# Counter with dynamic labels
 self.metrics.counter(
-    "shop_api_calls_total",
-    labels={"endpoint": action, "status": "ok"}
+    "shop_orders_total",
+    labels={"payment_type": "stripe"}
 ).inc()
 
-# Gauge — file d'attente
-self.metrics.gauge("shop_queue_size", labels={"queue": "emails"}).set(len(queue))
+# Gauge — queue size
+self.metrics.gauge("shop_queue_size").set(42)
 
-# Histogram — taille des réponses
-self.metrics.histogram("shop_response_bytes").observe(len(str(result)))
+# Histogram — response size
+self.metrics.histogram("shop_response_bytes").observe(1024)
 ```

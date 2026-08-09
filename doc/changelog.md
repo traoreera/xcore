@@ -55,20 +55,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **database/session** : Connexion échouait silencieusement car la session n'était pas vérifiée avant utilisation. Ajout d'une vérification explicite de l'état de session (`is_active`) avant chaque opération, avec reconnexion automatique si la session est expirée ou fermée.
-- **database/async_sql** : `pool_pre_ping=True` levait `ping() missing 1 required positional argument: 'reconnect'` avec le driver `aiomysql`. Le pre-ping est désormais désactivé automatiquement pour `aiomysql` et `cymysql`, compensé par un event listener pessimiste (`engine_connect`) et `pool_recycle`.
-- **database/async_sql** : Gestion des connexions mortes améliorée — les erreurs `OperationalError` et `DisconnectionError` lors d'un rollback sont maintenant capturées et loggées sans planter le worker.
-- **database/_utils** : Les paramètres `read_timeout` et `write_timeout` sont exclusifs à `pymysql`. `sanitize_connect_args()` les filtre désormais pour `aiomysql` avec un warning explicite, évitant une erreur silencieuse à la connexion.
-- **database/migrations** : `MigrationRunner._is_async()` ne reconnaissait pas les suffixes `+aiomysql` et `+asyncmy`, forçant le chemin synchrone sur des connexions async. Les deux drivers sont maintenant inclus dans `async_markers`.
-- **database/container** : La configuration `DatabaseConfig` n'exposait pas certains paramètres de production (`pool_timeout`, `pool_reset_on_return`, `connect_args`, `isolation_level`, `execution_options`). Ces champs sont désormais lus depuis `integration.yaml` et transmis aux adapters.
+- **database/session**: Connections were failing silently because the session was not verified before use. Added an explicit check on the session state (`is_active`) before each operation, with automatic reconnection if the session is expired or closed.
+- **database/async_sql**: `pool_pre_ping=True` raised `ping() missing 1 required positional argument: 'reconnect'` when using the `aiomysql` driver. Pre-ping is now disabled automatically for `aiomysql` and `cymysql`, and is compensated by a pessimistic event listener (`engine_connect`) and `pool_recycle`.
+- **database/async_sql**: Improved handling of dead connections — `OperationalError` and `DisconnectionError` errors during rollback are now caught and logged instead of crashing the worker.
+- **database/_utils**: The `read_timeout` and `write_timeout` parameters are exclusive to `pymysql`. `sanitize_connect_args()` now filters them out for `aiomysql` with an explicit warning, avoiding a silent connection error.
+- **database/migrations**: `MigrationRunner._is_async()` did not recognize the `+aiomysql` and `+asyncmy` suffixes, forcing the synchronous path on async connections. Both drivers are now included in `async_markers`.
+- **database/container**: The `DatabaseConfig` configuration did not expose certain production parameters (`pool_timeout`, `pool_reset_on_return`, `connect_args`, `isolation_level`, `execution_options`). These fields are now read from `integration.yaml` and passed to the adapters.
 
 ### Improved
 
-- **CI/CD** : Workflow `ci.yml` mis à jour — étape de coverage affinée, labels PR revus, workflow `pr.yml` ajouté pour valider le titre (conventional commits) et la taille des PRs.
-- **CI/CD** : Workflow `security.yml` — scan Bandit restreint aux dossiers existants (`xcore/`, `tests/`) pour éliminer les faux positifs sur `extensions/` et `plugins/`.
-- **Tests** : Correction du test `test_tenancy.py` — assertion alignée sur le comportement réel du `ContextVar` après reset.
-- **Documentation** : Refonte complète de la section CLI (`doc/cli/`) avec des guides détaillés pour l'installation, la configuration, les commandes `worker`, `plugin`, `sandbox`, `manager` et `migration`. Ajout de la référence API SDK (`doc/sdk/api/`).
-- **Observabilité** : `XcoreLogger` enrichi avec support structurel des champs contextuels ; `MetricsCollector` étendu avec backends `memory` et `prometheus` documentés.
+- **CI/CD**: Updated `ci.yml` workflow — refined the coverage step, reviewed PR labels, and added the `pr.yml` workflow to validate PR titles (conventional commits) and PR sizes.
+- **CI/CD**: `security.yml` workflow — restricted Bandit scans to existing folders (`xcore/`, `tests/`) to eliminate false positives on `extensions/` and `plugins/`.
+- **Tests**: Fixed `test_tenancy.py` test — aligned assertion with actual `ContextVar` behavior after reset.
+- **Documentation**: Complete overhaul of the CLI section (`doc/cli/`) with detailed guides for installation, configuration, and the `worker`, `plugin`, `sandbox`, `manager`, and `migration` commands. Added the SDK API reference (`doc/sdk/api/`).
+- **Observability**: Enriched `XcoreLogger` with structural support for contextual fields; extended `MetricsCollector` with documented `memory` and `prometheus` backends.
 
 ## [2.3.0] - 2026-05-14
 

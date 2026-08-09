@@ -1,21 +1,21 @@
 ## Description
 
-<!-- Décris brièvement le changement et pourquoi il est nécessaire. -->
+<!-- Briefly describe the change and why it is necessary. -->
 
-Closes #<!-- numéro de l'issue -->
+Closes #<!-- issue number -->
 
 ---
 
-## Type de changement
+## Type of Change
 
-<!-- Coche les cases qui s'appliquent -->
+<!-- Check the boxes that apply -->
 
 - [ ] 🐛 Bug fix
-- [ ] ✨ Nouvelle fonctionnalité
-- [ ] 🔌 Nouveau plugin
+- [ ] ✨ New feature
+- [ ] 🔌 New plugin
 - [ ] 📖 Documentation
 - [ ] ♻️ Refactoring
-- [ ] 🔒 Sécurité
+- [ ] 🔒 Security
 - [ ] ⚡ Performance
 - [ ] 🔧 CI / Configuration
 
@@ -23,27 +23,27 @@ Closes #<!-- numéro de l'issue -->
 
 ## Checklist
 
-- [ ] Mon code respecte le [style du projet](/docs/development/code-style.md)
-- [ ] J'ai ajouté des tests qui couvrent mes changements
-- [ ] Tous les tests existants passent (`make test`)
-- [ ] J'ai mis à jour la documentation si nécessaire
-- [ ] Le titre de la PR respecte le format Conventional Commits
+- [ ] My code complies with the [project style guide](/docs/development/code-style.md)
+- [ ] I have added tests that cover my changes
+- [ ] All existing tests pass (`make test`)
+- [ ] I have updated the documentation as needed
+- [ ] The PR title complies with Conventional Commits conventions
 
 ---
 
-## Comment tester
+## How to Test
 
-<!-- Décris les étapes pour tester ce changement localement -->
+<!-- Describe the steps to test this change locally -->
 
 ```bash
-# Exemple
+# Example
 poetry install
 uvicorn main:app --reload
-curl http://localhost:8000/app/mon_plugin/
+curl http://localhost:8000/app/my_plugin/
 ```
 
 ---
 
-## Screenshots (si applicable)
+## Screenshots (if applicable)
 
-<!-- Ajoute des captures d'écran si le changement affecte l'UI ou les routes -->
+<!-- Add screenshots if the change affects any UI or endpoints -->

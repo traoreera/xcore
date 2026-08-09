@@ -100,26 +100,26 @@ services:
       type: "redis"
       url: "redis://localhost:6379/1"
 ```
-Autre configuration possible en production
+Other possible configurations in production
 ```yaml linenums="1" title="xcore.yaml"
 services:
   databases:
 
     # ── MySQL / MariaDB (prod) ─────────────────────────────
     default:
-      type: sqlasync        # ou postgresql+aio
+      type: sqlasync        # or postgresql+aio
       url: mysql+aiomysql://user:pass@host:3306/db
       pool_size: 10
       max_overflow: 20
       pool_pre_ping: true
-      pool_recycle: 1800           # < wait_timeout MySQL (SHOW VARIABLES LIKE 'wait_timeout')
+      pool_recycle: 1800           # < MySQL wait_timeout (SHOW VARIABLES LIKE 'wait_timeout')
       pool_timeout: 30
       pool_reset_on_return: rollback
       isolation_level: READ COMMITTED
       connect_args:
-        connect_timeout: 10        # timeout TCP initial
-        read_timeout: 30           # timeout lecture réseau
-        write_timeout: 30          # timeout écriture réseau
+        connect_timeout: 10        # initial TCP timeout
+        read_timeout: 30           # network read timeout
+        write_timeout: 30          # network write timeout
         charset: utf8mb4
 
     # ── PostgreSQL (prod) ──────────────────────────────────
@@ -134,14 +134,14 @@ services:
       isolation_level: READ COMMITTED
       connect_args:
         command_timeout: 30
-        timeout: 10                # timeout connexion initiale
+        timeout: 10                # initial connection timeout
 
-    # ── SQLite (dev/test uniquement) ───────────────────────
+    # ── SQLite (dev/test only) ───────────────────────
     dev:
       type: sqlasync
       url: sqlite+aiosqlite:///./dev.db
       echo: true
-      # pool_recycle / pool_timeout ignorés pour SQLite
+      # pool_recycle / pool_timeout ignored for SQLite
 
 ```
 

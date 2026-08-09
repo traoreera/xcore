@@ -1,71 +1,71 @@
-# XCore — Connaissance complète pour agents IA
+# XCore — Complete Knowledge Base for AI Agents
 
-> Ce fichier est la source de vérité pour tout agent qui travaille sur XCore.
-> Il couvre l'architecture, les APIs, les patterns, les pièges et des exemples complets.
+> This file is the source of truth for any agent working on XCore.
+> It covers the architecture, APIs, patterns, gotchas, and complete examples.
 
 ---
 
-## 1. Vue d'ensemble rapide
+## 1. Quick Overview
 
-XCore est un **framework d'orchestration plugin-first** construit sur FastAPI.
-Il charge, isole et orchestre des **plugins** (modules Python) dans un environnement sécurisé.
+XCore is a **plugin-first orchestration framework** built on FastAPI.
+It loads, isolates, and orchestrates **plugins** (Python modules) in a secure, sandboxed environment.
 
 ```
 xcore/
-├── kernel/          # Runtime, permissions, sécurité, observabilité, events
+├── kernel/          # Runtime, permissions, security, observability, events
 ├── services/        # DB, Cache, Scheduler, Worker, DI container
-├── configurations/  # Loader YAML + dataclasses de config
-├── registry/        # Index des plugins connus
-├── marketplace/     # Client HTTP du store de plugins
-└── sdk/             # Shim de compatibilité → xcoresdk package
+├── configurations/  # YAML Loader + config dataclasses
+├── registry/        # Known plugins index
+├── marketplace/     # Plugin store HTTP client
+└── sdk/             # Compatibility shim → xcoresdk package
 ```
 
-**Commandes essentielles :**
+**Essential Commands:**
 ```bash
-poetry run xcli worker start api   # démarrer l'API
-make test                           # tests complets + coverage
+poetry run xcli worker start api   # start the API
+make test                           # full tests + coverage
 make lint-fix                       # black + isort
-poetry run pytest tests/ -x -q     # rapide
+poetry run pytest tests/ -x -q     # fast pytest run
 ```
 
-**Config principale :** `integration.yaml` (pas `xcore.yaml`)
+**Main Config:** `integration.yaml` (not `xcore.yaml`)
 
 ---
 
-## 2. Plugin — Structure minimale
+## 2. Plugin — Minimal Structure
 
 ```
-app/plugins/mon_plugin/
+app/plugins/my_plugin/
 ├── plugin.yaml
 └── src/
     └── main.py
 ```
 
-### plugin.yaml — champs complets
+### plugin.yaml — Complete Fields
 
 ```yaml
-name: mon-plugin
+name: my-plugin
 version: 1.2.0
 author: team
-description: Ce que fait ce plugin.
+description: What this plugin does.
 framework_version: ">=2.3"
 
-# OBLIGATOIRE : trusted | sandboxed | ephemeral
+# REQUIRED: trusted | sandboxed | ephemeral
 execution_mode: trusted
 
 entry_point: src/main.py
 
-# Variables d'environnement injectées dans le plugin
+# Environment variables injected into the plugin
 env:
   DATABASE_URL: "postgresql://..."
-  API_KEY: "${MY_API_KEY}"   # interpolation depuis les variables d'env système
+  API_KEY: "${MY_API_KEY}"   # interpolated from system env variables
 
-# Dépendances vers d'autres plugins (chargés avant celui-ci)
+# Dependencies on other plugins (loaded before this one)
 requires:
   - auth-plugin
   - billing-plugin
 
-# Permissions déclarées (OBLIGATOIRE pour accéder aux services)
+# Declared permissions (REQUIRED to access services)
 permissions:
   - resource: "db.*"
     actions: ["read", "write"]
@@ -80,7 +80,7 @@ permissions:
     actions: ["emit", "subscribe"]
     effect: allow
 
-# Limites de ressources (optionnel, défauts raisonnables)
+# Resource limits (optional, reasonable defaults)
 resources:
   timeout_seconds: 30
   max_memory_mb: 512
@@ -88,25 +88,25 @@ resources:
     calls: 100
     period_seconds: 60
 
-# Config spécifique au plugin (accessible via self.ctx.config)
+# Plugin-specific config (accessible via self.ctx.config)
 extra:
   my_setting: "value"
   max_items: 100
 ```
 
-### plugin.yaml — mode Ephemeral
+### plugin.yaml — Ephemeral Mode
 
 ```yaml
 execution_mode: ephemeral
 
 ephemeral:
-  pool_size: 4          # instances préchauffées (0 = cold boot pur)
-  max_idle_seconds: 120 # libère après X secondes d'inactivité
-  max_concurrent: 8     # parallélisme max (backpressure au-delà)
-  boot_timeout: 5.0     # timeout de chargement d'une instance
+  pool_size: 4          # pre-warmed instances (0 = pure cold boot)
+  max_idle_seconds: 120 # release after X seconds of inactivity
+  max_concurrent: 8     # max parallelism (backpressure beyond this)
+  boot_timeout: 5.0     # instance boot timeout
 ```
 
-### plugin.yaml — mode Sandboxed
+### plugin.yaml — Sandboxed Mode
 
 ```yaml
 execution_mode: sandboxed
@@ -114,20 +114,20 @@ execution_mode: sandboxed
 resources:
   timeout_seconds: 10
   max_memory_mb: 256
-  max_disk_mb: 100      # quota disque pour le subprocess
+  max_disk_mb: 100      # disk quota for the subprocess
 ```
 
 ---
 
-## 3. Plugin — Code complet
+## 3. Plugin — Complete Code
 
-### Import minimal
+### Minimal Import
 
 ```python
 from xcore.sdk import TrustedBase, ok, error
 ```
 
-### Classe de base
+### Base Class
 
 ```python
 # src/main.py
@@ -147,30 +147,30 @@ class Plugin(TrustedBase):
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
     async def on_load(self):
-        """Appelé une fois au démarrage. Initialiser les services ici."""
+        """Called once upon boot. Initialize services here."""
         self.db = self.get_service("db")
         self.cache = self.get_service("cache")
-        self.logger.info("plugin chargé", plugin=self.ctx.name)
+        self.logger.info("plugin loaded", plugin=self.ctx.name)
 
     async def on_reload(self):
-        """Appelé après un hot-reload."""
+        """Called after a hot reload."""
         await self.on_load()
 
     async def on_unload(self):
-        """Appelé à l'arrêt."""
-        self.logger.info("plugin arrêté")
+        """Called upon shutdown."""
+        self.logger.info("plugin stopped")
 
-    # ── Action principale ─────────────────────────────────────────────────────
+    # ── Main Action Handler ──────────────────────────────────────────────────
 
     async def handle(self, action: str, payload: dict) -> dict:
         if action == "ping":
             return ok(msg="pong")
         if action == "create_user":
             return await self._create_user(payload)
-        return error(f"Action inconnue : {action}", "unknown_action")
+        return error(f"Unknown action: {action}", "unknown_action")
 ```
 
-### Réponses standardisées
+### Standardized Responses
 
 ```python
 from xcore.sdk import ok, error
@@ -180,12 +180,12 @@ return ok(data={"id": 1})               # {"status": "ok", "data": {"id": 1}}
 return ok(user_id=42, name="Alice")     # {"status": "ok", "user_id": 42, "name": "Alice"}
 
 return error("message")                 # {"status": "error", "msg": "message"}
-return error("non trouvé", "not_found") # {"status": "error", "msg": "...", "code": "not_found"}
+return error("not found", "not_found")  # {"status": "error", "msg": "...", "code": "not_found"}
 ```
 
 ---
 
-## 4. SDK — Tous les décorateurs
+## 4. SDK — All Decorators
 
 ### @action + AutoDispatchMixin
 
@@ -193,7 +193,7 @@ return error("non trouvé", "not_found") # {"status": "error", "msg": "...", "co
 from xcore.sdk import action, AutoDispatchMixin
 
 class Plugin(AutoDispatchMixin, TrustedBase):
-    # AutoDispatchMixin génère handle() automatiquement
+    # AutoDispatchMixin generates handle() automatically
 
     @action("greet")
     async def greet(self, payload: dict) -> dict:
@@ -204,28 +204,28 @@ class Plugin(AutoDispatchMixin, TrustedBase):
         return ok(msg="Goodbye")
 ```
 
-### @schema — Validation + versioning contrat
+### @schema — Validation + Contract Versioning
 
 ```python
 @action("create_user")
 @schema(
     version="2.0",
     input={
-        "email": (str, ...),       # requis
-        "role": (str, "user"),     # optionnel, défaut "user"
-        "age": (int, ...),         # requis
+        "email": (str, ...),       # required
+        "role": (str, "user"),     # optional, defaults to "user"
+        "age": (int, ...),         # required
     },
     output={"user_id": int, "created_at": str},
-    deprecated_fields={"username": "Supprimé en v2.0"},
+    deprecated_fields={"username": "Removed in v2.0"},
     breaking_since="2.0",
-    validate=True,           # valide le payload automatiquement
+    validate=True,           # automatically validate payload
     type_response="dict",    # "dict" | "model" (Pydantic)
 )
 async def create_user(self, payload: dict) -> dict:
     return ok(user_id=1, created_at="2026-01-01")
 ```
 
-### @route — Routes HTTP FastAPI
+### @route — FastAPI HTTP Routes
 
 ```python
 from xcore.sdk import route, RoutedPlugin
@@ -244,17 +244,17 @@ class Plugin(RoutedPlugin, TrustedBase):
     async def create_item(self, body: dict):
         return {"created": True}
 
-    @route("/admin", method="GET", permissions=["admin"])  # RBAC auto
+    @route("/admin", method="GET", permissions=["admin"])  # Auto RBAC
     async def admin_endpoint(self):
         return {"secret": True}
 
     async def handle(self, action, payload):
-        return error("action inconnue")
+        return error("unknown action")
 
-# Montées sous /plugins/<plugin_name><path>
+# Mounted under /plugins/<plugin_name><path>
 ```
 
-### @cron et @interval
+### @cron and @interval
 
 ```python
 from xcore.sdk import cron, interval, ScheduledMixin
@@ -278,7 +278,7 @@ class Plugin(ScheduledMixin, TrustedBase):
         ...
 ```
 
-### @on_event et @on_hook
+### @on_event and @on_hook
 
 ```python
 from xcore.sdk import on_event, on_hook, EventMixin, HookMixin, Event
@@ -313,7 +313,7 @@ from xcore.sdk import health_check, ObservabilityMixin
 
 class Plugin(ObservabilityMixin, TrustedBase):
 
-    @health_check("mon_plugin.db")
+    @health_check("my_plugin.db")
     async def check_db(self) -> tuple[bool, str]:
         try:
             await self.get_service("db").execute("SELECT 1")
@@ -321,7 +321,7 @@ class Plugin(ObservabilityMixin, TrustedBase):
         except Exception as e:
             return False, str(e)
 
-    @health_check("mon_plugin.api", kind="liveness")
+    @health_check("my_plugin.api", kind="liveness")
     async def check_internal(self) -> tuple[bool, str]:
         return True, "alive"
 ```
@@ -337,7 +337,7 @@ async def process(self, payload: dict) -> dict:
     ...
 ```
 
-### @cached et @invalidate
+### @cached and @invalidate
 
 ```python
 @action("get_user")
@@ -360,13 +360,13 @@ async def fetch_external(self, payload: dict) -> dict:
     ...
 ```
 
-### AutoMixin — Tout en un
+### AutoMixin — All-in-One
 
 ```python
 from xcore.sdk import AutoMixin
 
 class Plugin(AutoMixin):
-    """Combine AutoDispatchMixin + EventMixin + HookMixin +
+    """Combines AutoDispatchMixin + EventMixin + HookMixin +
        ObservabilityMixin + ScheduledMixin + RoutedPlugin"""
 
     @action("ping")
@@ -388,9 +388,9 @@ class Plugin(AutoMixin):
 
 ---
 
-## 5. Services — Accès depuis un plugin
+## 5. Services — Plugin-level Access
 
-### Accès aux services
+### Accessing Services
 
 ```python
 async def on_load(self):
@@ -399,10 +399,10 @@ async def on_load(self):
     self.mongo   = self.get_service("mongodb")        # MongoDBAdapter
     self.redis   = self.get_service("redisAdapter")   # RedisAdapter
     self.syncdb  = self.get_service("syncdb")         # SQLAdapter (sync)
-    svc          = self.get_service_as("mon_svc", MonService)  # typage explicite
+    svc          = self.get_service_as("my_svc", MyService)  # explicit typing
 ```
 
-### Base de données (AsyncSQL)
+### Databases (AsyncSQL)
 
 ```python
 await self.db.execute("CREATE TABLE IF NOT EXISTS items (id SERIAL PRIMARY KEY, name TEXT)")
@@ -422,11 +422,11 @@ async with self.db.session() as session:
 
 ```python
 await self.cache.set("key", {"data": "value"}, ttl=300)
-value = await self.cache.get("key")   # None si absent
+value = await self.cache.get("key")   # None if absent
 await self.cache.delete("key")
 ```
 
-### Scheduler programmatique (cas avancé)
+### Programmatic Scheduler (Advanced Use Cases)
 
 ```python
 scheduler = self.get_service("scheduler")
@@ -434,7 +434,7 @@ await scheduler.add_job(func=self._my_func, trigger="interval", seconds=60, job_
 await scheduler.remove_job("my_job")
 ```
 
-### Repository pattern
+### Repository Pattern
 
 ```python
 from xcore.sdk import BaseAsyncRepository
@@ -468,7 +468,7 @@ class Plugin(TrustedBase):
 from xcore.sdk import BaseRedisRepository
 
 class SessionRepo(BaseRedisRepository):
-    prefix = "session"   # toutes les clés : "session:<key>"
+    prefix = "session"   # all keys: "session:<key>"
 
     async def create(self, token: str, data: dict, ttl: int = 3600):
         await self.set(token, data, ttl=ttl)
@@ -484,16 +484,16 @@ class Plugin(TrustedBase):
 
 ---
 
-## 6. Créer un service custom
+## 6. Creating a Custom Service
 
-Il y a **deux méthodes** pour ajouter un service personnalisé dans XCore.
+There are **two ways** to add custom services to XCore.
 
 ---
 
-### Méthode 1 — Extension via integration.yaml (recommandée, sans code kernel)
+### Method 1 — Extension via integration.yaml (Recommended, Code-Free Core Modification)
 
-La plus simple. Déclarer le service dans `integration.yaml` sous `services.extensions`.
-XCore l'instancie, appelle `init()` et `shutdown()` automatiquement.
+The simplest approach. Declare the service under `services.extensions` in `integration.yaml`.
+XCore will instantiate it, call `init()`, and trigger `shutdown()` automatically.
 
 ```yaml
 # integration.yaml
@@ -514,7 +514,7 @@ services:
         webhook_secret: "${STRIPE_WEBHOOK_SECRET}"
 ```
 
-**Le service doit hériter de `BaseService` :**
+**The service must inherit from `BaseService`:**
 
 ```python
 # myapp/services/email.py
@@ -532,7 +532,7 @@ class EmailService(BaseService):
         self._client   = None
 
     async def init(self) -> None:
-        # Connexion / warmup
+        # Connection / warmup
         import aiosmtplib
         self._client = aiosmtplib.SMTP(
             hostname=self.smtp_host,
@@ -558,7 +558,7 @@ class EmailService(BaseService):
     def status(self) -> dict:
         return {"name": self.name, "status": self._status.value}
 
-    # Méthodes métier du service
+    # Custom business methods
     async def send(self, to: str, subject: str, body: str) -> None:
         from email.mime.text import MIMEText
         msg = MIMEText(body, "html")
@@ -568,29 +568,29 @@ class EmailService(BaseService):
         await self._client.sendmail(self.username, [to], msg.as_string())
 ```
 
-**Accès depuis un plugin :**
+**Accessing the Service from a Plugin:**
 
 ```python
 class Plugin(TrustedBase):
     async def on_load(self):
-        # Le nom d'accès est "ext.<nom_déclaré_dans_yaml>"
+        # Access name pattern is "ext.<declared_name>"
         self.email = self.get_service("ext.email")
 
     async def handle(self, action, payload):
         if action == "send_welcome":
             await self.email.send(
                 to=payload["email"],
-                subject="Bienvenue !",
-                body="<h1>Bonjour !</h1>",
+                subject="Welcome!",
+                body="<h1>Hello there!</h1>",
             )
             return ok()
 ```
 
 ---
 
-### Méthode 2 — ServiceProvider custom (injection dans le container)
+### Method 2 — Custom ServiceProvider (DI Container Injection)
 
-Pour un contrôle total sur l'initialisation, ou pour brancher plusieurs services d'un coup.
+For absolute control over initialization or to wire up multiple services simultaneously.
 
 ```python
 # myapp/providers.py
@@ -632,41 +632,41 @@ class MyCustomServiceProvider(BaseServiceProvider):
         api_key = container._config.extensions.get("my_custom", {}).get("config", {}).get("api_key")
         svc = MyCustomService(api_key=api_key)
         await svc.init()
-        # Enregistre sous le nom "my_custom" dans le container
+        # Register under name "my_custom" in the container
         container.register_service("my_custom", svc)
 ```
 
-**Brancher le provider au boot de l'app :**
+**Wiring up the Provider during Boot:**
 
 ```python
-# Dans le point d'entrée de l'app (avant container.init())
+# In the app entry point (prior to container.init())
 from myapp.providers import MyCustomServiceProvider
 container.add_provider(MyCustomServiceProvider())
 await container.init()
 ```
 
-**Ou enregistrement manuel direct (sans provider) :**
+**Or Register Directly (No Provider):**
 
 ```python
-# Pour les services légers qui n'ont pas besoin de lifecycle
+# Best for lightweight utilities lacking dynamic lifecycles
 container.register_service("feature_flags", FeatureFlagClient(url="..."))
 ```
 
 ---
 
-### Méthode 3 — Enregistrement depuis un plugin (service partagé entre plugins)
+### Method 3 — Registration from a Plugin (Inter-Plugin Shared Service)
 
-Un plugin peut enregistrer un service dans le container pour que d'autres plugins l'utilisent.
+A plugin can register a service directly into the shared container for other plugins to consume.
 
 ```python
 class Plugin(TrustedBase):
     async def on_load(self):
-        # Ce plugin expose son client HTTP pour les autres plugins
+        # Expose its custom HTTP client to the container
         from mylib import HttpClient
         client = HttpClient(base_url="https://api.example.com")
         await client.connect()
 
-        # Enregistre dans le container partagé
+        # Save to shared services
         self.ctx.services["http_client"] = client
 
     async def on_unload(self):
@@ -675,63 +675,63 @@ class Plugin(TrustedBase):
             await client.close()
 ```
 
-**Accès depuis un autre plugin :**
+**Consuming from another Plugin:**
 
 ```python
 class OtherPlugin(TrustedBase):
     async def on_load(self):
-        # Attend que le plugin qui expose le service soit chargé (via `requires`)
+        # Ensure the provider is loaded beforehand via `requires`
         self.http = self.get_service("http_client")
 ```
 
 ```yaml
-# plugin.yaml de OtherPlugin
+# plugin.yaml of OtherPlugin
 requires:
-  - mon-plugin-qui-expose-http  # garantit l'ordre de chargement
+  - my-http-provider-plugin  # guarantees load order
 ```
 
 ---
 
-### Contrat BaseService — résumé
+### BaseService Interface Contract Summary
 
 ```python
 from xcore.services.base import BaseService, ServiceStatus
 
-class MonService(BaseService):
-    name = "mon_service"   # nom affiché dans les logs et le status
+class MyService(BaseService):
+    name = "my_service"   # label shown in status lists and logs
 
     def __init__(self, config: dict):
-        super().__init__()  # initialise self._status = ServiceStatus.UNINITIALIZED
-        # stocker la config
+        super().__init__()  # sets self._status = ServiceStatus.UNINITIALIZED
+        # store configuration
 
     async def init(self) -> None:
-        # Connexion, warmup, vérification
-        # Obligatoire : mettre self._status = ServiceStatus.READY en fin
+        # Connect, warm up connections, perform handshakes
+        # Obligatory: update self._status to ServiceStatus.READY upon completion
         self._status = ServiceStatus.READY
 
     async def shutdown(self) -> None:
-        # Fermeture propre des connexions
+        # Gracefully sever connections
         self._status = ServiceStatus.STOPPED
 
     async def health_check(self) -> tuple[bool, str]:
-        # Retourne (True, "ok") ou (False, "message d'erreur")
+        # Return (True, "ok") or (False, "error description")
         return True, "ok"
 
     def status(self) -> dict:
-        # Dict affiché dans /status et les logs
+        # Dictionary rendered by /status and in logs
         return {"name": self.name, "status": self._status.value}
 
-# États disponibles dans ServiceStatus :
+# ServiceStatus State Machine values:
 # UNINITIALIZED → INITIALIZING → READY → DEGRADED → STOPPED → FAILED
 ```
 
 ---
 
-### Config dans integration.yaml pour les services
+### Service Configuration inside integration.yaml
 
 ```yaml
 services:
-  # BDD multiples — chaque entrée est un adaptateur distinct
+  # Multiple Databases — each entry defines a distinct adapter
   databases:
     default:
       type: postgresql+aio       # sqlite | postgresql | mysql | sqlite+aio | postgresql+aio | mongodb | redis
@@ -739,7 +739,7 @@ services:
       pool_size: 10
       max_overflow: 20
       pool_pre_ping: true
-      pool_recycle: 1800         # recycle avant que la BDD coupe (< wait_timeout MySQL)
+      pool_recycle: 1800         # recycle before DB severs (less than MySQL wait_timeout)
       pool_timeout: 30
       pool_reset_on_return: rollback   # "rollback" | "commit" | "none"
       echo: false
@@ -763,8 +763,8 @@ services:
   cache:
     backend: redis               # "memory" | "redis"
     url: "${REDIS_URL}"
-    ttl: 300                     # TTL par défaut en secondes
-    max_size: 1000               # taille max en mode memory
+    ttl: 300                     # default TTL in seconds
+    max_size: 1000               # max size for memory backend
 
   scheduler:
     enabled: true
@@ -795,10 +795,10 @@ services:
 
 ---
 
-### Accès aux BDD multiples depuis un plugin
+### Querying Multiple Databases in a Plugin
 
 ```yaml
-# plugin.yaml — permission sur une BDD nommée
+# plugin.yaml — explicit database resource wildcard
 permissions:
   - resource: "db.*"
     actions: ["read", "write"]
@@ -807,10 +807,10 @@ permissions:
 
 ```python
 async def on_load(self):
-    # BDD principale (premier adapter déclaré ou celui nommé "default")
+    # Primary DB (first declared adapter or key "default")
     self.db       = self.get_service("db")
 
-    # BDD nommées explicitement
+    # Named Database Adapters
     self.analytics = self.get_service("analytics")
     self.mongo     = self.get_service("mongo")
     self.redis     = self.get_service("redis_store")
@@ -818,24 +818,24 @@ async def on_load(self):
 
 ---
 
-## 7. Observabilité — APIs directes
+## 7. Observability — Core APIs
 
 ### Logger
 
 ```python
 from xcore.kernel.observability import get_logger
-logger = get_logger("xcore.mon_module")   # namespace obligatoire
+logger = get_logger("xcore.my_module")   # structured logger namespace required
 
-self.logger.info("message", champ="valeur", autre=42)
-self.logger.warning("attention", plugin="mon_plugin")
-self.logger.error("erreur", erreur=str(e))
-self.logger.debug("debug", payload=payload)
+self.logger.info("action performed", details="value", id=42)
+self.logger.warning("attention needed", plugin="my_plugin")
+self.logger.error("action failed", err=str(e))
+self.logger.debug("debug message", payload=payload)
 
-# INTERDIT
-import logging; logging.getLogger("mon_plugin")  # pas structuré, pas capturé
+# FORBIDDEN
+import logging; logging.getLogger("my_plugin")  # unstuctured, bypasses kernel logging hooks
 ```
 
-### Métriques
+### Metrics
 
 ```python
 self.metrics.counter("calls_total", labels={"plugin": "shop"}).inc()
@@ -857,7 +857,7 @@ with self.tracer.span("operation") as span:
 
 ---
 
-## 8. Appels inter-plugins
+## 8. Inter-Plugin Calls
 
 ```python
 result = await self.call_plugin("billing-plugin", "charge", {
@@ -904,8 +904,8 @@ tenancy:
   isolate_scheduler: false
 ```
 
-Le `tenant_id` vient du header `X-Tenant-ID` ou du sous-domaine.
-Les services DB/Cache/Scheduler prefixent automatiquement — **rien à faire dans le plugin**.
+The `tenant_id` is fetched automatically from the `X-Tenant-ID` header or request subdomain.
+Adapters automatically handle prefixing — **no tenant-aware logic required inside plugins**.
 
 ---
 
@@ -933,48 +933,48 @@ async def on_load(self):
 
 ---
 
-## 12. Modes d'exécution — différences clés
+## 12. Execution Modes Comparison
 
 | | `trusted` | `sandboxed` | `ephemeral` |
 |---|---|---|---|
-| Processus | In-process | Subprocess isolé | In-process (pool) |
-| Accès services | Direct `get_service()` | Via IPC JSON | Direct `get_service()` |
-| État persistant | Oui | Oui (subprocess) | **Non** (stateless) |
-| Sécurité | Moyenne | Haute | Moyenne |
-| Performance | Haute | Basse (IPC overhead) | Haute (warm pool) |
-| Cas d'usage | Services métier internes | Code tiers, UGC | Fonctions sans état |
+| Process Context | In-process | Isolated Subprocess | In-process (pooled) |
+| Service Access | Direct `get_service()` | JSON IPC bridge | Direct `get_service()` |
+| Persist State | Yes | Yes (subprocess) | **No** (stateless) |
+| Security | Medium | High | Medium |
+| Performance | High | Lower (IPC overhead) | High (warm pool) |
+| Target Use Cases | Core business domains | Untrusted/3rd-party code | Stateless VFs |
 
 ---
 
-## 13. Pièges critiques
+## 13. Critical Gotchas
 
 ```python
-# INTERDIT — logger standard, pas structuré
-import logging; logging.getLogger("mon_plugin")
+# FORBIDDEN — standard logger, lacks structured formats
+import logging; logging.getLogger("my_plugin")
 
-# INTERDIT — race condition multi-tenant
+# FORBIDDEN — multi-tenant race condition
 self.current_tenant = tenant_id
 
-# INTERDIT — bound method → pickle Redis échoue
+# FORBIDDEN — bound method → Redis serialization/pickle fails
 scheduler.add_job(self.my_method, ...)
 
-# CORRECT — scheduler via décorateur
+# CORRECT — scheduler decorator pattern
 @cron("0 3 * * *")
 async def nightly(self): ...
 
-# CORRECT — patch au niveau du module SOURCE dans les tests
+# CORRECT — patch the original SOURCE module inside test suites
 @patch("xcore.services.container.ServiceContainer.get")  # ✓
 @patch("xcore.ServiceContainer.get")                      # ✗
 
-# CORRECT — logger xcore
+# CORRECT — utilize structured logs
 from xcore.kernel.observability import get_logger
-logger = get_logger("xcore.mon_plugin")
-logger.info("action", user_id=42)  # kwargs structurés, jamais f-strings
+logger = get_logger("xcore.my_plugin")
+logger.info("action performed", user_id=42)  # kwargs, never f-strings
 ```
 
 ---
 
-## 14. Tests — patterns standards
+## 14. Testing Patterns
 
 ```python
 import pytest
@@ -990,11 +990,11 @@ def mock_db():
 
 @pytest.fixture
 async def plugin(mock_db):
-    from app.plugins.mon_plugin.src.main import Plugin
+    from app.plugins.my_plugin.src.main import Plugin
     p = Plugin()
     p._ctx = MagicMock()
     p._ctx.services = {"db": mock_db, "cache": AsyncMock()}
-    p._ctx.name = "mon-plugin"
+    p._ctx.name = "my-plugin"
     p._ctx.config = MagicMock()
     p._ctx.events = AsyncMock()
     p._ctx.tracer = MagicMock()
@@ -1015,26 +1015,26 @@ async def test_missing_field(plugin):
     assert result.get("code") == "missing_field"
 ```
 
-Variables d'environnement pour les tests :
+Environment variables required for testing:
 ```bash
 DATABASE_URL=sqlite:///./test.db
 REDIS_URL=redis://localhost:6379/0
 SECRET_KEY=test-secret-key
 ```
 
-`asyncio_mode = auto` → pas de `@pytest.mark.asyncio`. Coverage `fail_under = 80` (branch).
+`asyncio_mode = auto` → do not add `@pytest.mark.asyncio` manually. Target coverage `fail_under = 80` (branch).
 
 ---
 
-## 15. Flux HTTP → Plugin
+## 15. HTTP Flow → Plugin
 
 ```
 HTTP Request
-  └─ TenantMiddleware       (extrait X-Tenant-ID, met ContextVar)
+  └─ TenantMiddleware       (extracts X-Tenant-ID, binds ContextVar)
        └─ Router            (/plugins/{name}/{action})
             └─ supervisor.call(name, action, payload)
                  └─ IPCAuthMiddleware
-                      └─ TracingMiddleware    (span + propagation trace_id)
+                      └─ TracingMiddleware    (span extraction + context propagation)
                            └─ RateLimitMiddleware
                                 └─ PermissionMiddleware
                                      └─ RetryMiddleware
@@ -1044,23 +1044,23 @@ HTTP Request
 
 ---
 
-## 16. Endpoints système automatiques
+## 16. Out-of-the-Box System Endpoints
 
 | Endpoint | Description |
 |---|---|
-| `GET /status` | État de tous les plugins |
-| `POST /plugins/{name}/reload` | Hot-reload un plugin |
-| `POST /plugins/{name}/load` | Charger un plugin |
-| `POST /plugins/{name}/unload` | Décharger un plugin |
-| `GET /metrics` | Métriques Prometheus |
-| `GET /health` | Health de tous les checks |
-| `GET /health/live` | Liveness (k8s probe) |
-| `GET /health/ready` | Readiness (k8s probe) |
-| `POST /plugins/{name}/{action}` | Appel direct d'une action |
+| `GET /status` | Check state of all loaded plugins |
+| `POST /plugins/{name}/reload` | Hot-reload specific plugin without restart |
+| `POST /plugins/{name}/load` | Boot up specific plugin |
+| `POST /plugins/{name}/unload` | Shut down specific plugin |
+| `GET /metrics` | Exposes Prometheus formats |
+| `GET /health` | Fetch report of all health checks |
+| `GET /health/live` | Liveness indicator (k8s probe) |
+| `GET /health/ready` | Readiness indicator (k8s probe) |
+| `POST /plugins/{name}/{action}` | Invoke action handler directly |
 
 ---
 
-## 17. Référence rapide des imports
+## 17. Quick Imports Index
 
 ```python
 # Base
@@ -1072,7 +1072,7 @@ from xcore.sdk import action, AutoDispatchMixin, AutoMixin
 # HTTP
 from xcore.sdk import route, RoutedPlugin
 
-# Schémas
+# Schemas
 from xcore.sdk import schema, validate_payload
 
 # Scheduler
@@ -1081,7 +1081,7 @@ from xcore.sdk import cron, interval, ScheduledMixin
 # Events
 from xcore.sdk import on_event, on_hook, EventMixin, HookMixin, Event
 
-# Observabilité
+# Observability
 from xcore.sdk import health_check, traced, counted, timed, ObservabilityMixin
 from xcore.kernel.observability import get_logger
 
@@ -1100,13 +1100,13 @@ from xcore.sdk import AuthBackend, AuthPayload, register_auth_backend
 # Repositories
 from xcore.sdk import BaseAsyncRepository, BaseRedisRepository, BaseMongoRepository
 
-# Services custom
+# Custom Services
 from xcore.services.base import BaseService, BaseServiceProvider, ServiceStatus
 from xcore.services.container import ServiceContainer
 
-# Modes
+# Execution Modes
 from xcore.sdk import ExecutionMode  # trusted, sandboxed, ephemeral
 
-# Erreurs
+# Errors
 from xcore.sdk import PermissionDenied
 ```
