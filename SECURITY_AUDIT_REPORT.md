@@ -3,7 +3,7 @@
 ## 1. Executive Summary
 XCore is a "plugin-first" orchestration framework designed with a strong emphasis on security and isolation. The architecture relies on a minimalist kernel and delegates functionality to plugins, which can be executed either in **Trusted** mode (full trust, direct resource access) or **Sandboxed** mode (isolated processes with strict restrictions).
 
-The audit reveals a robust design using defense-in-depth techniques (AST scanning, monkey-patching, OS-level isolation). Common vulnerability (OWASP) protection mechanisms are well-integrated, particularly for multi-tenancy and secret management.
+The audit reveals a robust design using defense-in-depth techniques (AST scanning, monkey-patching, OS-level isolation). Common vulnerabilities (OWASP) protection mechanisms are well-integrated, particularly for multi-tenancy and secret management.
 
 ---
 
