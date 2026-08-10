@@ -58,7 +58,10 @@ class ServerConfig:
     """Paramètres uvicorn pour `xcore worker start api`."""
 
     app: str = "main:app"
-    host: str = "0.0.0.0"
+    # Défaut restrictif — les déploiements qui doivent écouter sur toutes
+    # les interfaces (conteneur, LB en amont) le déclarent explicitement via
+    # integration.yaml (app.server.host) ou XCORE__APP__SERVER__HOST=0.0.0.0.
+    host: str = "127.0.0.1"
     port: int = 8000
     workers: int = 1
     reload: bool = False
@@ -174,10 +177,10 @@ class WorkerConfig:
 
 @dataclass
 class CacheConfig:
-    backend: str = "memory"  # memory | redis
+    backend: str = "memory"  # memory | redis | tiered
     ttl: int = 300
     max_size: int = 1000
-    url: str | None = None
+    url: str | None = None  # requis pour redis et tiered
 
 
 @dataclass

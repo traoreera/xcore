@@ -20,7 +20,19 @@ The `CacheService` provides a unified, asynchronous interface for caching data. 
 ### Key Concepts
 
 #### Backend Abstraction
-Plugins interact with the `CacheService` facade, which delegates calls to either a `MemoryBackend` (standard Python dictionary with TTL) or a `RedisCacheBackend`.
+Plugins interact with the `CacheService` facade, which delegates calls to a `MemoryBackend` (standard Python dictionary with TTL), a `RedisCacheBackend`, or a `TieredCacheBackend` (memory **L1** in front of Redis **L2**).
+
+#### Tiered (L1 + L2) Backend
+`backend: tiered` reads L1 (local process memory) first — microsecond latency — and falls back to L2 (shared Redis) on miss, backfilling L1 for next time. Writes go to both layers (write-through).
+
+```text
+get("k")  →  L1 hit? return it
+          →  L1 miss → L2 hit? backfill L1, return it
+          →  both miss → None
+```
+
+!!! warning "Bounded cross-node staleness"
+    There is no push-based invalidation between nodes (no Redis pub/sub). If node A writes a key, node B's L1 keeps serving its old value until that entry's TTL expires — L2 is always fresh, only each node's local L1 can lag. `ttl` is shared by both layers today (no separate L1/L2 TTL knob), so it directly bounds the worst-case cross-node staleness window. Use the plain `redis` backend instead if you need strict consistency.
 
 #### Multi-Tenant Isolation
 When `tenancy.isolate_cache` is enabled in `xcore.yaml`, the `CacheService` automatically prefixes every key with the current `tenant_id`. This prevents data leakage between tenants sharing the same Redis instance.
@@ -99,10 +111,10 @@ prices = await cache.mget(keys)
 ```yaml linenums="1" title="xcore.yaml"
 services:
   cache:
-    backend: "redis"   # str — "memory" | "redis". Default: "memory"
+    backend: "redis"   # str — "memory" | "redis" | "tiered". Default: "memory"
     ttl: 300           # int — Global TTL in seconds. Default: 300
-    max_size: 1000     # int — Max entries (memory backend only). Default: 1000
-    url: "redis://localhost:6379/0" # str — Required for Redis. Default: null
+    max_size: 1000     # int — Max entries (memory / tiered L1). Default: 1000
+    url: "redis://localhost:6379/0" # str — Required for "redis" and "tiered". Default: null
 ```
 
 ---
