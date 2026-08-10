@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Ephemeral documentation**: New `doc/plugins/ephemeral-plugins.md` guide covering what Ephemeral mode is, when to use it, the warm pool lifecycle, configuration (per-plugin + global), plugin authoring, monitoring, and tuning advice. Registered in `mkdocs.yml`. Updated `execution-modes.md` (3-mode comparison table + Ephemeral section), `plugin-anatomy.md` (manifest reference), and `xcore-config.md` (`plugins.ephemeral` section).
+- **CI/CD Netlify**: `docs.yml` now deploys MkDocs to Netlify instead of GitHub Pages. Production deploy on push `main` / tags / manual, deploy preview on PR. Requires `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` secrets. Build is now strict (`mkdocs build --strict`).
+
+### Fixed
+- **Doc links**: Fixed 6 broken relative links (`quickstart.md`, `advanced/multi-tenancy.md`, `sdk/examples/demo-plugin.md`) that made the strict MkDocs build fail.
 
 ### Fixed
 - **Ephemeral per-plugin config**: `EphemeralActivator` now reads the `ephemeral:` block from `manifest.extra` when the manifest has no `ephemeral` attribute (the SDK's `PluginManifest` does not parse it as a field). Per-plugin config in `plugin.yaml` now works as documented, with global fallback preserved.

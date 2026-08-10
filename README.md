@@ -18,8 +18,15 @@
   <a href="https://github.com/traoreera/xcore/actions/workflows/ci.yml">
     <img src="https://github.com/traoreera/xcore/actions/workflows/ci.yml/badge.svg" alt="CI Status" />
   </a>
+  <a href="https://github.com/traoreera/xcore/actions/workflows/docs.yml">
+    <img src="https://github.com/traoreera/xcore/actions/workflows/docs.yml/badge.svg" alt="Docs Build & Deploy" />
+  </a>
+  <!-- ⚠️ Remplace YOUR_SITE_ID par l'API ID Netlify (Site settings → Site information) -->
+  <a href="https://app.netlify.com/sites/xcore-docs/deploys">
+    <img src="https://api.netlify.com/api/v1/badges/340716e8-9c34-472f-a5a3-c974bfab302b/deploy-status" alt="Netlify Status" />
+  </a>
   <a href="https://github.com/traoreera/xcore/releases">
-    <img src="https://img.shields.io/badge/version-2.3.2-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-2.3.4-blue.svg" alt="Version" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
@@ -31,7 +38,6 @@
     <img src="https://img.shields.io/badge/FastAPI-0.135+-green.svg" alt="FastAPI" />
   </a>
 </p>
-
 ---
 
 **XCore** is designed to load, isolate, and manage modular extensions (plugins) in a secure, sandboxed environment. It provides a robust foundation for building scalable applications where features can be dynamically added, removed, or updated without affecting the core system.

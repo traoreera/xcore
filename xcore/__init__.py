@@ -91,7 +91,7 @@ class Xcore:
       - L'observabilité (logs, métriques, traces, health)
 
     Usage FastAPI:
-        from contextlib import asynccontextmanager
+       ``` from contextlib import asynccontextmanager
         from fastapi import FastAPI
         from xcore import Xcore
 
@@ -104,12 +104,15 @@ class Xcore:
             await xcore.shutdown()
 
         app = FastAPI(lifespan=lifespan)
+        ```
 
     Usage standalone:
+    ```
         xcore = Xcore()
         await xcore.boot()
         result = await xcore.plugins.call("my_plugin", "ping", {})
         await xcore.shutdown()
+    ```
     """
 
     def __init__(self, config_path: str | None = None):
@@ -132,6 +135,14 @@ class Xcore:
         )
 
         self._logger = get_logger("xcore")
+
+    @property
+    def server(self):
+        return self._config.app.server.to_dict()
+
+    @property
+    def fastapi(self):
+        return self._config.app.fastapi.to_dict()
 
     def setup(self, app: "FastAPI") -> "Xcore":
         """
@@ -304,7 +315,7 @@ class Xcore:
         from .kernel.api.router import build_router
 
         # 1. Router système xcore (status, reload, load, unload)
-        system_router = build_router(
+        system_router, api_key_depends = build_router(
             supervisor=self.plugins,
             secret_key=self._config.app.secret_key,
             server_key=self._config.app.server_key,
@@ -359,10 +370,12 @@ class Xcore:
         ):
             with contextlib.suppress(ImportError):
                 from fastapi import APIRouter as _AR
-                from fastapi import Response
+                from fastapi import Depends, Response
                 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-                _metrics_router = _AR()
+                _metrics_router = _AR(
+                    dependencies=[Depends(api_key_depends)], tags=["Metrics"]
+                )
 
                 @_metrics_router.get("/metrics")
                 async def prometheus_metrics():

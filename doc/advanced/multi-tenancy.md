@@ -12,8 +12,8 @@ Xcore is built from the ground up to support multi-tenant applications. It provi
 
 ### Prerequisites
 
-- [x] [Service Container](./services.md) overview understood
-- [x] [PostgreSQL](./database.md) (required for schema-based isolation)
+- [x] [Service Container](../services/services.md) overview understood
+- [x] [PostgreSQL](../services/database.md) (required for schema-based isolation)
 
 ---
 

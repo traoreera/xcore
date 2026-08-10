@@ -1,19 +1,32 @@
-name: Docs – Build & Deploy MkDocs
+# ============================================================
+# Docs — Build MkDocs & Deploy Netlify
+# Déclenché sur : push main (production), PR (deploy preview),
+#                 tags et manuellement (workflow_dispatch)
+#
+# Secrets requis dans le repo :
+#   NETLIFY_AUTH_TOKEN  → généré via Netlify UI (User settings → Applications)
+#   NETLIFY_SITE_ID     → copié depuis Site settings → Site information → API ID
+#
+# Pour créer le site la première fois :
+#   netlify sites:create --name <slug>   (ou via l'UI Netlify)
+# ============================================================
+
+name: Docs – Deploy Netlify
 
 on:
   push:
     branches: [main]
-
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
   build:
@@ -27,7 +40,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12" # plus stable que 3.13
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -44,24 +57,52 @@ jobs:
         run: poetry install --no-interaction --with docs --no-root
 
       - name: Build site
-        run: poetry run mkdocs build
+        run: poetry run mkdocs build --strict
 
-      - name: Upload artifact (Pages)
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: site
           path: docs
+          retention-days: 7
 
   deploy:
-    name: 🚀 Deploy to GitHub Pages
+    name: 🚀 Deploy to Netlify
     runs-on: ubuntu-latest
     needs: build
     if: always() && needs.build.result == 'success'
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Download site artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+
+      - name: Deploy preview (PR)
+        if: github.event_name == 'pull_request'
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./site
+          production-deploy: false
+          alias: docs-preview-${{ github.event.number }}
+          deploy-message: "Preview (PR #${{ github.event.number }})"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Deploy production (main/tag/manual)
+        if: github.event_name != 'pull_request'
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./site
+          production-branch: main
+          production-deploy: true
+          deploy-message: "Deploy ${{ github.ref }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

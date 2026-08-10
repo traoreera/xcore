@@ -182,4 +182,4 @@ def build_router(
             return {}
         return metrics_registry.snapshot()
 
-    return router
+    return router, verify_api_key

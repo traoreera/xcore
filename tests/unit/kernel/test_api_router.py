@@ -21,7 +21,7 @@ def _make_app(supervisor=None, **kwargs):
         supervisor.load = AsyncMock()
         supervisor.unload = AsyncMock()
     app = FastAPI()
-    router = build_router(
+    router, _ = build_router(
         supervisor,
         secret_key=SECRET_KEY,
         server_key=SERVER_KEY,

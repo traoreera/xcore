@@ -89,7 +89,7 @@ class SandboxedActivator(PluginActivator):
         )
 
         if not scan.passed:
-            raise ValueError(f"[{manifest.name}] AST Scan failed: {scan}")
+            raise ValueError("scan failed")
 
         mgr = SandboxProcessManager(manifest=manifest, ctx=loader)
         await mgr.start()

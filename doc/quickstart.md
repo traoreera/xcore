@@ -137,6 +137,6 @@ Now, visit `http://127.0.0.1:8000/hello/Xcore` in your browser. You should see:
 ### Next Steps
 
 - [x] You have a running Xcore application.
-- [ ] Learn about [Execution Modes](../kernel/execution-modes.md) (Trusted vs. Sandboxed).
-- [ ] Explore the [Service Container](../services/services.md) to access Databases and Cache.
-- [ ] Understand the [Plugin Lifecycle](../kernel/kernel.md).
+- [ ] Learn about [Execution Modes](kernel/execution-modes.md) (Trusted vs. Sandboxed).
+- [ ] Explore the [Service Container](services/services.md) to access Databases and Cache.
+- [ ] Understand the [Plugin Lifecycle](kernel/kernel.md).

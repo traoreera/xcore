@@ -223,7 +223,7 @@ SECRET_KEY=test-secret-key
 |----------|-------------|---------------|
 | `ci.yml` | push/PR sur `main`, `features` | lint (black+isort+flake8), mypy, tests+coverage |
 | `pr.yml` | PR sur `main`, `features` | titre PR (conventional commits), taille PR, tests rapides |
-| `docs.yml` | push sur `main` | build + deploy MkDocs sur GitHub Pages |
+| `docs.yml` | push sur `main` + PR + tag | build MkDocs (strict) + deploy Netlify (prod + deploy preview) — secrets `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` |
 | `security.yml` | push + lundi 7h | pip-audit, bandit, gitleaks |
 | `release.yml` | tag `v*.*.*` | tests, build wheel, GitHub Release |
 

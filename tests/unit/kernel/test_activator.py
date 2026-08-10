@@ -63,7 +63,7 @@ async def test_sandboxed_activator_scan_failed(mock_loader, mock_manifest):
     with patch("xcore.kernel.security.validation.ASTScanner.scan") as mock_scan:
         mock_scan.return_value = MagicMock(passed=False)
 
-        with pytest.raises(ValueError, match="Scan AST échoué"):
+        with pytest.raises(ValueError, match="scan failed"):
             await activator.activate(mock_manifest, mock_loader)
 
 def test_activator_registry():

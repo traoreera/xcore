@@ -272,4 +272,4 @@ sys.modules["xcore.sdk"] = local_sdk
 from plugins.demo.src.main import Plugin
 ```
 
-See the [Installation guide](../installation.md) for full setup instructions.
+See the [Installation guide](../../installation.md) for full setup instructions.
