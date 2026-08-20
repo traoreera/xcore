@@ -246,6 +246,19 @@ files = [
 ]
 
 [[package]]
+name = "antlr4-python3-runtime"
+version = "4.13.2"
+description = "ANTLR 4.13.2 runtime for Python 3"
+optional = true
+python-versions = "*"
+groups = ["main"]
+markers = "extra == \"cpp\" or extra == \"all\""
+files = [
+    {file = "antlr4_python3_runtime-4.13.2-py3-none-any.whl", hash = "sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8"},
+    {file = "antlr4_python3_runtime-4.13.2.tar.gz", hash = "sha256:909b647e1d2fc2b70180ac586df3933e38919c85f98ccc656a96cd3f25ef3916"},
+]
+
+[[package]]
 name = "anyio"
 version = "4.14.1"
 description = "High-level concurrency and networking framework on top of asyncio or Trio"
@@ -2797,7 +2810,7 @@ version = "7.2.2"
 description = "Cross-platform lib for process and system monitoring."
 optional = false
 python-versions = ">=3.6"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "psutil-7.2.2-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:2edccc433cbfa046b980b0df0171cd25bcaeb3a68fe9022db0979e7aa74a826b"},
     {file = "psutil-7.2.2-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:e78c8603dcd9a04c7364f1a3e670cea95d51ee865e4efb3556a3a63adef958ea"},
@@ -2821,6 +2834,7 @@ files = [
     {file = "psutil-7.2.2-cp37-abi3-win_arm64.whl", hash = "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee"},
     {file = "psutil-7.2.2.tar.gz", hash = "sha256:0746f5f8d406af344fd547f1c8daa5f5c33dbc293bb8d6a16d80b4bb88f59372"},
 ]
+markers = {main = "extra == \"xcli\" or extra == \"all\""}
 
 [package.extras]
 dev = ["abi3audit", "black", "check-manifest", "colorama ; os_name == \"nt\"", "coverage", "packaging", "psleak", "pylint", "pyperf", "pypinfo", "pyreadline3 ; os_name == \"nt\"", "pytest", "pytest-cov", "pytest-instafail", "pytest-xdist", "pywin32 ; os_name == \"nt\" and implementation_name != \"pypy\"", "requests", "rstcheck", "ruff", "setuptools", "sphinx", "sphinx_rtd_theme", "toml-sort", "twine", "validate-pyproject[all]", "virtualenv", "vulture", "wheel", "wheel ; os_name == \"nt\" and implementation_name != \"pypy\"", "wmi ; os_name == \"nt\" and implementation_name != \"pypy\""]
@@ -3083,6 +3097,18 @@ groups = ["dev"]
 files = [
     {file = "pyflakes-3.4.0-py2.py3-none-any.whl", hash = "sha256:f742a7dbd0d9cb9ea41e9a24a918996e8170c799fa528688d40dd582c8265f4f"},
     {file = "pyflakes-3.4.0.tar.gz", hash = "sha256:b24f96fafb7d2ab0ec5075b7350b3d2d2218eab42003821c06344973d3ea2f58"},
+]
+
+[[package]]
+name = "pyftype"
+version = "1.2.4"
+description = "类型检测"
+optional = true
+python-versions = ">=3.7"
+groups = ["main"]
+markers = "extra == \"cpp\" or extra == \"all\""
+files = [
+    {file = "pyftype-1.2.4-py3-none-any.whl", hash = "sha256:f58cce4a98276355f5c392c8295fc131aeee5b086f2e0e4953770849c8feb48c"},
 ]
 
 [[package]]
@@ -4341,6 +4367,61 @@ files = [
 ]
 
 [[package]]
+name = "xcdk"
+version = "0.1.0"
+description = "SDK Python pour développer des plugins xcore : bases, mixins, décorateurs et utilitaires (actions, routes HTTP, événements, hooks, scheduling, cache, observabilité)."
+optional = true
+python-versions = ">=3.12"
+groups = ["main"]
+markers = "extra == \"sdk\" or extra == \"all\""
+files = [
+    {file = "xcdk-0.1.0-py3-none-any.whl", hash = "sha256:20963798ca0f5714cbb9e836a2076ad8523a2707c451bb447e948e76a99dce90"},
+    {file = "xcdk-0.1.0.tar.gz", hash = "sha256:2991e0608dbd7a260a5df0f3f1a48a814392315514ae462fb8fc299696bf6602"},
+]
+
+[package.dependencies]
+xcoreruntime = ">=2.4.4"
+
+[[package]]
+name = "xcorecli"
+version = "1.1.0"
+description = "CLI for xcore — configuration, plugins, deployment"
+optional = true
+python-versions = ">=3.12"
+groups = ["main"]
+markers = "extra == \"xcli\" or extra == \"all\""
+files = [
+    {file = "xcorecli-1.1.0-py3-none-any.whl", hash = "sha256:1b3ace4d111852ef4af3ce92f65c991078ea4cbbe7886de576e55ba109f8ffaa"},
+    {file = "xcorecli-1.1.0.tar.gz", hash = "sha256:d3852deb04d449d9b8ef2fc969dcb560405c744a7d2097de654e96b270cec6c8"},
+]
+
+[package.dependencies]
+alembic = ">=1.18.0"
+httpx = ">=0.27"
+psutil = ">=5.9"
+pyyaml = ">=6.0.1"
+rich = ">=14.3.4"
+sqlalchemy = ">=2.0.0"
+typer = ">=0.25.1"
+
+[[package]]
+name = "xscanner"
+version = "0.1.0"
+description = ""
+optional = true
+python-versions = ">=3.10,<4.0"
+groups = ["main"]
+markers = "extra == \"cpp\" or extra == \"all\""
+files = [
+    {file = "xscanner-0.1.0-py3-none-any.whl", hash = "sha256:63676092533de95e574d6d0de85fa40cf3aaf63dac744440948a2a7f781b9d93"},
+]
+
+[package.dependencies]
+antlr4-python3-runtime = ">=4.9.2,<5.0.0"
+click = ">=8.0.3,<9.0.0"
+pyftype = ">=1.2.2,<2.0.0"
+
+[[package]]
 name = "yarl"
 version = "1.24.2"
 description = "Yet another URL library"
@@ -4459,7 +4540,13 @@ idna = ">=2.0"
 multidict = ">=4.0"
 propcache = ">=0.2.1"
 
+[extras]
+all = ["xcdk", "xcorecli", "xscanner"]
+cpp = ["xscanner"]
+sdk = ["xcdk"]
+xcli = ["xcorecli"]
+
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "61a665b919642c04f3350a815cc41c084828fe2688e149ac6694cb5fcc6dc299"
+content-hash = "4a0f1e33e7826f77bfd36944b5d9ebcf8b11968849881bd292245abc1275a437"
