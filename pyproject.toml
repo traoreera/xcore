@@ -1,6 +1,6 @@
 [project]
 name = "XCoreRuntime"
-version = "2.5.0"
+version = "2.5.1"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
@@ -39,13 +39,16 @@ dependencies = [
 # ── Dépendances optionnelles ─────────────────────────────────────────────────────
 # pip install XCoreRuntime[sdk]   → SDK complet pour auteurs de plugins (xcdk)
 # pip install XCoreRuntime[xcli]  → CLI xcore (xcorecli)
-# pip install XCoreRuntime[cpp]   → accélération C++ du scanner AST (xscanner)
-# pip install XCoreRuntime[all]   → les trois
+#
+# [cpp] et [all] (accélération C++ du scanner AST, package xcorescanner)
+# sont retirés temporairement : xcorescanner n'est pas encore publié sur
+# PyPI, et Poetry doit pouvoir résoudre TOUTES les extras déclarées pour
+# écrire poetry.lock — une extra pointant vers un package inexistant
+# casse `poetry lock`/`poetry install` pour tout le monde, pas seulement
+# pour qui demande [cpp]. À réintroduire dès que xcorescanner est publié.
 [project.optional-dependencies]
 sdk  = ["xcdk>=0.1.0"]
 xcli = ["xcorecli>=1.1.0"]
-cpp  = ["xscanner>=0.1.0"]
-all  = ["xcdk>=0.1.0", "xcorecli>=1.1.0", "xscanner>=0.1.0"]
 
 # ── Build system ───────────────────────────────────────────────────────────────
 [build-system]
