@@ -1,71 +1,66 @@
 """
-xcore/sdk — Compatibility shim.
+xcore/sdk — Kit de développement pour les auteurs de plugins xcore.
 
-All SDK functionality now lives in the xcoresdk package:
-    https://github.com/xcore-team/xcoreSDK
+Historique : ce SDK a été extrait dans le package externe `xcoresdk`
+(https://github.com/xcore-team/xcoreSDK) pour alléger le runtime, puis
+vendoré à nouveau ici le temps que `xcoresdk`/`xcoreCli` soient publiés
+sur PyPI (PyPI refuse les packages avec une dépendance git directe dans
+leurs métadonnées — voir pyproject.toml).
 
-Plugin authors can import directly from xcoresdk:
-    from sdk import TrustedBase, action, ok, error
+Le socle (manifest, décorateurs de base, adaptateurs SQL) est fourni
+localement par ce module. Les fonctionnalités plus récentes de
+`xcoresdk` qui n'ont pas d'équivalent local (EventMixin, HookMixin,
+ObservabilityMixin, ScheduledMixin, cached/invalidate, cron/interval,
+health_check comme décorateur, AutoMixin, BaseMongoRepository,
+BaseRedisRepository) restent disponibles uniquement si `xcoresdk` est
+installé séparément — sinon elles sont simplement absentes de ce
+namespace plutôt que de faire planter l'import.
 
-Or continue using the xcore.sdk namespace (backward-compatible):
+Import recommandé dans un plugin :
     from xcore.sdk import TrustedBase, action, ok, error
+    from xcore.sdk import PluginManifest
 """
 
-from sdk import (
+from ..kernel.api import (
     AuthBackend,
     AuthPayload,
-    AutoDispatchMixin,
-    AutoMixin,
-    BaseAsyncRepository,
-    BaseMongoRepository,
-    BasePlugin,
-    BaseRedisRepository,
-    BaseSyncRepository,
-    Event,
-    EventMixin,
-    ExecutionMode,
-    HookMixin,
-    HookResult,
-    ObservabilityMixin,
-    PermissionDenied,
-    PluginManifest,
-    PluginState,
-    RBACChecker,
-    ResourceConfig,
-    RoutedPlugin,
-    RouterRegistry,
-    RuntimeConfig,
-    ScheduledMixin,
-    TrustedBase,
-    action,
-    cached,
-    counted,
-    cron,
-    error,
     get_auth_backend,
-    get_logger,
     has_auth_backend,
-    health_check,
-    interval,
-    invalidate,
-    ok,
-    on_event,
-    on_hook,
     register_auth_backend,
-    require_permission,
-    require_role,
+    unregister_auth_backend,
+)
+from ..kernel.api.contract import BasePlugin, ExecutionMode, TrustedBase, error, ok
+from ..kernel.api.rbac import RBACChecker, require_permission, require_role
+from ..kernel.events import Event, HookResult
+from ..kernel.observability import get_logger
+from ..kernel.permissions.engine import PermissionDenied
+from ..kernel.runtime.state_machine import PluginState
+from ..services.xworker import WorkerService, task, task_registry
+from .adapter.asyncsql import BaseAsyncRepository
+from .adapter.syncsql import BaseSyncRepository
+from .decorators import (
+    RoutedPlugin,
+    action,
     require_service,
     route,
     sandboxed,
-    timed,
-    traced,
+    schema,
     trusted,
-    unregister_auth_backend,
     validate_payload,
 )
-from sdk.decorators import schema
-
-from ..services.xworker import WorkerService, task, task_registry
+from .mixin.ipc import AutoDispatchMixin
+from .plugin_base import (
+    FilesystemConfig,
+    HealthCheckConfig,
+    PluginDependency,
+    PluginManifest,
+    RateLimitConfig,
+    ResourceConfig,
+    RetryConfig,
+    RuntimeConfig,
+    VersionConstraint,
+)
+from .routers import RouterRegistry
 
 __all__ = [
     # Kernel contracts
@@ -78,8 +73,14 @@ __all__ = [
     "PluginState",
     # Manifest
     "PluginManifest",
+    "PluginDependency",
     "ResourceConfig",
     "RuntimeConfig",
+    "RateLimitConfig",
+    "HealthCheckConfig",
+    "RetryConfig",
+    "FilesystemConfig",
+    "VersionConstraint",
     # Core decorators
     "action",
     "schema",
@@ -90,7 +91,6 @@ __all__ = [
     "route",
     "RoutedPlugin",
     "AutoDispatchMixin",
-    "AutoMixin",
     "RouterRegistry",
     # RBAC
     "RBACChecker",
@@ -106,31 +106,64 @@ __all__ = [
     # DB adapters
     "BaseAsyncRepository",
     "BaseSyncRepository",
-    "BaseMongoRepository",
-    "BaseRedisRepository",
     # Events & Hooks
-    "on_event",
-    "on_hook",
-    "EventMixin",
-    "HookMixin",
     "Event",
     "HookResult",
     # Observability
     "get_logger",
-    "traced",
-    "counted",
-    "timed",
-    "health_check",
-    "ObservabilityMixin",
-    # Scheduler
-    "cron",
-    "interval",
-    "ScheduledMixin",
-    # Cache
-    "cached",
-    "invalidate",
     # Worker (xcore services)
     "WorkerService",
     "task",
     "task_registry",
 ]
+
+# ── Fonctionnalités xcoresdk sans équivalent local ─────────────────────────
+# N'existent que si le package externe `xcoresdk` est installé en plus.
+# Absentes ici plutôt que simulées : un faux no-op serait pire qu'une
+# ImportError explicite (ex: un @cached qui ne cache rien silencieusement).
+try:
+    from sdk import (  # type: ignore[import-not-found]
+        AutoMixin,
+        BaseMongoRepository,
+        BaseRedisRepository,
+        EventMixin,
+        HookMixin,
+        ObservabilityMixin,
+        ScheduledMixin,
+        cached,
+        counted,
+        cron,
+        health_check,
+        interval,
+        invalidate,
+        on_event,
+        on_hook,
+        timed,
+        traced,
+    )
+
+    __all__ += [
+        "AutoMixin",
+        "BaseMongoRepository",
+        "BaseRedisRepository",
+        "EventMixin",
+        "HookMixin",
+        "ObservabilityMixin",
+        "ScheduledMixin",
+        "cached",
+        "counted",
+        "cron",
+        "health_check",
+        "interval",
+        "invalidate",
+        "on_event",
+        "on_hook",
+        "timed",
+        "traced",
+    ]
+except ImportError:
+    get_logger("xcore.sdk").debug(
+        "package xcoresdk non installé — EventMixin/HookMixin/ObservabilityMixin/"
+        "ScheduledMixin/cached/invalidate/cron/interval/health_check/AutoMixin/"
+        "BaseMongoRepository/BaseRedisRepository indisponibles dans xcore.sdk"
+    )
