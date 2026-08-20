@@ -1,8 +1,14 @@
 # ============================================================
 # Release — Déclenchement manuel
-# Bump la version, commit, crée le tag vX.Y.Z et le pousse.
-# Le push du tag déclenche ensuite release.yml (tests, build,
-# publication PyPI, GitHub Release) — aucune logique dupliquée ici.
+# Bump la version, commit, crée le tag vX.Y.Z et le pousse, puis
+# déclenche explicitement release.yml (tests, build, publication
+# PyPI, GitHub Release) via workflow_dispatch.
+#
+# Note : le push du tag est fait avec GITHUB_TOKEN, et GitHub ne
+# fait JAMAIS cascader un événement push déclenché par GITHUB_TOKEN
+# vers d'autres workflows (protection anti-boucle) — d'où l'appel
+# explicite `gh workflow run` ci-dessous plutôt que de compter sur
+# le trigger `push: tags:` de release.yml.
 # ============================================================
 
 name: Release – Manual Trigger
@@ -35,6 +41,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   PYTHON_VERSION: "3.12"
@@ -118,4 +125,14 @@ jobs:
           git push origin HEAD:main
           git push origin "v${{ steps.ver.outputs.version }}"
           echo "✅ Poussé sur main + tag v${{ steps.ver.outputs.version }}"
-          echo "➡️  Le workflow 'Release' (release.yml) va démarrer automatiquement."
+
+      - name: Trigger release.yml
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml \
+            --ref main \
+            -f tag="v${{ steps.ver.outputs.version }}"
+          echo "➡️  release.yml déclenché pour v${{ steps.ver.outputs.version }}"
+          echo "🔗 https://github.com/${{ github.repository }}/actions/workflows/release.yml"
