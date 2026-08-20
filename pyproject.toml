@@ -1,5 +1,5 @@
 [project]
-name = "xcore"
+name = "XCoreRuntime"
 version = "2.4.3"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
