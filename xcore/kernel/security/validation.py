@@ -31,14 +31,24 @@ from .section import (
 )
 
 # ── Chargement de l'extension C++ (optionnel) ────────────────
+# 1. Package publié `xscanner` (pip install xscanner / XCoreRuntime[cpp])
+#    -> module top-level `scanner_core`.
+# 2. Fallback build local en place (`python setup.py build_ext --inplace`
+#    dans ce dossier) -> import relatif.
+# 3. Sinon, implémentation Python pure (voir plus bas).
 
 try:
-    from .scanner_core import ImportClassifier as _CppClassifier  # type: ignore
+    from scanner_core import ImportClassifier as _CppClassifier  # type: ignore
 
     _CPP_AVAILABLE = True
 except ImportError:
-    _CppClassifier = None
-    _CPP_AVAILABLE = False
+    try:
+        from .scanner_core import ImportClassifier as _CppClassifier  # type: ignore
+
+        _CPP_AVAILABLE = True
+    except ImportError:
+        _CppClassifier = None
+        _CPP_AVAILABLE = False
 
 # ─────────────────────────────────────────────────────────────
 # Manifest
