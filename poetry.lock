@@ -2797,7 +2797,7 @@ version = "7.2.2"
 description = "Cross-platform lib for process and system monitoring."
 optional = false
 python-versions = ">=3.6"
-groups = ["main", "dev"]
+groups = ["dev"]
 files = [
     {file = "psutil-7.2.2-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:2edccc433cbfa046b980b0df0171cd25bcaeb3a68fe9022db0979e7aa74a826b"},
     {file = "psutil-7.2.2-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:e78c8603dcd9a04c7364f1a3e670cea95d51ee865e4efb3556a3a63adef958ea"},
@@ -4341,50 +4341,6 @@ files = [
 ]
 
 [[package]]
-name = "xcorecli"
-version = "1.0.2"
-description = "CLI for xcore — configuration, plugins, deployment"
-optional = false
-python-versions = ">=3.12"
-groups = ["main"]
-files = []
-develop = false
-
-[package.dependencies]
-alembic = ">=1.18.0"
-httpx = ">=0.27"
-psutil = ">=5.9"
-pyyaml = ">=6.0.1"
-rich = ">=14.3.4"
-sqlalchemy = ">=2.0.0"
-typer = ">=0.25.1"
-
-[package.source]
-type = "git"
-url = "https://github.com/xcore-team/xcoreCli.git"
-reference = "main"
-resolved_reference = "a898a1cd308724dfb6ec696905d7690e7f48a562"
-
-[[package]]
-name = "xcoresdk"
-version = "0.1.0"
-description = "Add your description here"
-optional = false
-python-versions = ">=3.12"
-groups = ["main"]
-files = []
-develop = false
-
-[package.dependencies]
-xcore = "*"
-
-[package.source]
-type = "git"
-url = "https://github.com/xcore-team/xcoreSDK.git"
-reference = "main"
-resolved_reference = "497d6226e6150b79abe9331272b3c8cb15a6e43d"
-
-[[package]]
 name = "yarl"
 version = "1.24.2"
 description = "Yet another URL library"
@@ -4506,4 +4462,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "6e67579cf6c3dab519216a895083bff30a9fc4e38b06e912204c5eb087d2b72a"
+content-hash = "61a665b919642c04f3350a815cc41c084828fe2688e149ac6694cb5fcc6dc299"

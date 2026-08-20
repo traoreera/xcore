@@ -17,8 +17,6 @@ classifiers = [
 
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
-    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
     "fastapi[standard]>=0.135.1,<1.0.0",
     "uvicorn>=0.38.0,<1.0.0",
     "pydantic[email]>=2.11.7,<3.0.0",
