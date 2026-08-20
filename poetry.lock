@@ -2821,7 +2821,7 @@ files = [
     {file = "psutil-7.2.2-cp37-abi3-win_arm64.whl", hash = "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee"},
     {file = "psutil-7.2.2.tar.gz", hash = "sha256:0746f5f8d406af344fd547f1c8daa5f5c33dbc293bb8d6a16d80b4bb88f59372"},
 ]
-markers = {main = "extra == \"xcli\""}
+markers = {main = "extra == \"xcli\" or extra == \"all\""}
 
 [package.extras]
 dev = ["abi3audit", "black", "check-manifest", "colorama ; os_name == \"nt\"", "coverage", "packaging", "psleak", "pylint", "pyperf", "pypinfo", "pyreadline3 ; os_name == \"nt\"", "pytest", "pytest-cov", "pytest-instafail", "pytest-xdist", "pywin32 ; os_name == \"nt\" and implementation_name != \"pypy\"", "requests", "rstcheck", "ruff", "setuptools", "sphinx", "sphinx_rtd_theme", "toml-sort", "twine", "validate-pyproject[all]", "virtualenv", "vulture", "wheel", "wheel ; os_name == \"nt\" and implementation_name != \"pypy\"", "wmi ; os_name == \"nt\" and implementation_name != \"pypy\""]
@@ -4348,7 +4348,7 @@ description = "SDK Python pour développer des plugins xcore : bases, mixins, d�
 optional = true
 python-versions = ">=3.12"
 groups = ["main"]
-markers = "extra == \"sdk\""
+markers = "extra == \"sdk\" or extra == \"all\""
 files = [
     {file = "xcdk-0.1.0-py3-none-any.whl", hash = "sha256:20963798ca0f5714cbb9e836a2076ad8523a2707c451bb447e948e76a99dce90"},
     {file = "xcdk-0.1.0.tar.gz", hash = "sha256:2991e0608dbd7a260a5df0f3f1a48a814392315514ae462fb8fc299696bf6602"},
@@ -4364,7 +4364,7 @@ description = "CLI for xcore — configuration, plugins, deployment"
 optional = true
 python-versions = ">=3.12"
 groups = ["main"]
-markers = "extra == \"xcli\""
+markers = "extra == \"xcli\" or extra == \"all\""
 files = [
     {file = "xcorecli-1.1.0-py3-none-any.whl", hash = "sha256:1b3ace4d111852ef4af3ce92f65c991078ea4cbbe7886de576e55ba109f8ffaa"},
     {file = "xcorecli-1.1.0.tar.gz", hash = "sha256:d3852deb04d449d9b8ef2fc969dcb560405c744a7d2097de654e96b270cec6c8"},
@@ -4378,6 +4378,24 @@ pyyaml = ">=6.0.1"
 rich = ">=14.3.4"
 sqlalchemy = ">=2.0.0"
 typer = ">=0.25.1"
+
+[[package]]
+name = "xcorescanner"
+version = "0.1.0"
+description = "Extension C++ (pybind11) pour l'accélération du scanner AST de sécurité xcore — import scanner_core"
+optional = true
+python-versions = ">=3.12"
+groups = ["main"]
+markers = "extra == \"cpp\" or extra == \"all\""
+files = [
+    {file = "xcorescanner-0.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:2b61ede86af7fc43df5c6910556909b286dde4198ef93fd09f0488e0670e72b4"},
+    {file = "xcorescanner-0.1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:98fd6ecfa0a362a4c9f67311bb4feb9f540e360487953cbf489ccff23c7b6739"},
+    {file = "xcorescanner-0.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fc6f447dd63c48044596068515a9fcadf6ac999b534da3189077f609271db2b7"},
+    {file = "xcorescanner-0.1.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:3dd9a2a7dd3fc237f1c2e4e02b68e37066216101cdab4ad84da5648099218d88"},
+    {file = "xcorescanner-0.1.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:04d89b7628f0128bebc43d0084c309abb7143674d68a9344317f50b291a626dd"},
+    {file = "xcorescanner-0.1.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:adc24d701618d0299057b867cfc02f052d4e0b43651b0bca1429da943be45494"},
+    {file = "xcorescanner-0.1.0.tar.gz", hash = "sha256:ab4528b223257801682849effca1d0c834020230c29b636b8c93c7a85db017db"},
+]
 
 [[package]]
 name = "yarl"
@@ -4499,10 +4517,12 @@ multidict = ">=4.0"
 propcache = ">=0.2.1"
 
 [extras]
+all = ["xcdk", "xcorecli", "xcorescanner"]
+cpp = ["xcorescanner"]
 sdk = ["xcdk"]
 xcli = ["xcorecli"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "e2fd042e48802aa6a2f20b9fc682cdb81eb85f11349a4fc64c8cff085194e7df"
+content-hash = "4351f42149ca3bd14affc6c5088c32478f5f29f23056f768ac5da484f5174331"
