@@ -55,6 +55,18 @@ class CacheService(BaseService):
                 url=self._config.url, ttl=self._config.ttl
             )
             await self._backend.connect()
+        elif backend_type == "tiered":
+            if not self._config.url:
+                raise ValueError("CacheConfig.url obligatoire pour le backend tiered")
+            from .backends.memory import MemoryBackend
+            from .backends.redis import RedisCacheBackend
+            from .backends.tiered import TieredCacheBackend
+
+            self._backend = TieredCacheBackend(
+                l1=MemoryBackend(ttl=self._config.ttl, max_size=self._config.max_size),
+                l2=RedisCacheBackend(url=self._config.url, ttl=self._config.ttl),
+            )
+            await self._backend.connect()
         else:  # memory (default)
             from .backends.memory import MemoryBackend
 

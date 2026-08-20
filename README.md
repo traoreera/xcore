@@ -26,7 +26,7 @@
     <img src="https://api.netlify.com/api/v1/badges/340716e8-9c34-472f-a5a3-c974bfab302b/deploy-status" alt="Netlify Status" />
   </a>
   <a href="https://github.com/traoreera/xcore/releases">
-    <img src="https://img.shields.io/badge/version-2.3.4-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-2.3.5-blue.svg" alt="Version" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
@@ -49,9 +49,10 @@
 - 🛡️ **Advanced Sandboxing**: AST-based scanning, resource restriction, and C++ security core.
 - 🌐 **Native Multi-tenancy**: Resource isolation (DB/Cache) and tenant-aware routing out of the box.
 - 🚀 **Built on FastAPI**: Leverage the speed and ecosystem of one of the fastest Python frameworks.
-- 📦 **Service Container**: Seamless management of Databases (SQLAlchemy), Cache (Redis), and Schedulers.
+- 📦 **Service Container**: Seamless management of Databases (SQLAlchemy), Cache (Redis or tiered Memory+Redis), and Schedulers.
 - 🛠️ **Dev-Friendly CLI**: Hot-reload plugins, sign manifests, and verify system health with one command.
-- 📊 **Production Ready**: Structured logging, integrated metrics, and comprehensive test coverage.
+- 📊 **Production Ready**: Structured logging, Prometheus metrics, and comprehensive test coverage.
+- 🔭 **Distributed Tracing**: Real OpenTelemetry integration — a single trace_id follows a request across HTTP, plugin calls, and sandboxed subprocess IPC hops.
 
 ---
 
@@ -65,7 +66,7 @@ from xcore import Xcore
 from contextlib import asynccontextmanager
 
 # 1. Initialize the Kernel
-xcore = Xcore(config_path="xcore.yaml")
+xcore = Xcore(config_path="integration.yaml")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

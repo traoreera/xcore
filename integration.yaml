@@ -81,7 +81,7 @@ services:
 
   # ── Cache ────────────────────────────────────────────────────
   cache:
-    backend: memory
+    backend: memory # memory | redis | tiered (memory L1 + redis L2, url requis)
 
   # ── Scheduler ────────────────────────────────────────────────
   scheduler:
@@ -175,10 +175,10 @@ observability:
     prefix: myapp
 
   tracing:
-    enabled: false
-    backend: noop # noop | opentelemetry | jaeger
+    enabled: true
+    backend: opentelemetry # noop | opentelemetry
     service_name: my-app
-    endpoint: null # ex: http://jaeger:4317 (OTLP gRPC)
+    endpoint: null # null = export console (dev). Sinon OTLP/HTTP, ex: http://localhost:4318/v1/traces
 
 # ── Sécurité ──────────────────────────────────────────────────
 security:

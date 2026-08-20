@@ -22,6 +22,10 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
+from ..observability import get_logger
+
+logger = get_logger("xcore.tenancy.services")
+
 # Tenant actif pour la tâche asyncio courante.
 # Initialisé à "default". Mis à jour par supervisor._dispatch à chaque requête.
 _current_tenant_id: ContextVar[str] = ContextVar("xcore_tenant_id", default="default")
@@ -125,8 +129,8 @@ class TenantAwareDB:
             await conn.execute(f"SET search_path TO {tenant}, public")
         except ValueError:
             raise
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("tenant schema cleanup error", error=str(e))
 
     @contextlib.asynccontextmanager
     async def session(self):

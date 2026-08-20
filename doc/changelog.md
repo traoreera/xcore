@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5] - 2026-08-10
+
+Closes out the V2 Industrialization roadmap: the two remaining ⚠️ items (Full OpenTelemetry, Distributed Tracing) are now implemented, and Advanced Hot Cache gets a tiered backend. V2 is now maintained in patch-release mode through December while running in production — see `ROADMAP_PROGRESS.md` for the V3 timeline decision.
+
+### Added
+- **Real OpenTelemetry SDK integration**: `Tracer`/`Span` (`xcore/kernel/observability/tracing.py`) now back onto a real `TracerProvider` when `observability.tracing.backend: opentelemetry` — console export (`SimpleSpanProcessor`, immediate) by default, OTLP/HTTP export (`BatchSpanProcessor`) when `endpoint` is set. Public API unchanged, fully backward compatible with the previous noop implementation.
+- **Distributed trace propagation (W3C TraceContext)**: a single `trace_id` now survives across process boundaries. `TraceContextMiddleware` (new, `xcore/kernel/observability/http_middleware.py`) extracts the incoming `traceparent` HTTP header before any span opens; the sandbox IPC channel (`sandbox/ipc.py` / `sandbox/worker.py`) injects/parses `traceparent` across the hop to a sandboxed subprocess. New `inject_trace_context()` / `extract_trace_context()` helpers, and `span(..., context=...)` to parent a span explicitly.
+- **`Tracer.shutdown()`**: flushes and stops the `TracerProvider`, wired into `Xcore.shutdown()`. Without it, spans still sitting in the `BatchSpanProcessor` buffer at process exit were silently dropped.
+- **Tiered cache backend** (`backend: tiered` in `services.cache`): `TieredCacheBackend` (`xcore/services/cache/backends/tiered.py`) — memory L1 in front of Redis L2, read-through with backfill, write-through. No cross-node invalidation push (bounded by `ttl`) — documented trade-off, see `doc/services/cache.md`.
+- New dependencies: `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`.
+
+### Changed
+- **`ServerConfig.host` default**: `0.0.0.0` → `127.0.0.1`. Deployments that need to bind all interfaces (containers, LB in front) now do so explicitly via `app.server.host` in `integration.yaml` or `XCORE__APP__SERVER__HOST`.
+
+### Fixed
+- **Silent exception swallowing**: 3 bare `except: pass` blocks now log at debug level instead of discarding the error — `sandbox/ipc.py` (`IPCChannel.close`), `sandbox/worker.py` (`plugin.on_unload`), `tenancy/services.py` (`_set_tenant_schema` cleanup).
+- **`sandbox/ipc.py`**: replaced `logging.getLogger()` with the project's `get_logger()`.
+
+### Documentation
+- `doc/observability/observability.md`: documented the real tracing backend, distributed propagation (HTTP + IPC), exporter selection table, and a new gotcha — `self.tracer`/`self.metrics`/`self.health` are `None` inside ephemeral/sandboxed plugins (no `PluginContext` injected there); automatic supervisor-level tracing still covers those calls without any plugin code.
+- `doc/services/cache.md`: documented the `tiered` backend and its cross-node staleness trade-off.
+
 ## [2.3.4] - 2026-08-04
 
 ### Added

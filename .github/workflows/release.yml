@@ -15,8 +15,8 @@ permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: "3.11"
-  POETRY_VERSION: "1.8.2"
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "2.4.1"
 
 jobs:
   # ──────────────────────────────────────────────────────────────
@@ -229,7 +229,33 @@ jobs:
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────
-  # JOB 4 — Création de la GitHub Release
+  # JOB 4 — Publication sur PyPI
+  # Secret requis : PYPI_TOKEN (clé API PyPI, scope "all projects")
+  # ──────────────────────────────────────────────────────────────
+  publish:
+    name: 📦 Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+        with:
+          packages-dir: dist/
+          password: ${{ secrets.PYPI_TOKEN }}
+          skip-existing: false
+          verbose: true
+
+  # ──────────────────────────────────────────────────────────────
+  # JOB 5 — Création de la GitHub Release
   # ──────────────────────────────────────────────────────────────
   release:
     name: 🎉 GitHub Release
@@ -258,7 +284,7 @@ jobs:
             dist/*.tar.gz
 
   # ──────────────────────────────────────────────────────────────
-  # JOB 5 — Résumé final
+  # JOB 6 — Résumé final
   # ──────────────────────────────────────────────────────────────
   notify:
     name: 📣 Summary

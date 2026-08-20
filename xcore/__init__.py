@@ -161,7 +161,12 @@ class Xcore:
                 raise RuntimeError(f"Service '{name}' requested before boot()")
             return self.services.get(name)
 
+        from .kernel.observability.http_middleware import TraceContextMiddleware
         from .kernel.tenancy import TenantMiddleware
+
+        # Middleware le plus externe : extrait le traceparent entrant avant tout
+        # le reste de la pile (TenantMiddleware compris).
+        app.add_middleware(TraceContextMiddleware)
 
         # TenantMiddleware toujours présent — si disabled, injecte juste default_tenant
         app.add_middleware(TenantMiddleware, config=self._config.tenancy)
@@ -189,7 +194,10 @@ class Xcore:
         # etape intermediare
         # configuration de l'observabilite
         self.metrics = create_metrics_registry(self._config.observability.metrics)
-        self.tracer = Tracer(self._config.observability.tracing.service_name)
+        self.tracer = Tracer(
+            self._config.observability.tracing.service_name,
+            self._config.observability.tracing,
+        )
         self.health = HealthChecker()
 
         # 1. Services (BDD, cache, scheduler)
@@ -259,6 +267,8 @@ class Xcore:
             await self.plugins.shutdown()
         if self.services:
             await self.services.shutdown()
+        if self.tracer:
+            self.tracer.shutdown()
         self._booted = False
         self._logger.info("xcore stopped")
 

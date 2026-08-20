@@ -673,6 +673,22 @@ def _send(transport, data: dict) -> None:
     transport.write(line.encode("utf-8"))
 
 
+def _trace_id_from_carrier(carrier: dict | None) -> str | None:
+    """
+    Extrait le trace_id d'un carrier W3C traceparent transmis par le Core via
+    l'enveloppe IPC. Parsing manuel — le SDK OpenTelemetry n'est pas dans la
+    whitelist d'imports du sandbox (ASTScanner), donc pas importable ici.
+    Format : "{version}-{trace_id}-{parent_id}-{flags}".
+    """
+    if not carrier:
+        return None
+    traceparent = carrier.get("traceparent")
+    if not traceparent:
+        return None
+    parts = traceparent.split("-")
+    return parts[1] if len(parts) == 4 else None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Boucle principale du worker
 # ─────────────────────────────────────────────────────────────────────────────
@@ -733,10 +749,13 @@ async def _run(plugin_dir: Path) -> None:
             continue
 
         response: dict
+        action = ""
+        trace_id = None
         try:
             msg = json.loads(raw)
             action = msg.get("action", "")
             payload = msg.get("payload", {})
+            trace_id = _trace_id_from_carrier(msg.get("trace_context"))
 
             if action == "ping":
                 response = {"status": "ok", "pong": True}
@@ -766,7 +785,7 @@ async def _run(plugin_dir: Path) -> None:
                 "code": "json_error",
             }
         except Exception as e:
-            logger.exception("handler error", action=action)
+            logger.exception("handler error", action=action, trace_id=trace_id)
             response = {"status": "error", "msg": str(e), "code": "handler_error"}
 
         _send(transport, response)
@@ -774,8 +793,8 @@ async def _run(plugin_dir: Path) -> None:
     if hasattr(plugin, "on_unload"):
         try:
             await plugin.on_unload()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("plugin on_unload failed", error=str(e))
 
     if hasattr(plugin, "_import_hook"):
         plugin._import_hook.uninstall()
