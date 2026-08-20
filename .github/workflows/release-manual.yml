@@ -1,0 +1,121 @@
+# ============================================================
+# Release — Déclenchement manuel
+# Bump la version, commit, crée le tag vX.Y.Z et le pousse.
+# Le push du tag déclenche ensuite release.yml (tests, build,
+# publication PyPI, GitHub Release) — aucune logique dupliquée ici.
+# ============================================================
+
+name: Release – Manual Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version explicite à publier (ex: 2.4.0, 3.0.0-beta.1). Laisser vide pour utiliser 'bump'."
+        required: false
+        type: string
+      bump:
+        description: "Type de bump utilisé si 'version' est vide."
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prepatch
+          - preminor
+          - premajor
+          - prerelease
+        default: patch
+      dry_run:
+        description: "Ne rien pousser — affiche juste ce qui serait fait."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "2.4.1"
+
+jobs:
+  prepare-release:
+    name: 🏷️ Prepare & Tag Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Compute target version
+        id: ver
+        run: |
+          CURRENT=$(poetry version -s)
+          echo "Version actuelle : $CURRENT"
+
+          if [ -n "${{ inputs.version }}" ]; then
+            poetry version "${{ inputs.version }}"
+          else
+            poetry version "${{ inputs.bump }}"
+          fi
+
+          VERSION=$(poetry version -s)
+          if [ "$VERSION" = "$CURRENT" ]; then
+            echo "❌ La version n'a pas changé ($VERSION) — abandon."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "🎯 Version cible : v$VERSION"
+
+      - name: Check tag doesn't already exist
+        run: |
+          if git rev-parse "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "❌ Le tag v${{ steps.ver.outputs.version }} existe déjà."
+            exit 1
+          fi
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit version bump
+        run: |
+          git add pyproject.toml
+          git commit -m "chore(release): v${{ steps.ver.outputs.version }}"
+
+      - name: Create annotated tag
+        run: |
+          git tag -a "v${{ steps.ver.outputs.version }}" \
+            -m "Release v${{ steps.ver.outputs.version }}"
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "🔍 Dry run — rien n'a été poussé sur origin."
+          echo ""
+          echo "Commit qui aurait été poussé sur main :"
+          git show --stat HEAD
+          echo ""
+          echo "Tag qui aurait été créé : v${{ steps.ver.outputs.version }}"
+
+      - name: Push commit + tag
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          git push origin HEAD:main
+          git push origin "v${{ steps.ver.outputs.version }}"
+          echo "✅ Poussé sur main + tag v${{ steps.ver.outputs.version }}"
+          echo "➡️  Le workflow 'Release' (release.yml) va démarrer automatiquement."
