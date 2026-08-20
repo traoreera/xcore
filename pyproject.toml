@@ -1,6 +1,6 @@
 [project]
 name = "XCoreRuntime"
-version = "2.4.3"
+version = "2.4.4"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
