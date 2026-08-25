@@ -7,7 +7,7 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 | Version | Focus | État | Progression |
 | :--- | :--- | :--- | :--- |
 | **V1** | Fondation Kernel | **Terminé** | 100% |
-| **V2** | Industrialisation | **Terminé** | 95% |
+| **V2** | Industrialisation | **Terminé** | 100% |
 | **V3** | Distribution | **Avancé** | 60% |
 | **V4** | Cloud Native | **Démarré** | 15% |
 | **V5** | Intelligence Native | **Concept** | 0% |
@@ -43,12 +43,14 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 | Warm Pool Plugins | ✅ | `xcore/kernel/runtime/warm_pool.py` |
 | Schema Registry | ✅ | `xcore/kernel/schema/registry.py` |
 | Validation automatique des contrats | ✅ | `xcore/kernel/schema/checker.py` |
-| OpenTelemetry complet | ⚠️ | Base présente dans `tracing.py`, stubs à lier |
-| Tracing distribué | ⚠️ | Middleware `TracingMiddleware` prêt |
+| OpenTelemetry complet | ✅ | Vrai `TracerProvider` (console/OTLP-HTTP) — `xcore/kernel/observability/tracing.py` |
+| Tracing distribué | ✅ | Propagation W3C traceparent HTTP + IPC sandbox — `http_middleware.py`, `sandbox/ipc.py` |
 | Métriques Prometheus | ✅ | `xcore/kernel/observability/metrics.py` |
 | Plugin Registry privé | ✅ | `xcore/registry/index.py` |
-| Hot Cache avancé | ⚠️ | TenantAwareCache optimisé, mais backend unique |
+| Hot Cache avancé | ✅ | Backend étagé (mémoire L1 + Redis L2) — `xcore/services/cache/backends/tiered.py` |
 | Optimisations loader | ✅ | Tri topologique par vagues implémenté |
+
+**Fenêtre de maintenance V2** : V2 reste feature-complete et tourne en production jusqu'à **décembre 2026** avant le démarrage de V3 — chaque bug trouvé en prod est patché en release V2.3.x plutôt que fondu dans le travail V3. Voir `CHANGELOG.md`.
 
 ---
 
@@ -96,14 +98,18 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 
 ---
 
-## 🔍 Analyse Technique (MàJ v2.3.2)
+## 🔍 Analyse Technique (MàJ v2.3.5)
 
 ### Points Forts
 - **Runtime Avancé (V2)** : Le support des plugins éphémères avec Warm Pool est une réussite technique majeure, permettant des performances "cold start" minimales.
 - **Sécurité & Performance** : Les optimisations récentes sur l'EventBus et le moteur de permissions ont réduit la latence sur le chemin critique.
+- **Observabilité (V2)** : Vrai SDK OpenTelemetry + propagation W3C bout en bout (HTTP → appels plugins → IPC sandbox) — clôt les deux derniers ⚠️ de V2.
 - **Tenancy (V3)** : L'isolation des ressources (DB/Cache) par tenant est mature et validée par les tests d'intégration.
 
-### Chantiers Prioritaires
+### Limites connues à suivre pendant la fenêtre de maintenance V2
+- **`self.tracer` / `self.metrics` / `self.health` valent `None` dans les plugins ephemeral/sandboxed** — aucun `PluginContext` injecté dans `sandbox/worker.py`. Le tracing automatique côté superviseur couvre quand même ces appels ; seuls les spans/métriques custom écrits dans le code d'un plugin ephemeral sont affectés.
+- **Le cache étagé n'a pas d'invalidation push inter-nœuds** — la fraîcheur du L1 est bornée par le `ttl`, pas garantie immédiate. Compromis assumé et documenté.
+
+### Chantiers Prioritaires (V3, une fois la fenêtre de maintenance terminée)
 1. **Clustering (V3)** : C'est le saut technologique manquant. Le framework doit pouvoir communiquer entre nœuds (Cluster IPC).
-2. **Observabilité (V2)** : Sortir du mode "stubs" pour OpenTelemetry pour permettre une traçabilité réelle en distribué.
-3. **Résilience (V3)** : Implémenter Circuit Breaker et Failover pour la stabilité inter-plugins.
+2. **Résilience (V3)** : Implémenter Circuit Breaker et Failover pour la stabilité inter-plugins.

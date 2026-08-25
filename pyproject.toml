@@ -1,6 +1,6 @@
 [project]
-name = "xcore"
-version = "2.3.3"
+name = "XCoreRuntime"
+version = "2.5.2"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
@@ -17,8 +17,6 @@ classifiers = [
 
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "xcoresdk @ git+https://github.com/xcore-team/xcoreSDK.git@main",
-    "xcoreCli @ git+https://github.com/xcore-team/xcoreCli.git@main",
     "fastapi[standard]>=0.135.1,<1.0.0",
     "uvicorn>=0.38.0,<1.0.0",
     "pydantic[email]>=2.11.7,<3.0.0",
@@ -33,7 +31,21 @@ dependencies = [
     "pyyaml>=6.0.3,<7.0.0",
     "rich>=14.0.0,<15.0.0",
     "celery>=5.6.3,<6.0.0",
+    "opentelemetry-api>=1.27.0,<2.0.0",
+    "opentelemetry-sdk>=1.27.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0,<2.0.0",
 ]
+
+# ── Dépendances optionnelles ─────────────────────────────────────────────────────
+# pip install XCoreRuntime[sdk]   → SDK complet pour auteurs de plugins (xcdk)
+# pip install XCoreRuntime[xcli]  → CLI xcore (xcorecli)
+# pip install XCoreRuntime[cpp]   → accélération C++ du scanner AST (xcorescanner)
+# pip install XCoreRuntime[all]   → les trois
+[project.optional-dependencies]
+sdk  = ["xcdk>=0.1.0"]
+xcli = ["xcorecli>=1.1.0"]
+cpp  = ["xcorescanner>=0.1.0"]
+all  = ["xcdk>=0.1.0", "xcorecli>=1.1.0", "xcorescanner>=0.1.0"]
 
 # ── Build system ───────────────────────────────────────────────────────────────
 [build-system]

@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-08-20
+
+### Fixed
+- **`[cpp]`/`[all]` extras removed (urgent)**: `2.5.0` shipped `cpp = ["xscanner>=0.1.0"]`, but `xscanner` on PyPI is an unrelated third-party package — we never owned that name. `pip install XCoreRuntime[cpp]` would have silently installed a stranger's package instead of failing. Dropped both extras until the real accelerator package (`xcorescanner`) is published; `[sdk]` and `[xcli]` are unaffected.
+
+## [2.5.0] - 2026-08-20
+
+### Added
+- **Optional extras** (`[project.optional-dependencies]`): `pip install XCoreRuntime[sdk]` (full plugin-author SDK, [`xcdk`](https://pypi.org/project/xcdk/)) and `pip install XCoreRuntime[xcli]` ([`xcorecli`](https://pypi.org/project/xcorecli/), the `xcli` command). `[cpp]`/`[all]` were part of this release but immediately broken — see `2.5.1`.
+
+## [2.4.4] - 2026-08-20
+
+First release actually published to PyPI as **`XCoreRuntime`** — `pip install XCoreRuntime` now works. `2.4.0`–`2.4.3` were cut while the release pipeline itself was still being fixed and never successfully reached PyPI (see `Fixed` below); no functional difference to document for those beyond what's already in `2.4.0`.
+
+### Changed
+- **PyPI distribution renamed to `XCoreRuntime`**: the registered PyPI project isn't `xcore` — `pyproject.toml`'s `name` didn't match, so the project-scoped `PYPI_TOKEN` was rejected with `403 Invalid API Token`. The **import name is unaffected**: `import xcore` still works, only `pip install <name>` changes.
+- **`xcoresdk`/`xcoreCli` git dependencies dropped**: PyPI rejects any package whose metadata declares a direct VCS dependency (`xcoresdk @ git+https://...`). Removing them broke `import xcore` itself (`ModuleNotFoundError: No module named 'sdk'` — `xcore/kernel/security/section.py` and `validation.py` imported `PluginDependency` from the external `sdk` package unconditionally, not just as an SDK convenience). Fixed by vendoring the pre-extraction SDK source (`xcore/sdk/plugin_base.py`, `decorators.py`, `routers.py`, `mixin/ipc.py`, `adapter/*.py`) back locally: the kernel now depends on nothing external, and `xcore.sdk`'s newer features (`EventMixin`, `HookMixin`, `ObservabilityMixin`, `ScheduledMixin`, `cached`/`cron`/`interval`/`health_check`, `AutoMixin`, Mongo/Redis repositories) are picked up automatically if the `xcdk` package happens to be installed (`[sdk]` extra), and simply absent otherwise — no fake no-op fallbacks.
+- **`xcore/kernel/security/{section,validation}.py`**: `PluginDependency` now imported from `...sdk.plugin_base` (local) instead of the external `sdk` package.
+
+### Fixed
+- **Release pipeline couldn't actually release**: `release.yml` only triggered on `push: tags:`, but the version-bump commit + tag pushed by `release-manual.yml` use the default `GITHUB_TOKEN` — GitHub deliberately never cascades a `push` event triggered by `GITHUB_TOKEN` into other workflow runs (anti-loop protection). `v2.3.5`(era) tags were pushed with no build/publish/release ever firing. `release.yml` now also accepts `workflow_dispatch` with a `tag` input, and `release-manual.yml` explicitly calls `gh workflow run release.yml -f tag=vX.Y.Z` after pushing the tag.
+- **`pypa/gh-action-pypi-publish` token wiring**: the PyPI API token was passed via `env: PYPI_TOKEN`, which the action never reads (it only reads the `password:` input) — publish step silently no-op'd on auth. Fixed to `with: password: ${{ secrets.PYPI_TOKEN }}`.
+- **`.github/workflows/labeler.yml`**: contained the label-mapping *config* (`"core": - changed-files: ...`) instead of a workflow definition — GitHub tried to parse it as a workflow and failed on every push. Moved the mapping to `.github/labeler.yml` (where `pr.yml`'s existing `🏷️ Auto Label` job already expected it) and deleted the broken duplicate workflow file.
+- **`docs.yml`**: missing `permissions:` block meant the Netlify PR-preview comment step failed with `Resource not accessible by integration`. Added `contents: read` / `pull-requests: write`.
+- **`xcore/kernel/security/validation.py`** isort ordering (introduced by the SDK-vendoring fix above).
+
+### New tooling
+- **`.github/workflows/release-manual.yml`**: `workflow_dispatch`-only release trigger — bump `pyproject.toml` (explicit version or `patch`/`minor`/`major`/pre-release), commit, tag, push, and dispatch `release.yml`. Supports `dry_run`.
+
+## [2.4.0] - 2026-08-20
+
+### Added
+- **Real OpenTelemetry SDK integration and distributed trace propagation** (W3C `traceparent`, HTTP + sandbox IPC) — completes the tracing work started in `2.3.5`. See `doc/observability/observability.md`.
+- **Tiered cache backend** follow-up work, and general V2 Industrialization roadmap close-out (PR #271).
+
+## [2.3.5] - 2026-08-10
+
+Closes out the V2 Industrialization roadmap: the two remaining ⚠️ items (Full OpenTelemetry, Distributed Tracing) are now implemented, and Advanced Hot Cache gets a tiered backend. V2 is now maintained in patch-release mode through December while running in production — see `ROADMAP_PROGRESS.md` for the V3 timeline decision.
+
+### Added
+- **Real OpenTelemetry SDK integration**: `Tracer`/`Span` (`xcore/kernel/observability/tracing.py`) now back onto a real `TracerProvider` when `observability.tracing.backend: opentelemetry` — console export (`SimpleSpanProcessor`, immediate) by default, OTLP/HTTP export (`BatchSpanProcessor`) when `endpoint` is set. Public API unchanged, fully backward compatible with the previous noop implementation.
+- **Distributed trace propagation (W3C TraceContext)**: a single `trace_id` now survives across process boundaries. `TraceContextMiddleware` (new, `xcore/kernel/observability/http_middleware.py`) extracts the incoming `traceparent` HTTP header before any span opens; the sandbox IPC channel (`sandbox/ipc.py` / `sandbox/worker.py`) injects/parses `traceparent` across the hop to a sandboxed subprocess. New `inject_trace_context()` / `extract_trace_context()` helpers, and `span(..., context=...)` to parent a span explicitly.
+- **`Tracer.shutdown()`**: flushes and stops the `TracerProvider`, wired into `Xcore.shutdown()`. Without it, spans still sitting in the `BatchSpanProcessor` buffer at process exit were silently dropped.
+- **Tiered cache backend** (`backend: tiered` in `services.cache`): `TieredCacheBackend` (`xcore/services/cache/backends/tiered.py`) — memory L1 in front of Redis L2, read-through with backfill, write-through. No cross-node invalidation push (bounded by `ttl`) — documented trade-off, see `doc/services/cache.md`.
+- New dependencies: `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`.
+
+### Changed
+- **`ServerConfig.host` default**: `0.0.0.0` → `127.0.0.1`. Deployments that need to bind all interfaces (containers, LB in front) now do so explicitly via `app.server.host` in `integration.yaml` or `XCORE__APP__SERVER__HOST`.
+
+### Fixed
+- **Silent exception swallowing**: 3 bare `except: pass` blocks now log at debug level instead of discarding the error — `sandbox/ipc.py` (`IPCChannel.close`), `sandbox/worker.py` (`plugin.on_unload`), `tenancy/services.py` (`_set_tenant_schema` cleanup).
+- **`sandbox/ipc.py`**: replaced `logging.getLogger()` with the project's `get_logger()`.
+
+### Documentation
+- `doc/observability/observability.md`: documented the real tracing backend, distributed propagation (HTTP + IPC), exporter selection table, and a new gotcha — `self.tracer`/`self.metrics`/`self.health` are `None` inside ephemeral/sandboxed plugins (no `PluginContext` injected there); automatic supervisor-level tracing still covers those calls without any plugin code.
+- `doc/services/cache.md`: documented the `tiered` backend and its cross-node staleness trade-off.
+
 ## [2.3.4] - 2026-08-04
 
 ### Added

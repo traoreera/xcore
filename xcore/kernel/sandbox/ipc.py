@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from dataclasses import dataclass
 
-logger = logging.getLogger("xcore.sandbox.ipc")
+from xcore.kernel.observability import get_logger
+from xcore.kernel.observability.tracing import inject_trace_context
+
+logger = get_logger("xcore.sandbox.ipc")
 
 
 class IPCError(Exception):
@@ -53,7 +55,14 @@ class IPCChannel:
             return await self._send_recv(action, payload)
 
     async def _send_recv(self, action: str, payload: dict) -> IPCResponse:
-        line = json.dumps({"action": action, "payload": payload}) + "\n"
+        trace_context: dict[str, str] = {}
+        inject_trace_context(trace_context)
+        line = (
+            json.dumps(
+                {"action": action, "payload": payload, "trace_context": trace_context}
+            )
+            + "\n"
+        )
         try:
             self._process.stdin.write(line.encode())
             await self._process.stdin.drain()
@@ -90,5 +99,5 @@ class IPCChannel:
         try:
             self._process.stdin.close()
             await self._process.stdin.wait_closed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("ipc channel close error", error=str(e))

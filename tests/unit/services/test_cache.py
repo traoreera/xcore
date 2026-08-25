@@ -2,6 +2,8 @@
 Tests for CacheService.
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from xcore.services.base import ServiceStatus
@@ -46,6 +48,41 @@ class TestCacheService:
             await cache.init()
 
         assert "url obligatoire" in str(exc.value)
+
+    @pytest.fixture
+    def tiered_config(self):
+        """Tiered (memory L1 + redis L2) backend configuration."""
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            backend="tiered", url="redis://localhost:6379/0", ttl=300, max_size=1000
+        )
+
+    @pytest.mark.asyncio
+    async def test_init_tiered_backend_requires_url(self, tiered_config):
+        """Test tiered backend requires URL (for its L2/redis layer)."""
+        tiered_config.url = None
+        cache = CacheService(tiered_config)
+
+        with pytest.raises(ValueError) as exc:
+            await cache.init()
+
+        assert "url obligatoire" in str(exc.value)
+
+    @pytest.mark.asyncio
+    async def test_init_tiered_backend(self, tiered_config):
+        """Test initializing tiered backend builds a TieredCacheBackend and connects it."""
+        from xcore.services.cache.backends.tiered import TieredCacheBackend
+
+        with patch(
+            "xcore.services.cache.backends.redis.RedisCacheBackend.connect",
+            new_callable=AsyncMock,
+        ):
+            cache = CacheService(tiered_config)
+            await cache.init()
+
+        assert cache._status == ServiceStatus.READY
+        assert isinstance(cache._backend, TieredCacheBackend)
 
     @pytest.mark.asyncio
     async def test_get_set_delete(self, memory_config):
