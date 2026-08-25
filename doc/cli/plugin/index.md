@@ -1,9 +1,3 @@
----
-title: Plugin System
-description: Manage the full plugin lifecycle — scaffold, install, deploy, and control plugins.
-icon: material/puzzle
----
-
 # Plugin System
 
 The `xcore` framework is designed around a powerful, modular plugin system. Plugins allow you to extend the core functionality of your application without modifying the kernel.
@@ -14,17 +8,15 @@ Plugins in `xcore` are self-contained modules located in the directory specified
 
 ### Types of Plugins
 
-**Trusted Plugins**
+1. **Trusted Plugins**:
+   - Have full access to the system.
+   - Typically developed internally.
+   - Must be signed if `strict_trusted` is enabled.
 
-- Have full access to the system and service container.
-- Typically developed internally or by vetted contributors.
-- Must be signed if `strict_trusted: true` is enabled.
-
-**Sandboxed Plugins**
-
-- Run in an isolated subprocess environment.
-- Restricted by an AST-based whitelist for imports.
-- Limited resource consumption (CPU, Memory, Disk quotas).
+2. **Sandboxed Plugins**:
+   - Run in an isolated environment.
+   - Restricted by an AST-based whitelist for imports.
+   - Limited resource consumption (CPU, Memory, Disk).
 
 ## Directory Structure
 
@@ -34,56 +26,30 @@ A typical plugin looks like this:
 plugins/
 └── my-plugin/
     ├── src/
-    │   ├── __init__.py
-    │   └── main.py          # Entry point — class Plugin
-    ├── plugin.yaml          # Metadata, permissions & resources
-    ├── plugin.sig           # HMAC signature file (production)
-    ├── tests/               # Plugin unit tests
-    └── data/                # Writable data directory (sandboxed)
-```
-
-## Quick Start
-
-```bash
-# Scaffold a new trusted plugin
-xcli plugin local scaffold my_plugin --mode trusted --db --cache
-
-# Link your development directory
-xcli plugin local link --path ./my_plugin --name my_plugin
-
-# Check the plugin loaded correctly
-xcli plugin runtime status
-
-# Run a health check on all plugins
-xcli plugin health
+    │   └── main.py      # Entry point
+    ├── plugin.yaml      # Metadata & Resources
+    ├── plugin.sig       # Security signature
+    └── requirements.txt # Dependencies
 ```
 
 ## Lifecycle Management
 
 `xcorecli` provides a comprehensive suite of commands to manage the entire plugin lifecycle:
 
-| Stage | Command Group | Purpose |
-|-------|---------------|---------|
-| Development | [Local](local.md) | Scaffold, symlink, and iterate locally |
-| Deployment | [Install](install.md) | Install from marketplace, Git, or zip |
-| Runtime | [Runtime](runtime.md) | Load, unload, reload, and call actions |
-| Discovery | [Marketplace](marketplace.md) | Browse and search the plugin registry |
-| Security | [Security](security.md) | Sign, verify, and audit plugins |
-| Maintenance | [Updates](update.md) | Check and apply upstream updates |
+- **Development**: [Local Linking & Scaffolding](local.md)
+- **Deployment**: [Installation & Removal](install.md)
+- **Runtime**: [Load/Unload/Reload](runtime.md)
+- **Discovery**: [Marketplace](marketplace.md)
+- **Security**: [Signing & Health Checks](security.md)
+- **Maintenance**: [Updates](update.md)
 
-## Top-level Commands
+### Top-level Commands
 
-| Command | Description |
-|---------|-------------|
-| `xcli plugin info <name>` | Show manifest, permissions, and resource limits |
-| `xcli plugin health` | Check signatures, AST, and manifests for all plugins |
-| `xcli plugin remove <name>` | Uninstall a plugin and delete its directory |
-| `xcli plugin versions <name>` | List all available versions on the marketplace |
+In addition to sub-apps, the `plugin` group provides several direct commands:
 
-!!! tip "Inter-Plugin Communication (IPC)"
-    Plugins communicate using the built-in IPC mechanism. Declare `allowed_callers` in `plugin.yaml` to control which plugins can call yours:
-    ```yaml
-    allowed_callers:
-      - "auth_plugin"
-      - "admin_panel"
-    ```
+- **`xcli plugin info <name>`**: Show detailed manifest and permissions for an installed plugin.
+- **`xcli plugin health`**: Perform a global health check (signatures, AST, manifests) on all installed plugins.
+- **`xcli plugin remove <name>`**: Uninstall a plugin and delete its files.
+
+!!! tip "IPC (Inter-Plugin Communication)"
+    Plugins can communicate with each other using the built-in IPC mechanism, which is enforced by the core `ServiceContainer`.

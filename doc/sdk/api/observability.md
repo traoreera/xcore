@@ -4,172 +4,164 @@ description: Decorators and mixins for logging, metrics, tracing, and health che
 icon: material/eye
 ---
 
-# Observability SDK
+# Observability
 
-The SDK provides declarative decorators and direct properties on `TrustedBase` to instrument your plugins without boilerplate.
-
----
-
-## Direct Properties
-
-Any plugin inheriting from `TrustedBase` has access to these properties without any configuration:
-
-| Property | Type | Description |
-|-----------|------|-------------|
-| `self.logger` | `XcoreLogger` | Structured logger bound to the plugin namespace |
-| `self.metrics` | `MetricsRegistry` | Metrics registry |
-| `self.tracer` | `Tracer` | Tracer for spans |
-| `self.health` | `HealthChecker` | Health checks registry |
-
----
-
-## 1. Structured Logging
-
-Structured logger — accepts arbitrary kwargs as contextual fields.
-
-```python linenums="1"
-class Plugin(TrustedBase):
-    async def handle(self, action, payload):
-        self.logger.info("action executed", action=action, user_id=payload.get("user_id"))
-```
-
-Outside of a plugin, use `get_logger` directly:
+xcoreSDK provides declarative observability: tracing, metrics, and health checks — all via decorators.
 
 ```python
-from xcore.kernel.observability import get_logger
-logger = get_logger("my_namespace")
+from xcore.sdk import traced, counted, timed, health_check, get_logger
 ```
 
 ---
 
-## 2. Tracing Decorator
+## get_logger
 
-Wraps a method in a tracing span. No-op if `self.tracer` is `None`.
+Returns a structured logger namespaced under `plugin.<name>`.
 
-```python linenums="1"
+```python
+from xcore.sdk import get_logger
+
+logger = get_logger("my_plugin")
+logger.info("started")
+logger.warning("degraded: %s", reason)
+logger.error("failed", exc_info=True)
+```
+
+Inside a plugin, `self.logger` is pre-wired via `ObservabilityMixin`:
+
+```python
+class Plugin(AutoMixin):
+    async def on_load(self):
+        await super().on_load()
+        self.logger.info("plugin loaded")
+```
+
+---
+
+## @traced
+
+Wraps a handler in a distributed tracing span. No-ops gracefully when `self.ctx.tracer` is `None`.
+
+```python
 from xcore.sdk import traced
 
-class Plugin(TrustedBase):
-    @traced("process_payment")
-    async def process(self, payload: dict):
-        ...
+@action("get_user")
+@traced("demo.get_user")
+async def get_user(self, payload: dict) -> dict:
+    ...
 ```
 
-If an exception occurs, the span is marked as `status="error"` before the exception is re-raised.
+**Parameters**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `span_name` | `str \| None` | function name | Name of the span in the tracer |
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `span_name` | `str \| None` | function name | Name for the tracing span |
+
+On exception, the span is marked with `status="error"` before re-raising.
 
 ---
 
-## 3. Metrics Decorators
+## @counted
 
-### `@counted`
-
-Increments a counter after each successful call. No-op if `self.metrics` is `None`.
-
-```python linenums="1"
-from xcore.sdk import counted
-
-class Plugin(TrustedBase):
-    @counted("payment_processed_total")
-    async def process(self, payload: dict):
-        ...
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `metric_name` | `str` | — | Name of the counter in `self.metrics` |
-
-### `@timed`
-
-Records the execution duration in a histogram. No-op if `self.metrics` is `None`.
-
-```python linenums="1"
-from xcore.sdk import timed
-
-class Plugin(TrustedBase):
-    @timed("payment_duration_seconds")
-    async def process(self, payload: dict):
-        ...
-```
-
-The duration is measured from method entry to exit, including any awaited I/O.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `metric_name` | `str` | — | Name of the histogram in `self.metrics` |
-
----
-
-## 4. Health Checks Decorator
-
-Marks a method as a health check. The method must return `(bool, str)`.
-
-```python linenums="1"
-from xcore.sdk import health_check
-
-class Plugin(TrustedBase):
-    @health_check("shop.inventory")
-    async def check_inventory(self) -> tuple[bool, str]:
-        # Return status and descriptive message
-        return True, "ok"
-```
-
-Checks are registered automatically in `self.ctx.health` during `on_load()` via `ObservabilityMixin`.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `check_name` | `str` | — | Identifier exposed in `GET /ipc/health` |
-
----
-
-## `ObservabilityMixin`
-
-Provides:
-
-- Automatic registration of all `@health_check` methods during `on_load()`
-- Injection of `self.logger`, `self.metrics`, `self.tracer`, and `self.health`
+Increments a counter metric after every successful call.
 
 ```python
-from xcore.sdk import ObservabilityMixin
+from xcore.sdk import counted
 
-class Plugin(ObservabilityMixin, TrustedBase):
-    pass
+@action("create_user")
+@counted("demo.users.created")
+async def create_user(self, payload: dict) -> dict:
+    ...
 ```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `metric_name` | `str` | — | Counter name in `self.ctx.metrics` |
+| `labels` | `dict \| None` | `None` | Optional label dimensions |
+
+No-ops when `self.ctx.metrics` is unavailable.
 
 ---
 
-## Decorator Combination
+## @timed
 
-Decorators can be combined. Recommended order: `@traced` → `@counted` → `@timed` (from outside to inside).
+Records handler duration as a histogram observation.
 
-```python linenums="1"
-class Plugin(TrustedBase):
-    @traced("process_payment")
-    @counted("payment_processed_total")
-    @timed("payment_duration_seconds")
-    async def process(self, payload: dict):
-        ...
+```python
+from xcore.sdk import timed
+
+@action("search")
+@timed("demo.search.duration_seconds")
+async def search(self, payload: dict) -> dict:
+    ...
 ```
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `metric_name` | `str` | Histogram name in `self.ctx.metrics` |
+
+Duration is measured from call entry to return, including any awaited I/O.
 
 ---
 
-## Advanced Usage
+## @health_check
 
-For operations not covered by decorators:
+Registers a method as a health check with the kernel's health registry.
 
-```python linenums="1"
-# Counter with dynamic labels
-self.metrics.counter(
-    "shop_orders_total",
-    labels={"payment_type": "stripe"}
-).inc()
+```python
+from xcore.sdk import health_check
 
-# Gauge — queue size
-self.metrics.gauge("shop_queue_size").set(42)
-
-# Histogram — response size
-self.metrics.histogram("shop_response_bytes").observe(1024)
+@health_check("demo.db")
+async def check_db(self) -> tuple[bool, str]:
+    try:
+        db = self.get_service("db")
+        await db.execute("SELECT 1")
+        return True, "ok"
+    except KeyError:
+        return False, "service 'db' absent"
 ```
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `check_name` | `str` | Identifier exposed in `/health` endpoint |
+
+**Return value:** `tuple[bool, str]` — `(healthy, message)`.
+
+Health checks are registered during `on_load` by `ObservabilityMixin` and unregistered during `on_unload`.
+
+---
+
+## ObservabilityMixin
+
+Composed by `AutoMixin`. Provides:
+
+- `self.logger` property — pre-namespaced logger
+- Auto-registration of all `@health_check`-decorated methods during `on_load`
+- Auto-cleanup during `on_unload`
+
+No manual wiring needed when using `AutoMixin`.
+
+---
+
+## Direct metrics access
+
+For custom metric operations beyond the decorator API:
+
+```python
+# Counter
+self.ctx.metrics.increment("my.counter", labels={"env": "prod"})
+
+# Histogram
+self.ctx.metrics.observe("my.histogram", value=0.42)
+
+# Gauge
+self.ctx.metrics.set_gauge("my.gauge", value=100)
+```
+
+Available when `self.ctx.metrics` is not `None` (i.e., the metrics service is registered).

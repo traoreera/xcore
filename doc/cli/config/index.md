@@ -1,117 +1,48 @@
----
-title: CLI Configuration
-description: Manage xcorecli settings, view merged configuration, and validate integration.yaml.
-icon: material/tune
----
-
 # CLI Configuration
 
-The `config` command group allows you to manage the behavior of `xcorecli` itself and its interaction with the `xcore` project.
+The `config` command group stores the two credentials `xcorecli` needs to
+talk to the marketplace: an **API key** (`xdk_...`, authorizes downloads)
+and a **signing key** (verifies the HMAC signature of every ZIP before
+extraction). It does **not** manage `integration.yaml` or any other
+project-level setting — see [Getting started → Configuration](../getting-started/configuration.md)
+for that.
 
-## Commands Overview
+!!! tip "Prefer `xcli login`"
+    `xcli login` (device-code flow, opens a browser) fetches and stores
+    **both** credentials in one step, without ever printing them to the
+    terminal. `config set` below is the manual fallback — useful in a
+    non-interactive environment (CI, a container) where opening a browser
+    isn't possible.
+
+## Commands
 
 | Command | Description |
 |---------|-------------|
-| `show` | Display the current merged configuration |
-| `get` | Retrieve a specific configuration value |
-| `set` | Update a configuration value |
-| `validate` | Check `integration.yaml` for schema compliance |
+| `xcli config set <key> <value>` | Store a credential — `key` must be `api-key` or `signing-key`. |
+| `xcli config show` | Print whether each credential is set (values are masked, never shown in full). |
 
-## Managing Settings
+## Setting credentials manually
 
-### View Current Configuration
+```bash
+xcli config set api-key xdk_...
+xcli config set signing-key <your-signing-secret>
+```
 
-Display the full merged configuration including defaults, `integration.yaml` values, and environment overrides:
+Both are written to `~/.xcli/config.json` — the same file `xcli login`
+writes to, so mixing the two approaches (login once, then manually rotate
+one key later) is safe.
+
+## Checking status
 
 ```bash
 xcli config show
-
-# Merged Configuration
-# ─────────────────────────────────────────────────────
-#  app.name                 = my-xcore-app
-#  app.env                  = development
-#  app.debug                = true
-#  plugins.directory        = ./plugins
-#  plugins.strict_trusted   = false
-#  plugins.interval         = 2
-#  services.db.type         = sqlasync
-#  services.cache.backend   = memory
-#  marketplace.api_key      = xdk_****...****
-# ─────────────────────────────────────────────────────
 ```
 
-### Get a Specific Value
-
-```bash
-xcli config get app.env
-# development
-
-xcli config get plugins.strict_trusted
-# false
+```
+api-key:     set
+signing-key: not set
 ```
 
-### Update a Value
-
-Modify settings directly from the CLI:
-
-```bash title="Enable debug mode"
-xcli config set app.debug true
-
-title="Change plugin reload interval"
-xcli config set plugins.interval 5
-```
-
-!!! note "Layered Configuration"
-    `xcorecli` merges configuration from multiple sources in this priority order (highest first):
-
-    1. Environment variables (`XCORE__SECTION__KEY=value`)
-    2. Local CLI config (user-level overrides)
-    3. `integration.yaml` (project-level)
-    4. Internal framework defaults
-
-### Validate Configuration
-
-Check `integration.yaml` for schema compliance before deploying:
-
-```bash
-xcli config validate
-
-# Validating integration.yaml...
-# [OK] app section
-# [OK] plugins section
-# [OK] services.databases.default
-# [WARN] services.xworker: broker_url not set — XWorker disabled
-# Validation passed with 1 warning.
-```
-
-## Setting Credentials
-
-Sensitive values like API keys should be set via the `config` command (not stored in `integration.yaml`):
-
-```bash
-xcli config set marketplace.api_key "xdk_your-token"
-xcli config set plugins.secret_key "${XCORE_PLUGINS_KEY}"
-```
-
-## Runtime Configuration
-
-Some settings can be adjusted without restarting the server:
-
-```yaml title="integration.yaml"
-plugins:
-  interval: 5     # Hot-reload polling every 5 seconds
-```
-
-Apply live changes by reloading the service that owns the setting:
-
-```bash
-xcli manager services reload plugin_supervisor
-```
-
-!!! info "Dynamic Updates"
-    Use `xcli manager services reload <name>` to apply configuration changes without a full restart. Changes to `app.secret_key` or database URLs always require a full restart.
-
-## See Also
-
-[Configuration Guide](../getting-started/configuration.md)
-:   Complete reference for `integration.yaml` sections and fields.
+Nothing else is configurable through this command group — there is no
+`get`/`validate` sub-command, and no arbitrary `key.path value` form; `key`
+is restricted to exactly `api-key` or `signing-key`.

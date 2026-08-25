@@ -1,118 +1,56 @@
----
-title: Worker Orchestration
-description: Manage Celery workers for distributed background task processing.
-icon: material/worker
----
-
 # Worker Orchestration
 
 `xcore` integrates with **Celery** to handle background tasks, scheduled jobs, and asynchronous processing.
 
 ## Overview
 
-The `worker` command group manages the lifecycle of your background processing fleet.
+The `worker` command group allows you to manage the lifecycle of your background processing fleet.
 
-| Command | Description |
-|---------|-------------|
-| `start` | Launch a Celery worker |
-| `beat` | Start the periodic task scheduler (APScheduler) |
-| `inspect` | Check worker health and registered tasks |
-| `purge` | Clear all messages from a queue |
-| `process` | Fine-grained process management (see below) |
+### Key Commands
+
+- **`start`**: Launch a Celery worker.
+- **`beat`**: Start the periodic task scheduler.
+- **`inspect`**: Check worker health and registered tasks.
+- **`purge`**: Clear all messages from a queue.
+- **`process`**: Fine-grained process management sub-app.
 
 ## Managing Workers
 
 ### Start a Worker
 
-```bash title="Default start"
-xcli worker start
-```
+By default, `worker start` launches a Celery worker. API server management has moved to `manager start`.
 
-```bash title="With queues and concurrency"
-xcli worker start --queues default,email,heavy --concurrency 4
+```bash title="Start Celery"
+xcli worker start
 ```
 
 ### Inspect Workers
 
-Check which worker nodes are online and what tasks they can run:
+Check which worker nodes are online and what tasks they are capable of running.
 
-```bash title="Inspect active workers"
+```bash title="Inspect"
 xcli worker inspect
-
-# Active workers:
-#   worker@server-01   — queues: default, email   tasks: 3 active
-#   worker@server-02   — queues: heavy             tasks: 1 active
-#
-# Registered tasks:
-#   image_processing.resize
-#   report.generate_pdf
-#   email.send_batch
 ```
 
 ### Purging Queues
 
-Clear a queue if it has accumulated stale or unwanted tasks:
+If you have a buildup of unwanted tasks, you can clear a queue:
 
 ```bash
 xcli worker purge default
-# WARNING: This will delete all tasks in queue 'default'. Continue? [y/N]: y
-# Purged 142 tasks from queue 'default'.
 ```
 
 ## Periodic Tasks (Beat)
 
-Start the Celery Beat scheduler that triggers recurring tasks:
+To start the scheduler that triggers periodic tasks:
 
 ```bash
 xcli worker beat
-# Starting Celery Beat scheduler...
-# Next jobs:
-#   global_sync   every 1h   — next run in 42m
-#   daily_report  0 9 * * *  — next run in 14h
 ```
 
-Configure static jobs in `integration.yaml`:
+!!! tip "Configuration"
+    Worker settings like `broker_url`, `concurrency`, and `queues` are managed in the `services.xworker` section of `integration.yaml`.
 
-```yaml title="integration.yaml — scheduler jobs"
-services:
-  scheduler:
-    jobs:
-      - id: "global_sync"
-        func: "myapp.tasks:sync_external_data"
-        trigger: "interval"
-        hours: 1
-      - id: "daily_report"
-        func: "myapp.tasks:generate_report"
-        trigger: "cron"
-        hour: 9
-        minute: 0
-```
+## Next Steps
 
-## Worker Configuration
-
-```yaml title="integration.yaml — xworker section"
-services:
-  xworker:
-    enabled: true
-    broker_url: "redis://localhost:6379/0"
-    result_backend: "redis://localhost:6379/0"
-    queues: ["default", "email", "heavy"]
-    concurrency: 4
-    modules:
-      - "plugins.billing_engine.tasks"
-      - "plugins.email_plugin.tasks"
-```
-
-!!! tip "Queue Separation"
-    Use dedicated queues for different task types to scale workers independently:
-    - `default` — general tasks
-    - `email` — transactional email sending
-    - `heavy` — CPU-intensive processing (reports, image resizing)
-
-## See Also
-
-[Process Management](process.md)
-:   Start, stop, and monitor multiple worker instances.
-
-[XWorker Service](../../services/xworker.md)
-:   Define `@task` decorators and dispatch tasks from plugins.
+For detailed control over multiple worker processes, including logs and status tables, see [Process Management](process.md).

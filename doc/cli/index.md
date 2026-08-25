@@ -1,36 +1,39 @@
----
-title: CLI Overview
-description: Command-line interface for managing every aspect of your Xcore project.
-icon: material/console
----
+# Welcome to xcorecli
 
-# XCore CLI
+`xcorecli` is the official command-line companion for the **xcore ecosystem**. It provides a unified interface for project management, service monitoring, plugin lifecycles, and worker orchestration.
 
-The `xcore` command-line interface (CLI) is a powerful tool designed to manage every aspect of your XCore framework project. From scaffolding new plugins to managing background workers and monitoring system health, the CLI is your primary interface for development and administration.
+!!! tip "Beautiful Terminal Output"
+    `xcorecli` leverages the `rich` library to deliver stunning terminal interfaces, featuring interactive tables, progress bars, and real-time dashboards.
 
 ## Key Features
 
-- **Lifecycle Management**: Easily initialize projects and manage the lifecycle of your application.
-- **Plugin Control**: Scaffold, install, update, and manage plugins from the marketplace or local directories.
-- **Real-time Monitoring**: Integrated dashboard for monitoring resource usage and logs.
-- **Background Workers**: Manage Celery workers and background tasks with ease.
-- **Database Migrations**: Integrated support for database migrations and backups.
+- **Project Initialization**: Seamlessly scaffold new projects and manage `integration.yaml`.
+- **Plugin Lifecycle**: Full control over installing, signing, and updating plugins.
+- **Real-time Monitoring**: Integrated dashboard for service health and resource usage.
+- **Worker Orchestration**: Manage Celery/XWorker processes with ease.
+- **Security & Sandboxing**: Resource isolation and AST-based whitelisting for plugins.
+- **Database Migrations**: Streamlined Alembic integration for schema management.
 
-## Getting Started
+## Quick Start Overview
 
-If you're new to the XCore CLI, we recommend starting with the [Getting Started](getting-started/install.md) guide.
+```bash title="Quick Install"
+git clone https://github.com/xcore-team/xcoreCli.git
+cd xcorecli
+make install
+```
 
-## Command Groups
+!!! info "Architecture"
+    The CLI is designed to be highly modular. Each command group (e.g., `plugin`, `worker`, `manager`) is a self-contained module, ensuring extensibility and maintainability.
 
-The CLI is organized into several command groups:
+## Next Steps
 
-- **[Manager](manager/index.md)**: Administration and monitoring.
-- **[Plugin](plugin/index.md)**: Plugin lifecycle and development.
-- **[Worker](worker/index.md)**: Background task management.
-- **[Sandbox](sandbox/index.md)**: Security and isolation settings.
-- **[Migration](migration/index.md)**: Database schema management.
-- **[Config](config/index.md)**: System configuration tools.
+- [Installation Guide](getting-started/install.md)
+- [Authentication Setup](getting-started/auth.md)
+- [Core Commands Reference](reference.md)
 
-## Quick Reference
-
-For a complete list of all commands and their options, check out the [Full CLI Reference](reference.md).
+!!! info "Production deployment"
+    Deploying plugin bundles to remote servers is no longer part of
+    `xcorecli` — it's fully handled by the standalone
+    [`xcore-agent`](https://github.com/traoreera/xcore-agent) deployment
+    agent (Hub artifact fetch, signature verification, install/rollback,
+    systemd/Docker/Kubernetes supervisors, CI/CD watch loop).

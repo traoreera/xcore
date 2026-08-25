@@ -134,6 +134,7 @@ nav:
       - Base Commands:
           - Project Init: cli/commands/init.md
           - Health Check: cli/commands/health.md
+          - Login: cli/commands/login.md
       - Manager:
           - Overview: cli/manager/index.md
           - Monitoring: cli/manager/monitoring.md
@@ -150,9 +151,24 @@ nav:
           - Overview: cli/worker/index.md
           - Orchestration: cli/worker/process.md
       - Sandbox: cli/sandbox/index.md
+      - Service Extensions: cli/service/index.md
       - Migrations: cli/migration/index.md
       - Configuration: cli/config/index.md
       - Full Reference: cli/reference.md
+  - Deployment Agent:
+      - Overview: agent/index.md
+      - Getting Started: agent/getting-started.md
+      - CLI Reference: agent/usage.md
+      - install.yaml Scaffolding: agent/scaffold.md
+      - Architecture:
+          - Overview & Layout: agent/architecture.md
+          - Deployment Pipelines: agent/pipelines.md
+          - State Machines & Security: agent/security.md
+      - Real Marketplace Flow: agent/marketplace.md
+      - Concepts:
+          - Plugins: agent/plugins.md
+          - Provisioning Backing Services: agent/provisioning.md
+          - Key Custody: agent/key-custody.md
   - Best Practices: best-practices.md
   - Changelog: changelog.md
 

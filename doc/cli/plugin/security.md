@@ -1,136 +1,80 @@
----
-title: Plugin Security & Signing
-description: Sign, verify, and audit plugins using HMAC signatures and AST analysis.
-icon: material/shield-key
----
-
 # Plugin Security & Signing
 
-Security is a core pillar of the `xcore` plugin system. Xcore provides tools to ensure that only verified and safe code runs in your environment.
+Security is a core pillar of the `xcore` plugin system. We provide tools to ensure that only verified and safe code runs in your environment.
 
 ## Signing Plugins
 
-For production use, sign plugins to prevent unauthorized modification. Signing generates an HMAC-SHA256 hash of the manifest and all source files.
+For production use, plugins should be signed to prevent tampering. Signing uses an HMAC-SHA256 hash based on the plugin's content and a secret key.
 
-```bash title="Sign a plugin"
+```bash title="Sign Plugin"
 xcli plugin security sign my-plugin --key "your-secret-signing-key"
-# Computing HMAC-SHA256 of plugin content...
-# plugin.sig written to ./plugins/my-plugin/plugin.sig
-# Signature: a3f8c9...
 ```
 
-This creates a `plugin.sig` file in the plugin directory. The signature covers:
+This creates a `plugin.sig` file within the plugin directory.
 
-- `plugin.yaml` manifest
-- All `.py` files in `src/`
-- `requirements.txt` (if present)
+!!! note "Secret Key Management"
+    The `plugins.secret_key` in your `integration.yaml` must match the key used for signing for verification to succeed.
 
-!!! note "Key Management"
-    The `plugins.secret_key` in `integration.yaml` must match the key used during signing. Rotate both together if the key is compromised.
+## Verification & Health
 
-## Verification
-
-Manually verify the integrity of a plugin:
+You can manually verify the integrity of a plugin:
 
 ```bash
 xcli plugin security verify my-plugin
-
-# Verifying 'my-plugin'...
-# Files hashed: 4
-# Signature match: OK
-# Manifest valid: OK
 ```
 
-For a comprehensive check of all installed plugins (manifest validation, signatures, and AST analysis for sandboxed plugins):
+For a comprehensive check of all plugins (including manifest validation and AST analysis), use:
 
 ```bash
 xcli plugin health
-
-# Plugin Health Report
-# ───────────────────────────────────────────────────
-#  auth_plugin       OK       signed, manifest valid
-#  billing_engine    WARNING  plugin.sig missing
-#  text_transform    OK       sandboxed, AST clean
-# ───────────────────────────────────────────────────
 ```
+
+## Validating Manifests
+
+Beyond signature checks, `validate` checks the plugin manifest itself
+(`plugin.yaml` structure, required fields) and can track its **IPC
+surface** — the actions and events a plugin exposes to others — across
+versions:
+
+```bash title="Validate a plugin"
+xcli plugin security validate my-plugin
+```
+
+Without a path, it scans every plugin found via `integration.yaml`
+instead of just one:
+
+```bash
+xcli plugin security validate
+```
+
+```bash title="Track breaking IPC changes"
+xcli plugin security validate my-plugin --save            # snapshot today's IPC surface
+xcli plugin security validate my-plugin --check-breaking   # diff against that snapshot
+```
+
+`--save` writes the current IPC action/event schemas to a snapshot file
+(default `.xcore/schemas.json`, override with `--schema-file`); a later
+`--check-breaking` run reports anything removed or changed since — useful
+in CI to catch an accidental breaking change to a plugin's public IPC
+contract before it ships.
 
 ## Strict Mode
 
-Enable `strict_trusted` in `integration.yaml` to refuse any unsigned plugin at boot time:
-
-```yaml title="integration.yaml (production)"
-plugins:
-  strict_trusted: true
-  secret_key: "${XCORE_PLUGINS_KEY}"
-```
-
-When enabled, Xcore will log and skip any trusted plugin missing a valid `plugin.sig`:
-
-```text
-WARN  [kernel] Skipping my-plugin: strict_trusted enabled and plugin.sig is absent.
-```
-
-## AST Import Whitelisting
-
-For **Sandboxed Plugins**, Xcore uses an Abstract Syntax Tree (AST) analyzer to restrict imports before execution.
-
-```bash title="Run AST scan manually"
-xcli plugin security scan my-sandboxed-plugin
-
-# AST Scan Report
-# ──────────────────────────────────────────────────
-#  Import          Status
-#  ──────────────────────────────────────────────────
-#  json            ALLOWED
-#  math            ALLOWED
-#  datetime        ALLOWED
-#  os              BLOCKED
-#  subprocess      BLOCKED (not in allowed_imports)
-# ──────────────────────────────────────────────────
-# Result: FAIL (1 forbidden import)
-```
-
-Customize the whitelist in `integration.yaml`:
+Enable `strict_trusted` in your configuration to refuse any plugin that is not properly signed.
 
 ```yaml
-security:
-  allowed_imports:
-    - json
-    - math
-    - datetime
-    - pydantic
-    - fastapi
-  forbidden_imports:
-    - os
-    - subprocess
-    - socket
-    - shutil
+plugins:
+  strict_trusted: true
 ```
 
-## Signing Workflow (Production)
+## AST Whitelisting
 
-Typical signing process before deploying a plugin:
+For **Sandboxed Plugins**, `xcore` uses an Abstract Syntax Tree (AST) analyzer to restrict imports.
 
-```bash
-# 1. Verify the plugin passes health checks
-xcli plugin health
+- **Allowed**: `json`, `math`, `fastapi`, etc.
+- **Forbidden**: `os`, `subprocess`, `shutil`, etc.
 
-# 2. Sign the plugin
-xcli plugin security sign billing_engine \
-  --key "${XCORE_PLUGINS_KEY}"
+This prevents plugins from performing unauthorized filesystem or system operations.
 
-# 3. Verify the signature is valid
-xcli plugin security verify billing_engine
-
-# 4. Deploy and confirm it loads correctly
-xcli plugin runtime reload billing_engine
-xcli plugin runtime status
-```
-
-## See Also
-
-[Security Architecture](../../security/security.md)
-:   Deep dive into AST scanning and the FilesystemGuard.
-
-[Execution Modes](../../kernel/execution-modes.md)
-:   How Trusted and Sandboxed modes differ.
+!!! tip "Customizing Whitelists"
+    Modify the `security.allowed_imports` section in `integration.yaml` to suit your project's needs.

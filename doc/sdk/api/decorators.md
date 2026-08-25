@@ -226,6 +226,53 @@ async def fetch_data(self, payload: dict) -> dict:
 
 ---
 
+## @retry
+
+Automatically retries a failing async action with linear backoff. A silent no-op when applied to a synchronous function.
+
+```python
+from xcore.sdk import retry
+
+@action("fetch_invoice")
+@retry(max_attempts=3, backoff=0.5, exceptions=(IOError, TimeoutError))
+@traced("fetch_invoice")
+async def fetch_invoice(self, payload: dict) -> dict:
+    # Will retry up to 3 times on IOError or TimeoutError
+    return await self._external_api_call(payload["invoice_id"])
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `max_attempts` | `int` | `3` | Total number of attempts (including the first call) |
+| `backoff` | `float` | `1.0` | Linear backoff multiplier in seconds. Delay = `backoff * attempt` |
+| `exceptions` | `tuple[type[Exception], ...]` | `(Exception,)` | Exception types to catch and retry |
+| `on_failure` | `callable \| None` | `None` | Called as `on_failure(self, payload, exc)` after the final failure. May be async |
+
+On final failure, returns `error(str(exc), "retry_exhausted")`.
+
+```python
+async def _notify_on_failure(self, payload, exc):
+    self.logger.error("toutes les tentatives ont échoué", erreur=str(exc))
+    await self.ctx.events.emit("invoice.fetch_failed", {"error": str(exc)})
+
+@action("fetch_invoice")
+@retry(
+    max_attempts=5,
+    backoff=2.0,
+    exceptions=(IOError,),
+    on_failure=_notify_on_failure,
+)
+async def fetch_invoice(self, payload: dict) -> dict:
+    ...
+```
+
+!!! tip "Position dans la pile de décorateurs"
+    `@retry` doit être placé **entre** `@require_service` et `@traced` pour que chaque tentative soit tracée individuellement.
+
+---
+
 ## @trusted
 
 Restricts the action to plugins running in `trusted` execution mode. Returns a permission-denied response for sandboxed callers.
@@ -268,6 +315,7 @@ No parameters.
 @schema(version="1.0", input={...},      # schema declaration + validation
         type_response="dict")            # (replaces @validate_payload)
 @require_service("db")                   # checks service after validation
+@retry(max_attempts=3, backoff=1.0)      # retries on transient failures
 @traced("span")                          # observability wrapper
 @counted("metric")                       # counter wrapper
 @cached(ttl=300, key=…)                  # innermost — cache lookup
@@ -275,7 +323,7 @@ async def handler(self, payload: dict) -> dict:
     ...
 ```
 
-Decorators execute **bottom-up** at call time. The order above ensures: cache check → tracing → service check → validation → mode enforcement → action dispatch.
+Decorators execute **bottom-up** at call time. The order above ensures: cache check → tracing → retry → service check → validation → mode enforcement → action dispatch.
 
 !!! tip
     Use either `@schema(type_response="dict")` **or** `@validate_payload` — not both. `@schema` wraps `@validate_payload` internally when `type_response != "_"`.

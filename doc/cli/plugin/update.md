@@ -1,10 +1,4 @@
----
-title: Plugin Updates
-description: Keep plugins up to date with the latest features and security patches.
-icon: material/update
----
-
-# Plugin Updates
+# Managing Updates
 
 Keep your plugins up to date with the latest features and security patches.
 

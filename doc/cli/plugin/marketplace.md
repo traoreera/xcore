@@ -1,93 +1,61 @@
----
-title: Plugin Marketplace
-description: Discover, search, and rate plugins on the official Xcore marketplace.
-icon: material/store
----
-
 # Plugin Marketplace
 
-Discover and explore new capabilities for your `xcore` project via the official marketplace.
+Discover plugins available on the marketplace before installing them.
+`browse`/`search`/`info` below are read-only and public, no credentials
+required; `mine` is the one exception (see below).
 
-## Discovery Commands
+## Browse All
 
-### Browse All
-
-List everything available on the marketplace:
+List published plugins, sorted `newest` (default), `downloads`, or `rating`.
 
 ```bash
 xcli plugin marketplace browse
-
-# Available Plugins (42 total)
-# ──────────────────────────────────────────────────────
-#  Name               Author         Version   Stars
-#  auth-jwt           xcore-team     3.1.0     ★★★★★
-#  billing-stripe     payco          2.0.1     ★★★★☆
-#  monitoring-prom    observo        1.4.2     ★★★★☆
-#  email-ses          aws-plugins    1.2.0     ★★★☆☆
-#  ...
+xcli plugin marketplace browse --sort downloads --limit 50
 ```
 
-### Search
+## Search
 
-Find plugins by keywords, tags, or categories:
+Find plugins by name or description.
 
-```bash title="Keyword search"
+```bash title="Search"
 xcli plugin marketplace search "monitoring"
-
-# Results for "monitoring":
-#   monitoring-prom  — Prometheus metrics exporter        v1.4.2
-#   apm-elastic      — Elastic APM integration            v1.1.0
-#   sentry-plugin    — Sentry error reporting             v2.3.1
 ```
 
-### Trending
+## Plugin Details
 
-See what's popular in the community:
+Get in-depth information about a specific marketplace plugin before
+installing it — description, rating, download count, repository, and
+published versions.
 
-```bash
-xcli plugin marketplace trending
-
-# Trending this week:
-#  1. auth-jwt          (+124 installs)
-#  2. billing-stripe    (+89 installs)
-#  3. monitoring-prom   (+67 installs)
+```bash title="Plugin Info"
+xcli plugin marketplace info name-of-plugin
 ```
 
-## Viewing Plugin Details
+## Your Plugins
 
-Get in-depth information about a specific marketplace plugin before installing it:
+`browse`/`search` above only ever show **public** plugins — unauthenticated
+requests, by design. To also see your own **private** plugins, use `mine`
+instead, which sends your API key:
 
-```bash title="Plugin details"
-xcli plugin marketplace info auth-jwt
-
-# auth-jwt v3.1.0
-# Author:      xcore-team
-# License:     MIT
-# Description: JWT authentication backend with RBAC support
-# ─────────────────────────────────────────────────────
-# Permissions requested:
-#   cache.*   read, write
-# Resources:
-#   timeout:  5s
-#   rate:     500/60s
-# ─────────────────────────────────────────────────────
-# Install: xcli plugin install auth-jwt
+```bash title="Your plugins"
+xcli plugin marketplace mine
 ```
 
-## Community Feedback
+Needs the same API key as installing does — see
+[Authentication](../getting-started/auth.md). `xcli login`'s personal key
+works here even without a project-scoped key for any specific plugin.
 
-### Rating Plugins
+## What's not here
 
-Share your experience by rating a plugin (1 to 5 stars):
+Rating a plugin (`POST /plugins/{slug}/ratings`) requires a full user
+session (Bearer JWT), not the API key `xcli` stores — that's a web-app
+action, not a CLI one; rate plugins from the XCoreHub dashboard instead.
+There's also no dedicated "trending" endpoint server-side — use
+`browse --sort downloads` or `--sort rating` for the same effect.
 
-```bash
-xcli plugin marketplace rate auth-jwt --score 5 --comment "Excellent JWT integration"
-# Rating submitted. Thank you!
-```
+## Installing
 
-!!! info "API Keys"
-    Interacting with the marketplace requires an API key. Configure it:
-    ```bash
-    xcli config set marketplace.api_key "xdk_your-token"
-    ```
-    Or use the environment variable `XCORE_MARKETPLACE_API_KEY`.
+Once you've found a plugin, see [Installing Plugins](install.md) — it
+needs the API key and signing key described in
+[Authentication](../getting-started/auth.md), which discovery commands on
+this page don't.

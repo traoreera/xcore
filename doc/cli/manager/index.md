@@ -1,9 +1,3 @@
----
-title: Administration Dashboard
-description: High-level control center for monitoring, service management, and administration.
-icon: material/view-dashboard
----
-
 # Administration Dashboard
 
 The `manager` command group is your high-level control center for the entire `xcore` project. It provides a suite of tools for monitoring, service management, and system-wide administration.
@@ -22,39 +16,31 @@ While other commands focus on specific components (like `plugin` or `worker`), t
 
 ## Server Management
 
-Manage your API server directly from the CLI.
+You can manage your API server directly from the CLI.
 
 ### Start the Server
 
-```bash title="Development mode (hot-reload)"
+```bash title="Development mode"
 xcli manager start --reload
 ```
 
-```bash title="Production mode (detached)"
+```bash title="Production mode"
 xcli manager start --workers 4 --detach
 ```
 
 ### Stop the Server
 
+If started with `--detach`, you can stop it using:
+
 ```bash
 xcli manager stop
 ```
-
-### Server Start Flags
-
-| Flag | Description |
-|------|-------------|
-| `--reload` | Enable hot-reload (development only) |
-| `--workers N` | Number of Uvicorn worker processes |
-| `--host HOST` | Bind host (default: `127.0.0.1`) |
-| `--port PORT` | Bind port (default: `8000`) |
-| `--detach` / `-d` | Run as a background process |
 
 ## Monitoring & Services
 
 ### The `top` Dashboard
 
-Launch the full-screen real-time management interface:
+To launch the main management interface:
 
 ```bash
 xcli manager top
@@ -62,15 +48,14 @@ xcli manager top
 
 ### Service Management
 
-Fine-grained control over individual providers (DB, Cache, etc.):
+The `services` sub-app allows fine-grained control over individual providers (DB, Cache, etc.).
 
 ```bash
 xcli manager services list
 xcli manager services reload db
-xcli manager services unload cache
 ```
 
-## In This Section
+## In this section:
 
 - [Real-time Monitoring](monitoring.md)
 - [Service Management](services.md)
