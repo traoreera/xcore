@@ -331,10 +331,10 @@ def wrap_services_for_tenant(
 
 def _is_db_adapter(svc: Any) -> bool:
     try:
-        from xcore.services.database.adapters.sql import SQLAdapter
         from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
-        from xcore.services.database.adapters.mongodb import MongoDBAdapter
         from xcore.services.database.adapters.base import DBAdapter
+        from xcore.services.database.adapters.mongodb import MongoDBAdapter
+        from xcore.services.database.adapters.sql import SQLAdapter
 
         return isinstance(svc, (SQLAdapter, AsyncSQLAdapter, MongoDBAdapter, DBAdapter))
     except ImportError:
