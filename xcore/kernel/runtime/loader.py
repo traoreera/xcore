@@ -335,16 +335,20 @@ class PluginLoader:
     async def shutdown(self) -> None:
         """Décharge tous les plugins proprement, en parallèle avec timeout individuel."""
 
-        # FIX #1 : gather avec timeout par handler, return_exceptions=True pour ne pas
-        # interrompre les autres plugins si l'un d'eux échoue
         async def _stop_one(name: str, handler: PluginHandler) -> None:
             try:
                 await asyncio.wait_for(handler.stop(), timeout=10.0)
             except asyncio.TimeoutError:
                 logger.error("plugin_stop_timeout", plugin=name)
             except Exception as e:
-                logger.error("unload error", error=str(e))
+                logger.error("plugin_stop_error", plugin=name, error=str(e))
 
+        if self._handlers:
+            tasks = [
+                _stop_one(name, handler)
+                for name, handler in self._handlers.items()
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
         self._handlers.clear()
         logger.info("all plugins unloaded")
 

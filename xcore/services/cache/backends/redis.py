@@ -92,8 +92,17 @@ class RedisCacheBackend:
     async def exists(self, key: str) -> bool:
         return bool(await self._client.exists(key))
 
-    async def clear(self) -> None:
-        await self._client.flushdb()
+    async def clear(self, pattern: str | None = None) -> None:
+        """Supprime les clés correspondant au pattern au lieu de flushdb()."""
+        if pattern is None:
+            pattern = "*"
+        cursor = 0
+        while True:
+            cursor, keys = await self._client.scan(cursor=cursor, match=pattern, count=200)
+            if keys:
+                await self._client.delete(*keys)
+            if cursor == 0:
+                break
 
     async def keys(self, pattern: str | None = None) -> list[str]:
         return await self._client.keys(pattern or "*")

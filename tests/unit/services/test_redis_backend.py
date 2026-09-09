@@ -124,8 +124,9 @@ class TestRedisCacheBackend:
         mock_client.exists.return_value = 0
         assert await backend.exists("k") is False
 
+        mock_client.scan = AsyncMock(return_value=(0, []))
         await backend.clear()
-        mock_client.flushdb.assert_called_once()
+        mock_client.scan.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_keys_ttl_ping(self, backend):

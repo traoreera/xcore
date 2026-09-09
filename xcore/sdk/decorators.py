@@ -284,7 +284,7 @@ class RoutedPlugin:
 
     # xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
 
-    def RouterIn(self):
+    def get_router(self):
         from fastapi import APIRouter, Depends
 
         from xcore.kernel.api.rbac import RBACChecker

@@ -68,8 +68,6 @@ class TenantAwareCache:
         return f"{self._tenant}:{key}"
 
     async def get(self, key: str, default: Any = None) -> Any:
-        # On ne passe pas default au backend car tous ne le supportent pas (TypeError).
-        # On gère le fallback ici : si None, on retourne default.
         result = await self._cache.get(self._k(key))
         return result if result is not None else default
 
@@ -95,6 +93,34 @@ class TenantAwareCache:
         for k in matched:
             await self._cache.delete(k)
         return len(matched)
+
+    async def mget(self, keys: list[str]) -> dict[str, Any]:
+        prefixed = [self._k(k) for k in keys]
+        raw = await self._cache.mget(prefixed) if hasattr(self._cache, "mget") else {}
+        prefix = f"{self._tenant}:"
+        return {k[len(prefix):]: v for k, v in raw.items()}
+
+    async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
+        if hasattr(self._cache, "mset"):
+            prefixed = {self._k(k): v for k, v in mapping.items()}
+            await self._cache.mset(prefixed, ttl=ttl)
+        else:
+            for k, v in mapping.items():
+                await self.set(k, v, ttl=ttl)
+
+    async def disconnect(self) -> None:
+        if hasattr(self._cache, "disconnect"):
+            await self._cache.disconnect()
+
+    async def ping(self) -> bool:
+        if hasattr(self._cache, "ping"):
+            return await self._cache.ping()
+        return True
+
+    def stats(self) -> dict:
+        if hasattr(self._cache, "stats"):
+            return self._cache.stats()
+        return {"backend": "tenant_aware_cache", "tenant": self._tenant}
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._cache, name)
@@ -126,7 +152,8 @@ class TenantAwareDB:
     async def _set_tenant_schema(self, conn: Any) -> None:
         try:
             tenant = _validate_tenant(self._tenant)
-            await conn.execute(f"SET search_path TO {tenant}, public")
+            # Guillemets doubles pour identifier PostgreSQL (defense-in-depth)
+            await conn.execute(f'SET search_path TO "{tenant}", public')
         except ValueError:
             raise
         except Exception as e:
@@ -152,6 +179,28 @@ class TenantAwareDB:
         async with self._db.session() as sess:
             await self._set_tenant_schema(sess)
             return await sess.fetch_all(query, *args, **kwargs)
+
+    async def connect(self) -> None:
+        if hasattr(self._db, "connect"):
+            await self._db.connect()
+
+    async def disconnect(self) -> None:
+        if hasattr(self._db, "disconnect"):
+            await self._db.disconnect()
+
+    async def ping(self) -> tuple[bool, str]:
+        if hasattr(self._db, "ping"):
+            return await self._db.ping()
+        return True, "ok"
+
+    def status(self) -> dict:
+        if hasattr(self._db, "status"):
+            return self._db.status()
+        return {"backend": "tenant_aware_db", "tenant": self._tenant}
+
+    @property
+    def engine(self) -> Any:
+        return getattr(self._db, "engine", None)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._db, name)
@@ -223,6 +272,24 @@ class TenantAwareScheduler:
         prefix = f"{self._tenant}:"
         return [j for j in self._scheduler.jobs() if j.get("id", "").startswith(prefix)]
 
+    async def start(self) -> None:
+        if hasattr(self._scheduler, "start"):
+            await self._scheduler.start()
+
+    async def shutdown(self, wait: bool = True) -> None:
+        if hasattr(self._scheduler, "shutdown"):
+            self._scheduler.shutdown(wait=wait)
+
+    async def health_check(self) -> tuple[bool, str]:
+        if hasattr(self._scheduler, "health_check"):
+            return await self._scheduler.health_check()
+        return True, "ok"
+
+    def status(self) -> dict:
+        if hasattr(self._scheduler, "status"):
+            return self._scheduler.status()
+        return {"backend": "tenant_aware_scheduler", "tenant": self._tenant}
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._scheduler, name)
 
@@ -263,8 +330,16 @@ def wrap_services_for_tenant(
 
 
 def _is_db_adapter(svc: Any) -> bool:
-    cls_name = type(svc).__name__
-    return any(
-        cls_name.endswith(suffix)
-        for suffix in ("SQLAdapter", "AsyncSQLAdapter", "MongoDBAdapter", "DBAdapter")
-    )
+    try:
+        from xcore.services.database.adapters.sql import SQLAdapter
+        from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
+        from xcore.services.database.adapters.mongodb import MongoDBAdapter
+        from xcore.services.database.adapters.base import DBAdapter
+        return isinstance(svc, (SQLAdapter, AsyncSQLAdapter, MongoDBAdapter, DBAdapter))
+    except ImportError:
+        # Fallback: class name suffix detection si les adapters ne sont pas installés
+        cls_name = type(svc).__name__
+        return any(
+            cls_name.endswith(suffix)
+            for suffix in ("SQLAdapter", "AsyncSQLAdapter", "MongoDBAdapter", "DBAdapter")
+        )

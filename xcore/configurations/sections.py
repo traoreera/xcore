@@ -267,19 +267,6 @@ class TenancyConfig:
 
 
 @dataclass
-class __TenancyConfig:
-    """
-    Configuration du système multi-tenant.
-
-    enabled          → active/désactive tout le système (défaut: False)
-    enforce_ipc        → active la vérification allowed_callers sur IPC
-    """
-
-    enabled: bool = False
-    enforce_ipc: bool = True
-
-
-@dataclass
 class PluginConfig:
     directory: str = "./plugins"
     secret_key: bytes = b"change-me-in-production"

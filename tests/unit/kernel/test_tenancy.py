@@ -130,7 +130,7 @@ class TestTenantAwareDB:
         await tdb.execute("SELECT 1")
         # first call = SET search_path, second = actual query
         calls = [c.args[0] for c in sess.execute.call_args_list]
-        assert any("SET search_path TO acme" in str(c) for c in calls)
+        assert any('SET search_path TO "acme"' in str(c) for c in calls)
         assert any("SELECT 1" in str(c) for c in calls)
 
     @pytest.mark.asyncio
@@ -146,7 +146,7 @@ class TestTenantAwareDB:
         tdb, _, sess = self._make()
         result = await tdb.fetch_one("SELECT * FROM users WHERE id=1")
         calls = [c.args[0] for c in sess.execute.call_args_list]
-        assert any("SET search_path TO acme" in str(c) for c in calls)
+        assert any('SET search_path TO "acme"' in str(c) for c in calls)
         assert result == {"id": 1}
 
     @pytest.mark.asyncio

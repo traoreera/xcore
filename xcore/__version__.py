@@ -1,4 +1,4 @@
-__version__ = "2.3.3"
-__version_info__ = (2, 3, 3)
+__version__ = "2.5.3"
+__version_info__ = (2, 5, 3)
 __author__ = "xcore contributors"
 __license__ = "MIT"
