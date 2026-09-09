@@ -345,8 +345,7 @@ class PluginLoader:
 
         if self._handlers:
             tasks = [
-                _stop_one(name, handler)
-                for name, handler in self._handlers.items()
+                _stop_one(name, handler) for name, handler in self._handlers.items()
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
         self._handlers.clear()

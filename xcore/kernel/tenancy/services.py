@@ -98,7 +98,7 @@ class TenantAwareCache:
         prefixed = [self._k(k) for k in keys]
         raw = await self._cache.mget(prefixed) if hasattr(self._cache, "mget") else {}
         prefix = f"{self._tenant}:"
-        return {k[len(prefix):]: v for k, v in raw.items()}
+        return {k[len(prefix) :]: v for k, v in raw.items()}
 
     async def mset(self, mapping: dict[str, Any], ttl: int | None = None) -> None:
         if hasattr(self._cache, "mset"):
@@ -335,11 +335,17 @@ def _is_db_adapter(svc: Any) -> bool:
         from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
         from xcore.services.database.adapters.mongodb import MongoDBAdapter
         from xcore.services.database.adapters.base import DBAdapter
+
         return isinstance(svc, (SQLAdapter, AsyncSQLAdapter, MongoDBAdapter, DBAdapter))
     except ImportError:
         # Fallback: class name suffix detection si les adapters ne sont pas installés
         cls_name = type(svc).__name__
         return any(
             cls_name.endswith(suffix)
-            for suffix in ("SQLAdapter", "AsyncSQLAdapter", "MongoDBAdapter", "DBAdapter")
+            for suffix in (
+                "SQLAdapter",
+                "AsyncSQLAdapter",
+                "MongoDBAdapter",
+                "DBAdapter",
+            )
         )
