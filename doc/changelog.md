@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] - 2026-09-09
+
+### Fixed
+- **`PluginLoader.shutdown()`**: `_stop_one` coroutine was defined but never awaited — `self._handlers.clear()` was called immediately, bypassing all plugin cleanup (`on_unload` hooks, resource release). Now uses `asyncio.gather` with timeout per handler before clearing.
+- **`AutoDispatchMixin.handle()`**: Scanned `dir(self)` on every dispatch (O(N) per call). Added lazy `_build_action_map()` that pre-computes a `dict[action_name → method]` for O(1) dispatch.
+- **`RoutedPlugin`**: Method named `RouterIn()` but `lifecycle.py` looks for `get_router()` — renamed to `get_router()` for consistency.
+- **`PermissionEngine` cache**: Unbounded `dict` grew forever within process lifetime. Replaced with `OrderedDict`-based LRU cache (max 10,000 entries) with automatic eviction of oldest entries.
+- **TenantAware wrappers** (`TenantAwareCache/DB/Scheduler`): `__getattr__` proxy hid API surface from IDEs and mypy. Added explicit method declarations for `mget`, `mset`, `disconnect`, `ping`, `stats` (Cache), `connect`, `disconnect`, `ping`, `status`, `engine` (DB), `start`, `shutdown`, `health_check`, `status` (Scheduler).
+- **Version mismatch**: `__version__.py` was `2.3.3`, `pyproject.toml` was `2.5.2`, README badge was `v2.3.5`. Synced all to `2.5.2`.
+- **Dead code**: Removed unused `__TenancyConfig` dataclass in `configurations/sections.py`.
+- **`_is_db_adapter()`**: Fragile class-name-suffix detection replaced with `isinstance()` checks against actual adapter classes, with fallback for missing imports.
+- **`RedisCacheBackend.clear()`**: Called `flushdb()` which deleted the entire Redis database (not just cache keys). Now uses `SCAN + DELETE` to only remove matching keys.
+- **`TenantAwareDB._set_tenant_schema()`**: Used unquoted f-string in `SET search_path TO {tenant}, public`. Now quotes the identifier with double quotes (`"{tenant}"`) for PostgreSQL defense-in-depth against injection.
+
+### Changed
+- **Version synced to 2.5.3** across `__version__.py`, `pyproject.toml`, and README badge.
+
 ## [2.5.1] - 2026-08-20
 
 ### Fixed
