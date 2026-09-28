@@ -14,8 +14,8 @@
     "entry_point":       { "type": "string", "default": "src/main.py" },
     "execution_mode": {
       "type": "string",
-      "enum": ["trusted", "sandboxed", "legacy"],
-      "default": "legacy"
+      "enum": ["trusted", "sandboxed", "legacy", "ephemeral"],
+      "default": "sandboxed"
     },
     "requires": {
       "type": "array",

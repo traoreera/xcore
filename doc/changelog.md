@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-09-28
+
+### Security
+- **BREAKING: a plugin whose `plugin.yaml` omits `execution_mode` now defaults to `sandboxed` instead of `legacy`.** `legacy` is functionally a pure alias of `trusted` (`PluginLoader` registers the same `TrustedActivator()` for both) — meaning an unspecified plugin was silently getting full in-process trust (no AST scan restrictions, no filesystem guard, direct access to every service) rather than the safer, more restrictive default. Flagged in `reports/sandbox_dynamic_security_analysis_2026-09-28.md` / `roadmap/ROADMAP_PROGRESS.md` as a fail-open default worth a deliberate decision; the decision is fail-closed. Changed in `xcore/kernel/security/validation.py` (`ManifestValidator.load_and_validate`, the actual resolution path for a loaded plugin.yaml), `xcore/sdk/plugin_base.py` (`PluginManifest.execution_mode` dataclass default), and `xcore/sdk/manifest_schema.json` (schema default + adds the previously-missing `ephemeral` to the documented enum).
+  **Migration**: any existing plugin relying on the implicit in-process default must now declare `execution_mode: trusted` (or `legacy`) explicitly in its `plugin.yaml`, or it will load as `sandboxed` and may fail on blocked imports/filesystem access it previously took for granted.
+- `ExecutionMode.LEGACY` itself is unchanged and still resolves to `TrustedActivator()` when explicitly requested — only the *implicit* default moved.
+
 ## [2.6.1] - 2026-09-28
 
 ### Security

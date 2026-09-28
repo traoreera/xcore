@@ -259,7 +259,7 @@ class TestPluginManifest:
         assert manifest.description == ""
         assert manifest.framework_version == ">=2.0"
         assert manifest.entry_point == "src/main.py"
-        assert manifest.execution_mode == ExecutionMode.LEGACY
+        assert manifest.execution_mode == ExecutionMode.SANDBOXED
 
     def test_repr(self, tmp_path):
         """Test __repr__ method."""

@@ -205,7 +205,7 @@ class PluginManifest:
     description: str = ""
     framework_version: str = ">=2.0"
     entry_point: str = "src/main.py"
-    execution_mode: ExecutionMode = ExecutionMode.LEGACY
+    execution_mode: ExecutionMode = ExecutionMode.SANDBOXED
 
     # Dépendances et imports
     requires: list[PluginDependency] = field(default_factory=list)
