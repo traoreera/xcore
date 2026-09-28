@@ -81,7 +81,7 @@ class TestPluginManifest:
 
         assert manifest.name == "test_plugin"
         assert manifest.version == "1.0.0"
-        assert manifest.execution_mode == ExecutionMode.LEGACY
+        assert manifest.execution_mode == ExecutionMode.SANDBOXED
 
     def test_full_manifest(self, tmp_path):
         """Test creating full manifest."""

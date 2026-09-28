@@ -115,7 +115,9 @@ class ManifestValidator:
             raw.get("framework_version", f"=={__version__}"), __version__
         )
 
-        raw_mode = raw.get("execution_mode", "legacy").lower()
+        # Fail-closed : un plugin qui ne déclare pas execution_mode obtient le
+        # mode le plus restrictif (sandboxed), pas un accès in-process complet.
+        raw_mode = raw.get("execution_mode", "sandboxed").lower()
         try:
             mode = ExecutionMode(raw_mode)
         except ValueError as e:

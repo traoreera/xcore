@@ -98,17 +98,21 @@ This document outlines the current state of the XCore framework relative to the 
 
 ---
 
-## 🔍 Technical Analysis (Update v2.3.5)
+## 🔍 Technical Analysis (Update v2.7.0)
 
 ### Strengths
 - **Advanced Runtime (V2)**: Support for ephemeral plugins with Warm Pool is a major technical achievement, enabling minimal "cold start" latency.
 - **Security & Performance**: Recent optimizations on the EventBus and the permission engine have successfully reduced latency on the critical path.
 - **Observability (V2)**: Real OpenTelemetry SDK + end-to-end W3C trace propagation (HTTP → plugin calls → sandbox IPC) now closes out V2's last two ⚠️ items.
 - **Tenancy (V3)**: Resource isolation (DB/Cache) per tenant is mature and fully validated by integration tests.
+- **Plugin lifecycle hardening (V2, v2.6.0)**: persistent enable/disable state (`PluginStateStore`) that survives restarts, forced resource cleanup on unload (scheduler jobs, health checks, event/hook subscriptions, exported services — previously leaked silently), and an HTTP control surface (`/plugins/ipc/registry|enable|disable|audit|events`) with an IPC-call and event/hook audit trail. See `CHANGELOG.md` [2.6.0].
+- **Dependency hygiene (v2.7.0)**: core `dependencies` reduced to what `import xcore` and the zero-config boot path actually need; backend-specific packages (DB drivers, Redis, Celery, Alembic, OTLP exporter) moved to opt-in extras, closing a gap where `prometheus-client` was imported by core runtime code but only ever available via dev dependencies. See `CHANGELOG.md` [2.7.0].
+- **Sandbox hardening (v2.6.1/v2.6.2)**: 3 confirmed sandbox-escape techniques (`asyncio.create_subprocess_exec`/`_shell`, `__subclasses__()` walk to an already-loaded `subprocess.Popen`, dynamic `import posix`) found via dynamic testing and fixed by patching the dangerous objects directly rather than only gating imports by name — see `reports/sandbox_dynamic_security_analysis_2026-09-28.md`. Separately, an unspecified `execution_mode` in `plugin.yaml` now defaults to `sandboxed` instead of the `trusted`-equivalent `legacy` — fail-closed instead of fail-open. See `CHANGELOG.md` [2.6.1]/[2.6.2].
 
 ### Known limitations to track during the V2 maintenance window
 - **`self.tracer` / `self.metrics` / `self.health` are `None` inside ephemeral/sandboxed plugins** — no `PluginContext` is injected in `sandbox/worker.py`. Automatic supervisor-level tracing still covers those calls; only plugin-authored custom spans/metrics inside ephemeral code are affected. See `doc/observability/observability.md`.
 - **Tiered cache has no cross-node invalidation push** — L1 staleness is bounded by `ttl`, not eliminated. Acceptable trade-off, documented in `doc/services/cache.md`.
+- **`ExecutionMode.LEGACY` is still functionally a pure alias of `TRUSTED`**, and can still be requested explicitly (`execution_mode: legacy` in `plugin.yaml`) — only the *implicit* default changed (v2.6.2), the enum value itself was not retired. `LagacyActivator` (note the typo) remains dead code, raising `NotImplementedError` unconditionally — harmless (never instantiated: `PluginLoader` maps `ExecutionMode.LEGACY` to `TrustedActivator()`) but worth deleting in a future cleanup pass.
 
 ### High-Priority Workstreams (V3, once the maintenance window ends)
 1. **Clustering (V3)**: This is the missing technological leap. The framework must support inter-node communication (Cluster IPC).
