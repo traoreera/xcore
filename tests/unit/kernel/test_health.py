@@ -39,6 +39,22 @@ class TestHealthChecker:
         assert result["checks"]["cache"]["status"] == "healthy"
 
     @pytest.mark.asyncio
+    async def test_unregister_removes_check(self):
+        hc = HealthChecker()
+
+        @hc.register("database")
+        async def check_db():
+            return True, "ok"
+
+        assert hc.unregister("database") is True
+        result = await hc.run_all()
+        assert result["checks"] == {}
+
+    def test_unregister_unknown_returns_false(self):
+        hc = HealthChecker()
+        assert hc.unregister("does_not_exist") is False
+
+    @pytest.mark.asyncio
     async def test_degraded_check(self):
         hc = HealthChecker()
 

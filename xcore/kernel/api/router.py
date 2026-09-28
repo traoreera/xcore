@@ -23,6 +23,12 @@ class CallRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class DisableRequest(BaseModel):
+    """optional body for POST /{plugin_name}/disable."""
+
+    reason: Optional[str] = None
+
+
 class CallResponse(BaseModel):
     status: str
     plugin: str
@@ -115,6 +121,34 @@ def build_router(
     # =========================
     # Routes
     # =========================
+    #
+    # NB : ces routes spécifiques (registry/enable/disable) doivent être
+    # déclarées AVANT le catch-all POST /{plugin_name}/{action} ci-dessous —
+    # Starlette matche dans l'ordre de déclaration, et un POST sur
+    # "/{plugin_name}/enable" correspondrait sinon toujours à call_plugin()
+    # en premier (action="enable"), qui échoue faute de corps CallRequest.
+
+    @router.get("/registry")
+    async def plugins_registry() -> dict[str, Any]:
+        """
+        Table de vérité complète : tous les plugins présents sur disque, avec
+        leur flag persisté (enabled) et leur état live — y compris les
+        plugins désactivés ou jamais chargés. Le vrai « centre de contrôle ».
+        """
+        return {"plugins": supervisor.registry_table()}
+
+    @router.post("/{plugin_name}/enable")
+    async def enable_plugin(plugin_name: str) -> dict[str, str]:
+        await supervisor.enable(plugin_name)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' enabled"}
+
+    @router.post("/{plugin_name}/disable")
+    async def disable_plugin(
+        plugin_name: str, body: DisableRequest | None = None
+    ) -> dict[str, str]:
+        reason = body.reason if body else None
+        await supervisor.disable(plugin_name, reason=reason)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' disabled"}
 
     @router.post(
         "/{plugin_name}/{action}",
@@ -154,6 +188,26 @@ def build_router(
     @router.get("/status")
     async def plugins_status() -> dict[str, Any]:
         return supervisor.status()
+
+    @router.get("/audit")
+    async def ipc_audit(
+        plugin: Optional[str] = None, limit: int = 100
+    ) -> dict[str, Any]:
+        """Journal des appels IPC (qui a appelé quoi, quand) + stats par plugin."""
+        return {
+            "calls": supervisor.ipc_audit(plugin, limit),
+            "stats": supervisor.ipc_stats(),
+        }
+
+    @router.get("/events")
+    async def events_activity(
+        event: Optional[str] = None, limit: int = 100
+    ) -> dict[str, Any]:
+        """Activité récente de l'EventBus et du HookManager — plus de zone d'ombre sur les events."""
+        return {
+            "events": supervisor.events_activity(event, limit),
+            "hooks": supervisor.hooks_activity(event, limit),
+        }
 
     @router.post("/{plugin_name}/reload")
     async def reload_plugin(plugin_name: str) -> dict[str, str]:

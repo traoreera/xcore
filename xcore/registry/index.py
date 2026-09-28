@@ -135,6 +135,14 @@ class PluginRegistry:
             for name, meta in self._exported_services.items()
         ]
 
+    def is_registered_as(self, service_name: str, obj: Any) -> bool:
+        """Vrai si `service_name` est déjà exporté et pointe vers CE MÊME objet
+        (identité, pas égalité) — utile pour distinguer une simple ré-injection
+        du service reçu (bénin) d'une véritable tentative d'écrasement par un
+        objet différent (à bloquer)."""
+        existing = self._exported_services.get(service_name)
+        return existing is not None and existing.get("obj") is obj
+
     def has(self, name: str) -> bool:
         return name in self._entries
 

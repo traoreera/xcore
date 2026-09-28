@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 from ..api.context import PluginContext
 from ..api.contract import BasePlugin
 from ..observability import get_logger
+from .plugin_gc import PluginResourceTracker
 from .state_machine import PluginState, StateMachine
 
 logger = get_logger("xcore.runtime.lifecycle")
@@ -63,6 +64,13 @@ class LifecycleManager:
         # APIRouter exposé par le plugin (optionnel)
         self.plugin_router: Any | None = None
         self.plugin_middlewares: dict[Any] = {}
+
+        # Ramasse-miette forcé : ce que le plugin a enregistré (jobs, health
+        # checks, abonnements events/hooks) via le PluginContext, et les
+        # tâches de fond créées via ctx.spawn_task(). Nettoyés de force au
+        # unload, indépendamment de ce que fait on_unload/on_stop.
+        self._resource_tracker: PluginResourceTracker | None = None
+        self._spawned_tasks: list[asyncio.Task] = []
 
         self._sm = StateMachine(
             manifest.name,
@@ -183,6 +191,21 @@ class LifecycleManager:
                 isolate_db=tenancy.isolate_db,
                 isolate_scheduler=tenancy.isolate_scheduler,
             )
+
+        # Ramasse-miette forcé : on intercepte scheduler/health/events/hooks
+        # pour mémoriser ce que CE plugin y enregistre pendant on_load, afin
+        # de tout désinscrire au unload sans dépendre de on_unload/on_stop.
+        tracker = PluginResourceTracker(self.manifest.name)
+        ctx.events = tracker.wrap_events(ctx.events)
+        ctx.hooks = tracker.wrap_hooks(ctx.hooks)
+        ctx.health = tracker.wrap_health(ctx.health)
+        if ctx.services.get("scheduler") is not None:
+            ctx.services = dict(ctx.services)
+            ctx.services["scheduler"] = tracker.wrap_scheduler(
+                ctx.services["scheduler"]
+            )
+        self._resource_tracker = tracker
+        ctx._task_sink = self._spawned_tasks
 
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -309,7 +332,32 @@ class LifecycleManager:
 
     async def _do_unload(self) -> None:
         if self._instance:
-            await self._invoke_hooks(["on_stop", "on_unload"])
+            # Best-effort : on essaie les hooks du plugin, mais une erreur ici
+            # ne doit pas empêcher le ramasse-miette forcé ci-dessous — c'est
+            # justement le filet de sécurité pour un on_unload/on_stop bâclé.
+            try:
+                await self._invoke_hooks(["on_stop", "on_unload"])
+            except Exception as e:
+                logger.error(
+                    "on_stop/on_unload hook failed, forcing cleanup anyway",
+                    plugin=self.manifest.name,
+                    error=str(e),
+                )
+
+        # Ramasse-miette forcé : libère tout ce que le plugin a enregistré,
+        # qu'il l'ait fait proprement dans ses hooks ou pas.
+        if self._resource_tracker is not None:
+            self._resource_tracker.cleanup()
+            self._resource_tracker = None
+
+        for task in self._spawned_tasks:
+            if not task.done():
+                task.cancel()
+        self._spawned_tasks = []
+
+        if self._registry is not None:
+            self._registry.unregister(self.manifest.name)
+
         module_name = f"xcore_plugin_{self.manifest.name}"
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
@@ -408,17 +456,46 @@ class LifecycleManager:
                 svc_meta = manifest_services_config.get(name, {})
                 scope = svc_meta.get("scope", "public")
 
-                # register_service lèvera une PermissionError si le service est protégé
-                self._registry.register_service(
-                    plugin_name=self.manifest.name,
-                    service_name=name,
-                    service_obj=obj,
-                    metadata={
-                        "reloaded": is_reload,
-                        "scope": scope,
-                        "description": svc_meta.get("description", ""),
-                    },
-                )
+                try:
+                    # register_service lève PermissionError si le service est protégé
+                    self._registry.register_service(
+                        plugin_name=self.manifest.name,
+                        service_name=name,
+                        service_obj=obj,
+                        metadata={
+                            "reloaded": is_reload,
+                            "scope": scope,
+                            "description": svc_meta.get("description", ""),
+                        },
+                    )
+                except PermissionError:
+                    # TrustedBase expose tout `ctx.services` (y compris db/cache/
+                    # scheduler) via `self._services` pour la rétro-compatibilité —
+                    # ce ne sont pas forcément des services que CE plugin exporte,
+                    # potentiellement juste ceux qu'il a reçus en injection. Au
+                    # premier boot le registre ne les protège pas encore
+                    # (register_core_service() n'a lieu qu'après load_all()), donc
+                    # ça passe ; mais dès qu'on recharge/réactive le même plugin
+                    # plus tard, le nom est déjà protégé par le noyau. Si c'est
+                    # bien le même objet reçu en injection, ce n'est pas une
+                    # tentative d'écrasement — on l'ignore. Si c'est un objet
+                    # différent, c'est une vraie tentative malveillante : on
+                    # relève l'erreur telle quelle. `obj` peut être un proxy de
+                    # ramasse-miette (_ScopedScheduler, etc.) posé par ce même
+                    # LifecycleManager autour du service réel — on déballe un
+                    # niveau (`_real`) avant de comparer, sinon l'identité ne
+                    # matcherait jamais pour un service ainsi enveloppé.
+                    underlying = getattr(obj, "_real", obj)
+                    if self._registry.is_registered_as(
+                        name, obj
+                    ) or self._registry.is_registered_as(name, underlying):
+                        logger.debug(
+                            "skip re-registering kernel-protected service",
+                            plugin=self.manifest.name,
+                            service=name,
+                        )
+                    else:
+                        raise
         else:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger

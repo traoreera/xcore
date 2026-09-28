@@ -8,6 +8,8 @@ C'est lui qu'expose Xcore via xcore.plugins.
 from __future__ import annotations
 
 import contextlib
+import time
+from collections import deque
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -58,6 +60,11 @@ class PluginSupervisor:
 
         self._rate = RateLimiterRegistry()
         self._permissions = PermissionEngine(events=self._events)
+
+        # Supervision des appels IPC — même pattern que PermissionEngine._audit_log :
+        # un journal borné pour voir QUI a appelé QUOI, quand, avec quel résultat.
+        self._ipc_audit: deque[dict] = deque(maxlen=100_000)
+        self._ipc_stats: dict[str, dict] = {}
 
         self._loader: PluginLoader | None = None
         self._pipeline: MiddlewarePipeline | None = None
@@ -153,6 +160,7 @@ class PluginSupervisor:
             loaded=len(report["loaded"]),
             failed=len(report["failed"]),
             skipped=len(report["skipped"]),
+            disabled=len(report.get("disabled", [])),
         )
 
         if self._events:
@@ -241,11 +249,14 @@ class PluginSupervisor:
             return self._err("Supervisor non démarré", "not_ready")
 
         if not self._loader.has(plugin_name):
-            return self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
+            result = self._err(f"Plugin '{plugin_name}' introuvable", "not_found")
+            self._audit_ipc_call(plugin_name, action, caller, tenant_id, result, 0.0)
+            return result
 
         handler = self._loader.get(plugin_name)
 
-        return await self._pipeline.execute(
+        t0 = time.monotonic()
+        result = await self._pipeline.execute(
             plugin_name,
             action,
             payload,
@@ -254,6 +265,43 @@ class PluginSupervisor:
             caller=caller,
             tenant_id=tenant_id,
         )
+        duration_ms = (time.monotonic() - t0) * 1000
+        self._audit_ipc_call(
+            plugin_name, action, caller, tenant_id, result, duration_ms
+        )
+        return result
+
+    def _audit_ipc_call(
+        self,
+        plugin_name: str,
+        action: str,
+        caller: str | None,
+        tenant_id: str,
+        result: dict,
+        duration_ms: float,
+    ) -> None:
+        """Journalise chaque appel IPC — qui a appelé quoi, quand, avec quel résultat."""
+        status = result.get("status", "ok") if isinstance(result, dict) else "ok"
+        code = result.get("code") if isinstance(result, dict) else None
+        entry = {
+            "plugin": plugin_name,
+            "action": action,
+            "caller": caller,
+            "tenant_id": tenant_id,
+            "status": status,
+            "code": code,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": time.time(),
+        }
+        self._ipc_audit.append(entry)
+
+        stats = self._ipc_stats.setdefault(
+            plugin_name, {"calls": 0, "errors": 0, "total_duration_ms": 0.0}
+        )
+        stats["calls"] += 1
+        stats["total_duration_ms"] += duration_ms
+        if status == "error":
+            stats["errors"] += 1
 
     async def _dispatch(
         self, plugin_name: str, action: str, payload: dict, handler, **kwargs
@@ -326,6 +374,59 @@ class PluginSupervisor:
             if self._events:
                 await self._events.emit(f"plugin.{plugin_name}.unloaded", {})
 
+    # ── Table de vérité actif/inactif ──────────────────────────
+
+    async def enable(self, plugin_name: str) -> None:
+        """
+        Active un plugin de façon persistante : il sera aussi chargé aux
+        prochains redémarrages. Le charge immédiatement s'il ne l'est pas déjà.
+        """
+        if self._loader is None:
+            raise RuntimeError("Le superviseur n'est pas encore démarré.")
+        self._loader.state_store.set_enabled(plugin_name, True)
+        if not self._loader.has(plugin_name):
+            await self.load(plugin_name)
+
+    async def disable(self, plugin_name: str, reason: str | None = None) -> None:
+        """
+        Désactive un plugin de façon persistante : il ne sera plus chargé aux
+        prochains redémarrages. Le décharge immédiatement s'il est chargé
+        (ramasse-miette forcé via LifecycleManager._do_unload).
+        """
+        if self._loader is None:
+            raise RuntimeError("Le superviseur n'est pas encore démarré.")
+        self._loader.state_store.set_enabled(plugin_name, False, reason=reason)
+        if self._loader.has(plugin_name):
+            await self.unload(plugin_name)
+
+    def registry_table(self) -> list[dict]:
+        """
+        Table de vérité complète : tous les plugins présents sur disque, avec
+        leur flag persisté (enabled) et leur état live (ready/unloaded/...).
+        Contrairement à status(), inclut aussi les plugins désactivés ou
+        jamais chargés — la vraie vue « centre de contrôle ».
+        """
+        if self._loader is None:
+            return []
+
+        live_status = {s["name"]: s for s in self._loader.status()}
+        persisted = self._loader.state_store.all()
+
+        rows = []
+        for name in self._loader.discover_names():
+            live = live_status.get(name)
+            rows.append(
+                {
+                    "name": name,
+                    "enabled": self._loader.state_store.is_enabled(name),
+                    "state": live["state"] if live else "not_loaded",
+                    "mode": live.get("mode") if live else None,
+                    "loaded": live is not None,
+                    "reason": persisted.get(name, {}).get("reason"),
+                }
+            )
+        return rows
+
     # ── Observabilité ─────────────────────────────────────────
 
     def status(self) -> dict:
@@ -352,6 +453,56 @@ class PluginSupervisor:
     ) -> list[dict]:
         """Retourne le journal d'audit des permissions."""
         return self._permissions.audit_log(plugin_name, limit)
+
+    def ipc_audit(self, plugin_name: str | None = None, limit: int = 100) -> list[dict]:
+        """
+        Journal des appels IPC — qui a appelé quoi, quand, avec quel résultat.
+        Même pattern que permissions_audit(), le plus récent en dernier.
+        """
+        from itertools import islice
+
+        it = reversed(self._ipc_audit)
+        if plugin_name:
+            it = (e for e in it if e["plugin"] == plugin_name)
+        results = list(islice(it, limit))
+        results.reverse()
+        return results
+
+    def ipc_stats(self) -> dict:
+        """Statistiques agrégées par plugin : appels, erreurs, latence moyenne."""
+        return {
+            "entries": len(self._ipc_audit),
+            "by_plugin": {
+                name: {
+                    "calls": s["calls"],
+                    "errors": s["errors"],
+                    "avg_duration_ms": (
+                        round(s["total_duration_ms"] / s["calls"], 2)
+                        if s["calls"]
+                        else 0.0
+                    ),
+                }
+                for name, s in self._ipc_stats.items()
+            },
+        }
+
+    def events_activity(self, event_name: str | None = None, limit: int = 100) -> dict:
+        """Activité récente + métriques de l'EventBus (ctx.events)."""
+        if self._events is None:
+            return {"recent": [], "stats": {}}
+        return {
+            "recent": self._events.recent_emissions(event_name, limit),
+            "stats": self._events.stats(event_name),
+        }
+
+    def hooks_activity(self, event_name: str | None = None, limit: int = 100) -> dict:
+        """Activité récente + métriques du HookManager (ctx.hooks)."""
+        if self._hooks is None:
+            return {"recent": [], "metrics": {}}
+        return {
+            "recent": self._hooks.recent_emissions(event_name, limit),
+            "metrics": self._hooks.get_metrics(event_name),
+        }
 
     # ── Arrêt ─────────────────────────────────────────────────
 

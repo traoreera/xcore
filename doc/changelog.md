@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-09-28
+
+### Added
+- **Persistent plugin enable/disable state** (`PluginStateStore`, `xcore/registry/state_store.py`): until now there was no way to disable a plugin short of deleting its folder — the manifest schema's `enabled` field lived under `runtime.health_check`, not on the plugin itself. `PluginLoader.load_all()` now consults a JSON file (`<plugins_dir>/../.xcore/plugins_state.json`) and skips disabled plugins at boot; `PluginSupervisor.enable()`/`disable(reason=...)` toggle the state live *and* persist it, so a process restart honors the same active/inactive set.
+- **Forced garbage collection on unload/disable** (`PluginResourceTracker`, `xcore/kernel/runtime/plugin_gc.py`): `LifecycleManager._do_unload()` used to trust only the plugin's own `on_stop`/`on_unload` hooks plus `sys.modules` cleanup — no scheduler job, health check, or event/hook subscription was ever unregistered, and `PluginRegistry.unregister()` existed but was never called. The kernel now wraps scheduler/health/events/hooks at load time to track what a plugin registers, and forces their release on unload regardless of how well the plugin's own hooks behave. New `ctx.spawn_task()` for background tasks that are tracked and cancelled automatically.
+- **HTTP routes unmounted on unload**: `xcore/__init__.py` only stripped a plugin's FastAPI routes from `app.routes` on reload — never on unload/disable, leaving a disabled plugin's endpoints reachable indefinitely. Extracted into `_unmount_plugin_router()`, now also subscribed to `plugin.*.unloaded`.
+- **HTTP control center** on `/plugins/ipc/*`: `GET /registry` (the full plugin truth table — including disabled or never-loaded plugins, which `status()` never exposed), `POST /{name}/enable`, `POST /{name}/disable`.
+- **IPC call supervision**: `PluginSupervisor.ipc_audit()`/`ipc_stats()` log every call (`plugin`, `action`, `caller`, `tenant_id`, status, duration) to a bounded audit trail, mirroring the existing `PermissionEngine.audit_log()` pattern. Exposed via `GET /plugins/ipc/audit`.
+- **Event/hook supervision**: `EventBus.recent_emissions()`/`.stats()` and `HookManager.recent_emissions()` keep a record of recent emissions (event, handlers/hooks matched, errors, duration) — `EventBus` previously had no metrics at all. Exposed via `GET /plugins/ipc/events`.
+
+### Fixed
+- **`propagate_services()` broke reload/re-enable of a `TrustedBase` plugin**: `self._services` exposes the entire `ctx.services` dict for backward compatibility (including db/cache/scheduler), and `propagate_services()` tried to re-register those as the plugin's own exports. This passed on first boot (the registry doesn't protect core services until after `load_all()` runs), but any later reload raised `PermissionError: Impossible d'écraser le service protégé`. A collision on an object identical to the one already protected (received via injection, not exported) is now ignored; a genuinely different object (an actual override attempt) still raises.
+
 ## [2.5.1] - 2026-08-20
 
 ### Fixed

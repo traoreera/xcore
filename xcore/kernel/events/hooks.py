@@ -9,6 +9,7 @@ import asyncio
 import fnmatch
 import inspect
 import time
+from collections import deque
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..observability import get_logger
@@ -31,12 +32,16 @@ class HookManager:
     Identical to v1 but relocated to kernel/events.
     """
 
-    def __init__(self):
+    def __init__(self, max_audit: int = 10_000):
         self._hooks: Dict[str, List[HookInfo]] = {}
         self._pre_interceptors: Dict[str, List[Tuple[Callable, int]]] = {}
         self._post_interceptors: Dict[str, List[Tuple[Callable, int]]] = {}
         self._metrics: Dict[str, Dict[str, Any]] = {}
         self._result_processors: Dict[str, List[Callable]] = {}
+
+        # Supervision : journal borné des émissions, même pattern que EventBus —
+        # get_metrics() donne déjà l'agrégat, ceci donne le détail récent.
+        self._emission_log: deque[dict] = deque(maxlen=max_audit)
 
     def register(
         self,
@@ -186,6 +191,7 @@ class HookManager:
         event = Event(name=event_name, data={**(data or {}), **kwargs})
         matching = self._get_matching_hooks(event_name)
         if not matching:
+            self._log_emission(event_name, matched=0, errors=0, duration_ms=0.0)
             return []
 
         results: List[HookResult] = []
@@ -203,6 +209,38 @@ class HookManager:
             self.unregister(pattern, func)
 
         self._update_metrics(event_name, results)
+        self._log_emission(
+            event_name,
+            matched=len(matching),
+            errors=sum(1 for r in results if r.error),
+            duration_ms=sum(r.execution_time_ms for r in results),
+        )
+        return results
+
+    def _log_emission(
+        self, event_name: str, matched: int, errors: int, duration_ms: float
+    ) -> None:
+        self._emission_log.append(
+            {
+                "event": event_name,
+                "hooks_matched": matched,
+                "errors": errors,
+                "duration_ms": round(duration_ms, 2),
+                "timestamp": time.time(),
+            }
+        )
+
+    def recent_emissions(
+        self, event_name: Optional[str] = None, limit: int = 100
+    ) -> List[dict]:
+        """Journal des émissions récentes — le plus récent en dernier."""
+        from itertools import islice
+
+        it = reversed(self._emission_log)
+        if event_name:
+            it = (e for e in it if e["event"] == event_name)
+        results = list(islice(it, limit))
+        results.reverse()
         return results
 
     def _update_metrics(self, event_name: str, results: List[HookResult]) -> None:
