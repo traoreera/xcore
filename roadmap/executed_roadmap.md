@@ -57,6 +57,8 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 ## 🌐 V3 — Distribution
 **Objectif : Sortir du mono-processus.**
 
+**Spécification technique (28/09/2026)** : `roadmap/V3_NATIVE_RUNTIME_SPEC.md` — Python reste le plan de contrôle (plugins, SDK, API, orchestration) ; un nouveau runtime natif Rust (`xcore-runtime`, embarqué via PyO3) prend en charge l'appartenance au cluster, le transport inter-nœuds, le routage, le volet distribué de XBus, le circuit breaker et le failover. Chaque ligne du tableau ci-dessous correspond à une section de cette spec — rien n'est encore implémenté, c'est l'architecture cible pour une fois la fenêtre de maintenance V2 terminée.
+
 | Fonctionnalité | État | Localisation / Note |
 | :--- | :---: | :--- |
 | Federation statique | ❌ | Non implémenté |
