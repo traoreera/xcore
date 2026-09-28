@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-09-28
+
+### Security
+- **3 confirmed sandbox-escape techniques let a `sandboxed` plugin run arbitrary commands on the host**, found via dynamic testing (real plugins executed against a real `Xcore` instance, not static code review — see `reports/sandbox_dynamic_security_analysis_2026-09-28.md`):
+  - `asyncio.create_subprocess_exec`/`_shell` — `asyncio` was on neither of the two forbidden-module lists.
+  - `().__class__.__bases__[0].__subclasses__()` walking to an already-loaded `subprocess.Popen` — defeats both the static AST scan (no literal `__subclasses__`/`import subprocess` in source) and the runtime import guard (no `import` statement is ever executed; the class is already resident in memory before the guard installs).
+  - Dynamic `import posix` — listed in the static scanner's `DEFAULT_FORBIDDEN` but missing from the runtime guard's `_FORBIDDEN_MODULES`; `posix` is the module `os` is built on and exposes near-equivalent primitives (`fork`, `execve`, ...).
+  - Fixed in `xcore/kernel/sandbox/worker.py`: `pwd`/`grp`/`posix` added to `_FORBIDDEN_MODULES`, and a new guard layer patches the dangerous objects directly wherever they're reached from — `subprocess.Popen.__init__`, `subprocess.call`/`run`/`check_call`/`check_output`, the full `os.fork`/`os.exec*`/`os.spawn*`/`os.posix_spawn*`/`os.system`/`os.popen` family, and `asyncio.create_subprocess_exec`/`_shell` — rather than only gating imports by name. This closes the `__subclasses__()` bypass too, which a name-based fix alone cannot. Legitimate non-subprocess `asyncio` usage (`asyncio.sleep`, etc.) is unaffected — verified.
+- Memory limits (`RLIMIT_DATA`/`RLIMIT_RSS`) and the filesystem guard (`allowed_paths`/`denied_paths`, directory traversal) were verified effective by the same dynamic testing — no change needed there.
+
 ## [2.6.0] - 2026-09-28
 
 ### Added

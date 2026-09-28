@@ -72,6 +72,74 @@ def _apply_resource_limits() -> None:
 builtins_open = _builtins_module.open
 
 
+def _install_subprocess_guard(block) -> None:
+    """
+    Bloque la création de subprocess quel que soit le chemin emprunté pour
+    y accéder — pas seulement via `import` (couche 5 du sandbox).
+
+    Patche directement les objets déjà en mémoire (`subprocess.Popen`,
+    `os.fork`/`exec*`/`spawn*`, `asyncio.create_subprocess_*`) plutôt que de
+    ne filtrer que les imports par nom : une classe déjà chargée par
+    l'interpréteur (ex. `subprocess.Popen`, atteignable sans jamais exécuter
+    `import subprocess` via `().__class__.__bases__[0].__subclasses__()`)
+    resterait sinon exploitable même avec `subprocess` dans la liste des
+    modules interdits. `block(label, *args)` est le callback `_block` de
+    `FilesystemGuard._install_impl()` (log + lève `PermissionError`).
+    """
+    import asyncio as _asyncio
+    import subprocess as _subprocess
+
+    def _blocked_spawn(label):
+        def _inner(*args, **kwargs):
+            block(f"{label}()", args)
+
+        return _inner
+
+    def _blocked_popen_init(self, *args, **kwargs):
+        block("subprocess.Popen()", args)
+
+    _subprocess.Popen.__init__ = _blocked_popen_init
+    _subprocess.call = _blocked_spawn("subprocess.call")
+    _subprocess.run = _blocked_spawn("subprocess.run")
+    _subprocess.check_call = _blocked_spawn("subprocess.check_call")
+    _subprocess.check_output = _blocked_spawn("subprocess.check_output")
+
+    for _name in (
+        "fork",
+        "forkpty",
+        "system",
+        "popen",
+        "posix_spawn",
+        "posix_spawnp",
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+    ):
+        if hasattr(os, _name):
+            setattr(os, _name, _blocked_spawn(f"os.{_name}"))
+
+    async def _blocked_create_subprocess(*args, **kwargs):
+        block("asyncio.create_subprocess_exec/_shell()", args)
+
+    _asyncio.create_subprocess_exec = _blocked_create_subprocess
+    _asyncio.create_subprocess_shell = _blocked_create_subprocess
+    _asyncio.subprocess.create_subprocess_exec = _blocked_create_subprocess
+    _asyncio.subprocess.create_subprocess_shell = _blocked_create_subprocess
+
+
 class FilesystemGuard:
     """
     Applique la politique filesystem déclarée dans le manifeste.
@@ -304,6 +372,9 @@ class FilesystemGuard:
         _FORBIDDEN_MODULES = frozenset(
             {
                 "os",
+                "posix",  # module bas niveau sous os sur Unix — accès quasi équivalent
+                "pwd",
+                "grp",
                 "sys",
                 "subprocess",
                 "shutil",
@@ -437,6 +508,16 @@ class FilesystemGuard:
                 _ctypes.pythonapi = _blocked_ctypes_api("pythonapi")
             with contextlib.suppress(AttributeError):
                 _ctypes.cdll.LoadLibrary = _blocked_ctypes_api("cdll.LoadLibrary")
+
+        # ── Couche 5 : création de subprocess — blocage des primitives ────────
+        # Complète les couches 1-4 : bloquer l'IMPORT d'un module ne suffit pas
+        # si la classe/fonction dangereuse est déjà chargée en mémoire par
+        # l'interpréteur (ex: `().__class__.__bases__[0].__subclasses__()`
+        # retrouve `subprocess.Popen` sans jamais exécuter `import subprocess`)
+        # ou si elle vit dans un module légitime qu'on ne peut pas bloquer en
+        # entier (`asyncio` sert au worker lui-même pour sa boucle IPC — seules
+        # ses fonctions de spawn de subprocess sont dangereuses).
+        _install_subprocess_guard(_block)
 
     def uninstall(self) -> None:
         """Restaure les builtins originaux (utile pour les tests)."""
