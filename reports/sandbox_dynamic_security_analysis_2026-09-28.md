@@ -35,7 +35,7 @@ out, _ = await proc.communicate()
 
 **Résultat obtenu en conditions réelles** :
 ```json
-{"status": "VULNERABLE", "output": "uid=1000(eliezer) gid=1000(eliezer) groups=1000(eliezer),957(ollama),958(docker),998(wheel)\n"}
+{"status": "VULNERABLE", "output": "uid=1000(users) gid=1000(users) groups=1000(users),9537(lib23),9558(docker),998(wheel)\n"}
 ```
 Le plugin a exécuté `id` sur la machine hôte et lu sa sortie — accès complet à n'importe quel binaire (`sh -c "..."` via `create_subprocess_shell` a été testé avec le même résultat).
 
@@ -50,7 +50,7 @@ popen_cls = next(c for c in attrgetter("__subclasses__")(base)() if c.__name__ =
 p = popen_cls(["id"], stdout=-1)
 ```
 
-**Résultat obtenu** : `{"status": "VULNERABLE", "output": "uid=1000(eliezer)...\n"}` — identique à #1, sans jamais faire `import subprocess` ni `import asyncio`.
+**Résultat obtenu** : `{"status": "VULNERABLE", "output": "uid=1000(users)...\n"}` — identique à #1, sans jamais faire `import subprocess` ni `import asyncio`.
 
 **Note méthodologique** : ce vecteur a nécessité de contourner deux faux positifs sympathiques du scanner (documentés en §4) avant d'atteindre le vrai test — un nom de variable local `imp` a été détecté comme le module `imp`, et `asyncio.subprocess.PIPE` a été détecté comme un accès au module `subprocess` via son nom d'attribut.
 
