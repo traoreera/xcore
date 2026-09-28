@@ -57,6 +57,8 @@ This document outlines the current state of the XCore framework relative to the 
 ## 🌐 V3 — Distribution
 **Goal: Scale out beyond a single process.**
 
+**Technical specification (2026-09-28)**: `roadmap/V3_NATIVE_RUNTIME_SPEC.md` — Python stays the control plane (plugins, SDK, API, orchestration); a new Rust native runtime (`xcore-runtime`, embedded via PyO3) owns cluster membership, inter-node transport, routing, the distributed side of XBus, circuit breaking, and failover. Every row below maps to a section of that spec — none of it is implemented yet, this is the target architecture for when the V2 maintenance window ends.
+
 | Feature | State | Location / Note |
 | :--- | :---: | :--- |
 | Static Federation | ❌ | Not implemented |
