@@ -26,7 +26,7 @@
     <img src="https://api.netlify.com/api/v1/badges/340716e8-9c34-472f-a5a3-c974bfab302b/deploy-status" alt="Netlify Status" />
   </a>
   <a href="https://github.com/traoreera/xcore/releases">
-    <img src="https://img.shields.io/badge/version-2.3.5-blue.svg" alt="Version" />
+    <img src="https://img.shields.io/badge/version-2.5.3-blue.svg" alt="Version" />
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />

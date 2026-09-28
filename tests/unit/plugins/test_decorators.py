@@ -281,8 +281,8 @@ class TestRoutedPlugin:
     """Test RoutedPlugin class."""
 
     @pytest.mark.asyncio
-    async def test_routerin_returns_router(self):
-        """Test RouterIn returns APIRouter."""
+    async def test_get_router_returns_router(self):
+        """Test get_router returns APIRouter."""
         pytest.importorskip("fastapi")
 
         class TestPlugin(RoutedPlugin):
@@ -291,18 +291,18 @@ class TestRoutedPlugin:
                 return {"pong": True}
 
         plugin = TestPlugin()
-        router = plugin.RouterIn()
+        router = plugin.get_router()
 
         assert router is not None
         assert len(router.routes) == 1
 
-    def test_routerin_no_routes(self):
-        """Test RouterIn returns None when no routes defined."""
+    def test_get_router_no_routes(self):
+        """Test get_router returns None when no routes defined."""
 
         class TestPlugin(RoutedPlugin):
             pass
 
         plugin = TestPlugin()
-        router = plugin.RouterIn()
+        router = plugin.get_router()
 
         assert router is None

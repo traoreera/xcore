@@ -169,7 +169,7 @@ class TestDBTenantIsolation:
         tdb = TenantAwareDB(db, "acme")
         await tdb.execute("SELECT 1")
 
-        assert any("SET search_path TO acme" in q for q in executed)
+        assert any('SET search_path TO "acme"' in q for q in executed)
 
     @pytest.mark.asyncio
     async def test_two_tenants_set_different_search_paths(self):

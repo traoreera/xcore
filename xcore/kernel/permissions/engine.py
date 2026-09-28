@@ -8,7 +8,7 @@ The PermissionEngine is the singleton that:
 
 from __future__ import annotations
 
-from collections import deque
+from collections import OrderedDict, deque
 
 from ..observability import get_logger
 from .policies import PolicyEffect, PolicySet
@@ -39,12 +39,17 @@ class PermissionEngine:
     """
 
     def __init__(
-        self, events=None, max_audit=100_000, audit_cache_hits: bool = True
+        self,
+        events=None,
+        max_audit=100_000,
+        max_cache=10_000,
+        audit_cache_hits: bool = True,
     ) -> None:
         self._policies: dict[str, PolicySet] = {}
         self._events = events
         self._audit_log: deque[dict] = deque(maxlen=max_audit)
-        self._cache: dict[tuple[str, str, str], PolicyEffect] = {}
+        self._cache: OrderedDict[tuple[str, str, str], PolicyEffect] = OrderedDict()
+        self._max_cache = max_cache
         # audit_cache_hits=False : n'ajoute plus d'entrée au journal pour les
         # cache hits (le check() reste identique, seul le append() est sauté).
         # Défaut True = comportement historique inchangé (journal complet).
@@ -121,7 +126,11 @@ class PermissionEngine:
         else:
             effect = ps.evaluate(resource, action)
 
-        self._cache[(plugin_name, resource, action)] = effect
+        cache_key = (plugin_name, resource, action)
+        self._cache[cache_key] = effect
+        self._cache.move_to_end(cache_key)
+        while len(self._cache) > self._max_cache:
+            self._cache.popitem(last=False)
         return effect
 
     def _evaluate(self, plugin_name: str, resource: str, action: str) -> PolicyEffect:

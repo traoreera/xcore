@@ -92,6 +92,22 @@ class XcoreLogger:
     """
 
     __slots__ = ("_log",)
+    _REDACTED = "***REDACTED***"
+    _SENSITIVE_KEYS = (
+        "password",
+        "passwd",
+        "pwd",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "access_key",
+        "private_key",
+        "authorization",
+        "auth",
+        "cookie",
+        "session",
+    )
 
     def __init__(self, logger: logging.Logger) -> None:
         self._log = logger
@@ -99,6 +115,19 @@ class XcoreLogger:
     @property
     def name(self) -> str:
         return self._log.name
+
+    def _sanitize_fields(self, value: Any, key: str | None = None) -> Any:
+        key_l = key.lower() if isinstance(key, str) else ""
+        if any(s in key_l for s in self._SENSITIVE_KEYS):
+            return self._REDACTED
+
+        if isinstance(value, dict):
+            return {
+                str(k): self._sanitize_fields(v, key=str(k)) for k, v in value.items()
+            }
+        if isinstance(value, (list, tuple, set)):
+            return [self._sanitize_fields(v) for v in value]
+        return value
 
     def _emit(
         self,
@@ -110,7 +139,8 @@ class XcoreLogger:
     ) -> None:
         if not self._log.isEnabledFor(level):
             return
-        extra = {"xcore_ctx": fields} if fields else {}
+        safe_fields = self._sanitize_fields(fields) if fields else {}
+        extra = {"xcore_ctx": safe_fields} if safe_fields else {}
         self._log.log(level, msg, *args, exc_info=exc_info, extra=extra)
 
     def debug(self, msg: str, *args: Any, **fields: Any) -> None:

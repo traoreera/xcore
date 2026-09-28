@@ -192,9 +192,10 @@ class TestRedisCacheBackend:
     async def test_clear(self):
         backend = self._make_backend()
         mock_client = _make_redis_client()
+        mock_client.scan = AsyncMock(return_value=(0, []))
         backend._client = mock_client
         await backend.clear()
-        mock_client.flushdb.assert_called_once()
+        mock_client.scan.assert_called_once()
 
     async def test_keys_no_pattern(self):
         backend = self._make_backend()
