@@ -246,6 +246,14 @@ class Xcore:
 
         self.events.subscribe("plugin.*.reloaded", _on_plugin_reloaded)
 
+        # Retire les routes FastAPI d'un plugin désactivé/déchargé — sans elles,
+        # les routes restaient montées indéfiniment après un unload ou disable().
+        async def _on_plugin_unloaded(event):
+            plugin_name = event.name.split(".")[1]
+            self._unmount_plugin_router(plugin_name)
+
+        self.events.subscribe("plugin.*.unloaded", _on_plugin_unloaded)
+
         # 5. Attache le router FastAPI si une app est fournie
         if app is not None:
             self._app = app
@@ -272,21 +280,38 @@ class Xcore:
         self._booted = False
         self._logger.info("xcore stopped")
 
+    def _unmount_plugin_router(self, plugin_name: str) -> None:
+        """
+        Retire de l'app FastAPI toutes les routes montées pour ce plugin.
+
+        FastAPI n'offre pas de désinscription native d'un routeur — on filtre
+        donc `app.routes`, seule approche possible. Utilisé au unload/disable
+        et en première étape du remount lors d'un reload.
+        """
+        app = self._app
+        if app is None:
+            return
+
+        prefix = self._config.app.plugin_prefix or "/plugins"
+        plugin_prefix = f"{prefix}/{plugin_name}"
+
+        app.routes = [
+            r
+            for r in app.routes
+            if not getattr(r, "path", "").startswith(plugin_prefix)
+        ]
+        app.openapi_schema = None  # force regen du schéma OpenAPI
+
     def _remount_plugin_router(self, plugin_name: str) -> None:
         """Re-monte les routes FastAPI d'un plugin après un hot-reload."""
         app = self._app
         if app is None or self.plugins is None:
             return
 
+        self._unmount_plugin_router(plugin_name)
+
         prefix = self._config.app.plugin_prefix or "/plugins"
         plugin_prefix = f"{prefix}/{plugin_name}"
-
-        # Retire toutes les routes qui appartiennent à ce plugin
-        app.routes = [
-            r
-            for r in app.routes
-            if not getattr(r, "path", "").startswith(plugin_prefix)
-        ]
 
         # Récupère le nouveau router depuis le handler rechargé
         try:

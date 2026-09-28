@@ -60,6 +60,10 @@ class HealthChecker:
 
         return decorator
 
+    def unregister(self, name: str) -> bool:
+        """Retire un health check précédemment enregistré. Renvoie True s'il existait."""
+        return self._checks.pop(name, None) is not None
+
     async def run_all(self, timeout: float = 5.0) -> dict[str, Any]:
         results: list[CheckResult] = []
         for name, (fn, is_async) in self._checks.items():

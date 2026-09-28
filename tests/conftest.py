@@ -131,9 +131,36 @@ def fake_plugin_dir(plugins_dir: Path) -> Path:
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Fixture utilitaire pour un dossier temporaire propre."""
-    tmp = tempfile.mkdtemp()
+    # Préfixe distinctif : permet à _cleanup_stray_tmp_dirs (ci-dessous) de
+    # cibler précisément ces dossiers sans risquer de toucher aux tmp d'un
+    # autre processus si ce yield+rmtree n'a pas pu s'exécuter (crash dur).
+    tmp = tempfile.mkdtemp(prefix="xcore_test_")
     yield Path(tmp)
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+def sweep_stray_tmp_dirs() -> None:
+    """
+    Balaie tout ce qui porte le préfixe `xcore_test_` restant dans le dossier
+    temp système — jamais plus large, pour ne pas toucher aux fichiers
+    temporaires d'un autre processus. Fonction plain (pas une fixture) pour
+    rester testable directement.
+    """
+    tmp_root = Path(tempfile.gettempdir())
+    for leftover in tmp_root.glob("xcore_test_*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_stray_tmp_dirs() -> Generator[None, None, None]:
+    """
+    Filet de sécurité en fin de session : `plugins_dir`/`temp_dir` nettoient
+    déjà systématiquement leur propre dossier via yield+rmtree, mais ce
+    teardown ne s'exécute pas si un test crashe durement (SIGKILL) avant
+    d'y arriver.
+    """
+    yield
+    sweep_stray_tmp_dirs()
 
 
 @pytest.fixture

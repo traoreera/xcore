@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from pathlib import Path
 from xcore.kernel.sandbox.process_manager import SandboxProcessManager, SandboxConfig, ProcessState
-from xcore.kernel.sandbox.ipc import IPCResponse, IPCProcessDead
+from xcore.kernel.sandbox.ipc import IPCResponse, IPCProcessDead, IPCTimeoutError
 
 @pytest.fixture
 def mock_manifest(tmp_path):
@@ -104,6 +104,36 @@ async def test_manager_call_success(manager):
 async def test_manager_call_not_available(manager):
     with pytest.raises(RuntimeError, match="non disponible"):
         await manager.call("ping", {})
+
+
+@pytest.mark.asyncio
+async def test_manager_call_process_dead_triggers_recycle(manager):
+    """IPCProcessDead sur un appel doit déclencher le recyclage immédiatement."""
+    manager._state = ProcessState.RUNNING
+    manager._channel = MagicMock()
+    manager._channel.call = AsyncMock(side_effect=IPCProcessDead("dead"))
+
+    with patch.object(manager, "_handle_crash", new_callable=AsyncMock) as mock_crash:
+        with pytest.raises(IPCProcessDead):
+            await manager.call("ping", {})
+        mock_crash.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_manager_call_ipc_timeout_triggers_recycle(manager):
+    """
+    IPCTimeoutError (subprocess bloqué, pas mort) doit aussi déclencher le
+    recyclage immédiat — avant ce fix, seul IPCProcessDead était catché ici
+    et il fallait attendre le prochain _health_loop pour recycler.
+    """
+    manager._state = ProcessState.RUNNING
+    manager._channel = MagicMock()
+    manager._channel.call = AsyncMock(side_effect=IPCTimeoutError("no response"))
+
+    with patch.object(manager, "_handle_crash", new_callable=AsyncMock) as mock_crash:
+        with pytest.raises(IPCTimeoutError):
+            await manager.call("ping", {})
+        mock_crash.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_manager_stop(manager):

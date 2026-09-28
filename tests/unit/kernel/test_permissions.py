@@ -116,3 +116,34 @@ class TestPermissionEngine:
         # Check allows second call (cache hit for db.posts)
         assert engine.allows("p1", "db.posts", "read") is True
         assert len(events.emitted) == 2
+
+    def test_audit_cache_hits_default_keeps_full_log(self, engine):
+        """Comportement historique inchangé : audit_cache_hits=True par défaut."""
+        engine.load_from_manifest("p1", [{"resource": "*", "actions": ["*"]}])
+
+        engine.allows("p1", "res", "act")  # cache miss -> logged
+        engine.allows("p1", "res", "act")  # cache hit -> logged (défaut)
+
+        assert len(engine.audit_log(plugin_name="p1")) == 2
+
+    def test_audit_cache_hits_disabled_skips_hit_entries(self):
+        engine = PermissionEngine(audit_cache_hits=False)
+        engine.load_from_manifest("p1", [{"resource": "*", "actions": ["*"]}])
+
+        engine.allows("p1", "res", "act")  # cache miss -> logged
+        for _ in range(5):
+            engine.allows("p1", "res", "act")  # cache hits -> not logged
+
+        assert len(engine.audit_log(plugin_name="p1")) == 1
+
+    def test_audit_cache_hits_disabled_does_not_change_check_behavior(self):
+        """Le flag ne touche que l'audit log — check()/allows() restent corrects."""
+        engine = PermissionEngine(audit_cache_hits=False)
+        engine.load_from_manifest(
+            "p1", [{"resource": "db.*", "actions": ["read"], "effect": "deny"}]
+        )
+
+        with pytest.raises(PermissionDenied):
+            engine.check("p1", "db.users", "read")  # cache miss
+        with pytest.raises(PermissionDenied):
+            engine.check("p1", "db.users", "read")  # cache hit, still denies

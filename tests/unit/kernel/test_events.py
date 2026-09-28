@@ -222,7 +222,8 @@ class TestEventBus:
 
         assert len(results) == 0
         assert any(
-            r.getMessage() == "event handler error" and r.xcore_ctx.get("error") == "Test error"
+            r.getMessage() == "event handler error"
+            and r.xcore_ctx.get("error") == "Test error"
             for r in caplog.records
         )
 
@@ -260,3 +261,86 @@ class TestEventBus:
 
         assert "event1" in events
         assert "event2" in events
+
+
+class TestEventBusSupervision:
+    """Supervision : recent_emissions()/stats() — la visibilité qui manquait."""
+
+    @pytest.fixture
+    def event_bus(self):
+        return EventBus()
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_records_successful_emit(self, event_bus):
+        async def handler(event):
+            return "ok"
+
+        event_bus.subscribe("test.event", handler)
+        await event_bus.emit("test.event", {"key": "value"}, source="my_plugin")
+
+        recent = event_bus.recent_emissions()
+        assert len(recent) == 1
+        assert recent[0]["event"] == "test.event"
+        assert recent[0]["source"] == "my_plugin"
+        assert recent[0]["handlers_matched"] == 1
+        assert recent[0]["errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_records_no_handlers(self, event_bus):
+        await event_bus.emit("nobody.listens", {})
+
+        recent = event_bus.recent_emissions()
+        assert len(recent) == 1
+        assert recent[0]["handlers_matched"] == 0
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_counts_handler_errors(self, event_bus):
+        async def boom(event):
+            raise ValueError("boom")
+
+        event_bus.subscribe("test.event", boom)
+        await event_bus.emit("test.event", {})
+
+        recent = event_bus.recent_emissions()
+        assert recent[0]["errors"] == 1
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_filters_by_event_name(self, event_bus):
+        await event_bus.emit("event.a", {})
+        await event_bus.emit("event.b", {})
+
+        recent = event_bus.recent_emissions("event.a")
+        assert len(recent) == 1
+        assert recent[0]["event"] == "event.a"
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_respects_limit_and_order(self, event_bus):
+        for i in range(5):
+            await event_bus.emit(f"event.{i}", {})
+
+        recent = event_bus.recent_emissions(limit=2)
+        assert [e["event"] for e in recent] == ["event.3", "event.4"]
+
+    @pytest.mark.asyncio
+    async def test_stats_aggregates_per_event(self, event_bus):
+        async def handler(event):
+            return "ok"
+
+        event_bus.subscribe("test.event", handler)
+        await event_bus.emit("test.event", {})
+        await event_bus.emit("test.event", {})
+
+        stats = event_bus.stats("test.event")
+        assert stats["emissions"] == 2
+        assert stats["errors"] == 0
+
+    def test_stats_unknown_event_returns_empty(self, event_bus):
+        assert event_bus.stats("never.emitted") == {}
+
+    @pytest.mark.asyncio
+    async def test_stats_all_events(self, event_bus):
+        await event_bus.emit("a", {})
+        await event_bus.emit("b", {})
+
+        stats = event_bus.stats()
+        assert set(stats.keys()) == {"a", "b"}

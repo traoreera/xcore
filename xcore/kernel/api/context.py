@@ -8,8 +8,9 @@ variables, and the plugin configuration.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine
 
 if TYPE_CHECKING:
     from ...registry import PluginRegistry
@@ -45,6 +46,25 @@ class PluginContext:
     tracer: Tracer = None  # Tracer
     health: HealthChecker = None  # HealthChecker
     registry: PluginRegistry = None  # PluginRegistry
+
+    # Rempli par LifecycleManager : les tâches créées via spawn_task() y sont
+    # ajoutées pour pouvoir être annulées de force au unload, sans dépendre
+    # du plugin pour les traquer lui-même.
+    _task_sink: list[asyncio.Task] | None = field(default=None, repr=False)
+
+    def spawn_task(self, coro: Coroutine, name: str | None = None) -> asyncio.Task:
+        """
+        Crée une tâche de fond suivie par le kernel.
+
+        À utiliser à la place d'un `asyncio.create_task()` brut pour tout ce
+        qui ne doit pas survivre au unload du plugin : le kernel annule
+        automatiquement les tâches encore en cours au moment du unload,
+        qu'on_unload/on_stop l'ait fait ou non.
+        """
+        task = asyncio.create_task(coro, name=name)
+        if self._task_sink is not None:
+            self._task_sink.append(task)
+        return task
 
     def get_service(self, name: str) -> Any:
         """

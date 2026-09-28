@@ -123,8 +123,7 @@ class XcoreLogger:
 
         if isinstance(value, dict):
             return {
-                str(k): self._sanitize_fields(v, key=str(k))
-                for k, v in value.items()
+                str(k): self._sanitize_fields(v, key=str(k)) for k, v in value.items()
             }
         if isinstance(value, (list, tuple, set)):
             return [self._sanitize_fields(v) for v in value]

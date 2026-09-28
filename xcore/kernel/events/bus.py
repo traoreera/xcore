@@ -13,6 +13,8 @@ import contextlib
 import fnmatch
 import inspect
 import re
+import time
+from collections import deque
 from typing import TYPE_CHECKING, Any, Callable, Pattern
 
 from .section import Event, _HandlerEntry
@@ -44,9 +46,15 @@ class EventBus:
     ```
     """
 
-    def __init__(self, cache: "CacheService" = None) -> None:
+    def __init__(self, cache: "CacheService" = None, max_audit: int = 10_000) -> None:
         self._handlers: dict[str, list[_HandlerEntry]] = {}
         self._wildcard_patterns: dict[str, Pattern] = {}
+
+        # Supervision : journal borné des émissions + métriques agrégées par
+        # event, même pattern que PermissionEngine._audit_log — pour voir ce
+        # qui s'est réellement passé plutôt que de deviner depuis les logs.
+        self._emission_log: deque[dict] = deque(maxlen=max_audit)
+        self._stats: dict[str, dict] = {}
 
     # ── Enregistrement ────────────────────────────────────────
 
@@ -129,6 +137,7 @@ class EventBus:
             await bus.emit("user.created", {"email": "alice@example.com"})
         ```
         """
+        t0 = time.monotonic()
         event = Event(name=event_name, data=data or {}, source=source)
 
         # 1. Exact match lookup (O(1))
@@ -145,6 +154,9 @@ class EventBus:
                 matched_handlers.extend(self._handlers[pattern])
 
         if not matched_handlers:
+            self._audit_emission(
+                event_name, source, matched=0, errors=0, duration_ms=0.0
+            )
             return []
 
         # Sort by priority across all matched patterns
@@ -152,6 +164,7 @@ class EventBus:
 
         results: list[Any] = []
         to_remove: list[_HandlerEntry] = []
+        error_count = 0
 
         if gather:
             # Fast-path: only one handler
@@ -165,6 +178,7 @@ class EventBus:
                     )
                     results.append(result)
                 except Exception as e:
+                    error_count += 1
                     logger.error(
                         "event handler error",
                         handler=entry.name,
@@ -190,6 +204,7 @@ class EventBus:
                 raw = await asyncio.gather(*tasks, return_exceptions=True)
                 for entry, result in zip(matched_handlers, raw):
                     if isinstance(result, Exception):
+                        error_count += 1
                         logger.error(
                             "event handler error",
                             handler=entry.name,
@@ -212,6 +227,7 @@ class EventBus:
                     )
                     results.append(result)
                 except Exception as e:
+                    error_count += 1
                     logger.error(
                         "event handler error", handler=entry.name, error=str(e)
                     )
@@ -227,6 +243,15 @@ class EventBus:
                     if not entries:
                         self._handlers.pop(entry.pattern, None)
                         self._wildcard_patterns.pop(entry.pattern, None)
+
+        duration_ms = (time.monotonic() - t0) * 1000
+        self._audit_emission(
+            event_name,
+            source,
+            matched=len(matched_handlers),
+            errors=error_count,
+            duration_ms=duration_ms,
+        )
         return results
 
     def emit_sync(self, event_name: str, data: dict[str, Any] | None = None) -> None:
@@ -236,6 +261,70 @@ class EventBus:
             loop.create_task(self.emit(event_name, data))
         except RuntimeError:
             asyncio.run(self.emit(event_name, data))
+
+    # ── Supervision ───────────────────────────────────────────
+
+    def _audit_emission(
+        self,
+        event_name: str,
+        source: str | None,
+        matched: int,
+        errors: int,
+        duration_ms: float,
+    ) -> None:
+        entry = {
+            "event": event_name,
+            "source": source,
+            "handlers_matched": matched,
+            "errors": errors,
+            "duration_ms": round(duration_ms, 2),
+            "timestamp": time.time(),
+        }
+        self._emission_log.append(entry)
+
+        stats = self._stats.setdefault(
+            event_name, {"emissions": 0, "errors": 0, "total_duration_ms": 0.0}
+        )
+        stats["emissions"] += 1
+        stats["errors"] += errors
+        stats["total_duration_ms"] += duration_ms
+
+    def recent_emissions(
+        self, event_name: str | None = None, limit: int = 100
+    ) -> list[dict]:
+        """Journal des émissions récentes — le plus récent en dernier."""
+        from itertools import islice
+
+        it = reversed(self._emission_log)
+        if event_name:
+            it = (e for e in it if e["event"] == event_name)
+        results = list(islice(it, limit))
+        results.reverse()
+        return results
+
+    def stats(self, event_name: str | None = None) -> dict:
+        """Statistiques agrégées par event : émissions, erreurs, durée moyenne."""
+        if event_name:
+            s = self._stats.get(event_name)
+            if not s:
+                return {}
+            return {
+                "emissions": s["emissions"],
+                "errors": s["errors"],
+                "avg_duration_ms": round(s["total_duration_ms"] / s["emissions"], 2),
+            }
+        return {
+            name: {
+                "emissions": s["emissions"],
+                "errors": s["errors"],
+                "avg_duration_ms": (
+                    round(s["total_duration_ms"] / s["emissions"], 2)
+                    if s["emissions"]
+                    else 0.0
+                ),
+            }
+            for name, s in self._stats.items()
+        }
 
     # ── Introspection ─────────────────────────────────────────
 

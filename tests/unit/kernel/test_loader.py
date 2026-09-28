@@ -145,6 +145,65 @@ def test_loader_topo_sort(loader):
     assert [m.name for m in ordered] == ["p1", "p2"]
 
 
+@pytest.fixture
+def mock_ctx_tmp(tmp_path):
+    """Comme mock_ctx, mais avec un vrai dossier isolé (pour la state_store)."""
+    ctx = MagicMock()
+    ctx.config.directory = str(tmp_path / "plugins")
+    ctx.services.as_dict.return_value = {}
+    ctx.events = MagicMock()
+    ctx.hooks = MagicMock()
+    ctx.registry = MagicMock()
+    ctx.metrics = MagicMock()
+    ctx.tracer = MagicMock()
+    ctx.health = MagicMock()
+    return ctx
+
+
+def test_loader_state_store_default_path(mock_ctx_tmp, tmp_path):
+    loader = PluginLoader(mock_ctx_tmp)
+    assert loader.state_store._path == tmp_path / ".xcore" / "plugins_state.json"
+
+
+def test_loader_discover_names(mock_ctx_tmp, tmp_path):
+    plugins_dir = tmp_path / "plugins"
+    (plugins_dir / "shop").mkdir(parents=True)
+    (plugins_dir / "_disabled_by_prefix").mkdir()
+    (plugins_dir / "not_a_dir.txt").write_text("x")
+
+    loader = PluginLoader(mock_ctx_tmp)
+    assert loader.discover_names() == ["shop"]
+
+
+@pytest.mark.asyncio
+async def test_loader_load_all_skips_disabled_plugin(mock_ctx_tmp):
+    m1 = MagicMock()
+    m1.name = "p1"
+    m1.requires = []
+    m1.execution_mode = ExecutionMode.TRUSTED
+    m1.version = "1.0.0"
+
+    p1 = MagicMock(spec=Path)
+    p1.is_dir.return_value = True
+    p1.name = "p1"
+
+    loader = PluginLoader(mock_ctx_tmp)
+    loader.state_store.set_enabled("p1", False, reason="maintenance")
+
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch("pathlib.Path.iterdir", return_value=[p1]):
+            with patch.object(
+                loader._validator, "load_and_validate", return_value=(m1, True, "2.3.2")
+            ):
+                with patch.object(
+                    loader, "_activate", new_callable=AsyncMock
+                ) as mock_activate:
+                    res = await loader.load_all()
+                    assert res["loaded"] == []
+                    assert res["disabled"] == ["p1"]
+                    mock_activate.assert_not_called()
+
+
 def test_loader_topo_sort_circular(loader):
     m1 = MagicMock()
     m1.name = "p1"

@@ -333,3 +333,51 @@ class TestHookManager:
 
         hooks = hook_manager.list_hooks()
         assert len(hooks) == 0
+
+
+class TestHookManagerSupervision:
+    """Supervision : recent_emissions() — le détail récent derrière get_metrics()."""
+
+    @pytest.fixture
+    def hook_manager(self):
+        return HookManager()
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_records_emit(self, hook_manager):
+        def handler(event):
+            return "ok"
+
+        hook_manager.register("test.event", handler)
+        await hook_manager.emit("test.event", {"key": "value"})
+
+        recent = hook_manager.recent_emissions()
+        assert len(recent) == 1
+        assert recent[0]["event"] == "test.event"
+        assert recent[0]["hooks_matched"] == 1
+        assert recent[0]["errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_no_handlers(self, hook_manager):
+        await hook_manager.emit("nobody.listens", {})
+        recent = hook_manager.recent_emissions()
+        assert recent[0]["hooks_matched"] == 0
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_counts_errors(self, hook_manager):
+        def boom(event):
+            raise ValueError("boom")
+
+        hook_manager.register("test.event", boom)
+        await hook_manager.emit("test.event", {})
+
+        recent = hook_manager.recent_emissions()
+        assert recent[0]["errors"] == 1
+
+    @pytest.mark.asyncio
+    async def test_recent_emissions_filters_by_event_name(self, hook_manager):
+        await hook_manager.emit("event.a", {})
+        await hook_manager.emit("event.b", {})
+
+        recent = hook_manager.recent_emissions("event.a")
+        assert len(recent) == 1
+        assert recent[0]["event"] == "event.a"

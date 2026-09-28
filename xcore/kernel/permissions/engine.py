@@ -38,12 +38,22 @@ class PermissionEngine:
     ```
     """
 
-    def __init__(self, events=None, max_audit=100_000, max_cache=10_000) -> None:
+    def __init__(
+        self,
+        events=None,
+        max_audit=100_000,
+        max_cache=10_000,
+        audit_cache_hits: bool = True,
+    ) -> None:
         self._policies: dict[str, PolicySet] = {}
         self._events = events
         self._audit_log: deque[dict] = deque(maxlen=max_audit)
         self._cache: OrderedDict[tuple[str, str, str], PolicyEffect] = OrderedDict()
         self._max_cache = max_cache
+        # audit_cache_hits=False : n'ajoute plus d'entrée au journal pour les
+        # cache hits (le check() reste identique, seul le append() est sauté).
+        # Défaut True = comportement historique inchangé (journal complet).
+        self._audit_cache_hits = audit_cache_hits
 
     def load_from_manifest(
         self, plugin_name: str, raw_permissions: list[dict] | None
@@ -79,7 +89,9 @@ class PermissionEngine:
         else:
             # Cache hit: minimal audit (log entry only, no events)
             # This keeps audit_log complete while being fast
-            self._audit(plugin_name, resource, action, effect, emit_event=False)
+            self._audit(
+                plugin_name, resource, action, effect, emit_event=False, cache_hit=True
+            )
 
         if effect == PolicyEffect.DENY:
             raise PermissionDenied(
@@ -93,7 +105,9 @@ class PermissionEngine:
 
         if effect is not None:
             # Audit even on cache hit for allows() to keep log complete
-            self._audit(plugin_name, resource, action, effect, emit_event=False)
+            self._audit(
+                plugin_name, resource, action, effect, emit_event=False, cache_hit=True
+            )
             return effect == PolicyEffect.ALLOW
 
         try:
@@ -133,6 +147,7 @@ class PermissionEngine:
         action: str,
         effect: PolicyEffect,
         emit_event: bool = True,
+        cache_hit: bool = False,
     ) -> None:
         entry = {
             "plugin": plugin_name,
@@ -140,7 +155,8 @@ class PermissionEngine:
             "action": action,
             "effect": effect.value,
         }
-        self._audit_log.append(entry)
+        if not cache_hit or self._audit_cache_hits:
+            self._audit_log.append(entry)
 
         # Only log warning or emit events on miss or deny
         if effect == PolicyEffect.DENY:

@@ -25,6 +25,7 @@ from xcore.registry.resolver import (
 
 from ...kernel.observability import get_logger
 from ...kernel.security.validation import ManifestValidator
+from ...registry import PluginStateStore
 from ..api.contract import PluginHandler
 from .activator import (
     ActivatorRegistry,
@@ -83,6 +84,27 @@ class PluginLoader:
 
         self._validator = ManifestValidator()
 
+        # Table de vérité persistante actif/inactif — survit aux redémarrages.
+        # Défaut : <plugins_dir>/../.xcore/plugins_state.json, aucune config requise.
+        plugins_dir = Path(self._config.directory)
+        state_path = plugins_dir.parent / ".xcore" / "plugins_state.json"
+        self._state_store = PluginStateStore(state_path)
+
+    @property
+    def state_store(self) -> PluginStateStore:
+        return self._state_store
+
+    def discover_names(self) -> list[str]:
+        """Liste tous les dossiers de plugins présents sur disque (chargés ou non)."""
+        plugin_dir = Path(self._config.directory)
+        if not plugin_dir.exists():
+            return []
+        return sorted(
+            d.name
+            for d in plugin_dir.iterdir()
+            if d.is_dir() and not d.name.startswith("_")
+        )
+
     # ── Chargement global ─────────────────────────────────────
 
     async def load_all(self) -> dict[str, list[str]]:
@@ -95,15 +117,20 @@ class PluginLoader:
         loaded: list[str] = []
         failed: list[str] = []
         skipped: list[str] = []
+        disabled: list[str] = []
         manifests = []
 
         plugin_dir = Path(self._config.directory)
         if not plugin_dir.exists():
             logger.warning("plugin directory not found", path=str(plugin_dir))
-            return {"loaded": [], "failed": [], "skipped": []}
+            return {"loaded": [], "failed": [], "skipped": [], "disabled": []}
 
         for d in sorted(plugin_dir.iterdir()):
             if not d.is_dir() or d.name.startswith("_"):
+                continue
+            if not self._state_store.is_enabled(d.name):
+                logger.info("plugin disabled, skipped", plugin=d.name)
+                disabled.append(d.name)
                 continue
             try:
                 manifest, validate_version, frameversion = (
@@ -123,7 +150,12 @@ class PluginLoader:
                 skipped.append(d.name)
 
         if not manifests:
-            return {"loaded": [], "failed": [], "skipped": skipped}
+            return {
+                "loaded": [],
+                "failed": [],
+                "skipped": skipped,
+                "disabled": disabled,
+            }
 
         try:
             ordered = _topo_sort(manifests)
@@ -133,6 +165,7 @@ class PluginLoader:
                 "loaded": [],
                 "failed": [m.name for m in manifests],
                 "skipped": skipped,
+                "disabled": disabled,
             }
 
         # FIX #2 : deux ensembles distincts — "chargé avec succès" vs "traité"
@@ -211,8 +244,14 @@ class PluginLoader:
             loaded=len(loaded),
             failed=len(failed),
             skipped=len(skipped),
+            disabled=len(disabled),
         )
-        return {"loaded": loaded, "failed": failed, "skipped": skipped}
+        return {
+            "loaded": loaded,
+            "failed": failed,
+            "skipped": skipped,
+            "disabled": disabled,
+        }
 
     async def _try_load(self, manifest: Any) -> tuple[Any, bool]:
         try:

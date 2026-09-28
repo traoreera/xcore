@@ -19,7 +19,7 @@ from ..observability import get_logger
 if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
 
-from .ipc import IPCChannel, IPCProcessDead
+from .ipc import IPCChannel, IPCProcessDead, IPCTimeoutError
 from .isolation import DiskQuotaExceeded, DiskWatcher
 
 logger = get_logger("xcore.sandbox.process_manager")
@@ -178,7 +178,12 @@ class SandboxProcessManager:
         try:
             resp = await self._channel.call(action, payload)
             return resp.data
-        except IPCProcessDead:
+        except (IPCProcessDead, IPCTimeoutError):
+            # IPCTimeoutError : le subprocess n'est pas forcément mort, juste
+            # bloqué/sans réponse — sans ce catch, il fallait attendre le
+            # prochain cycle de _health_loop pour que le recyclage se déclenche.
+            # On recycle immédiatement sur le chemin de l'appel en échec plutôt
+            # que de laisser un process inutilisable jusqu'au prochain health check.
             await self._handle_crash()
             raise
 

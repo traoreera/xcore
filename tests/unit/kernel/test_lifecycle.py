@@ -333,6 +333,170 @@ class Plugin(BasePlugin):
         assert lifecycle_manager.state == PluginState.UNLOADED
 
     @pytest.mark.asyncio
+    async def test_unload_unregisters_from_registry(self, lifecycle_manager, tmp_path):
+        """Le ramasse-miette forcé doit toujours retirer le plugin du PluginRegistry."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+""")
+
+        await lifecycle_manager.load()
+        await lifecycle_manager.unload()
+
+        lifecycle_manager._registry.unregister.assert_called_once_with("test_plugin")
+
+    @pytest.mark.asyncio
+    async def test_unload_forces_cleanup_even_if_on_unload_raises(
+        self, lifecycle_manager, tmp_path
+    ):
+        """Un on_unload buggé ne doit pas empêcher le ramasse-miette forcé."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+
+    async def on_unload(self):
+        raise RuntimeError("boom")
+""")
+
+        await lifecycle_manager.load()
+        await lifecycle_manager.unload()
+
+        assert lifecycle_manager.state == PluginState.UNLOADED
+        assert lifecycle_manager._instance is None
+        lifecycle_manager._registry.unregister.assert_called_once_with("test_plugin")
+
+    @pytest.mark.asyncio
+    async def test_unload_removes_scheduler_jobs(self, mock_manifest):
+        """Un job planifié par le plugin doit être désinscrit du vrai scheduler au unload."""
+        from xcore.kernel.context import KernelContext
+
+        real_scheduler = MagicMock()
+        real_scheduler.add_job.side_effect = lambda func, trigger="cron", job_id=None, **kw: job_id
+
+        ctx = KernelContext(
+            # tenancy=None explicite : sinon un MagicMock() auto-généré rend
+            # `config.tenancy.enabled` truthy et le scheduler passe aussi par
+            # TenantAwareScheduler, hors sujet de ce test.
+            config=MagicMock(tenancy=None),
+            services=MagicMock(),
+            events=MagicMock(),
+            hooks=MagicMock(),
+            # Comme en production, le scheduler n'est pas encore exporté dans le
+            # registry pendant load_all() (register_core_service() n'a lieu
+            # qu'après) : get_service() doit retomber sur le dict de services.
+            registry=MagicMock(get_service=MagicMock(side_effect=KeyError("scheduler"))),
+            metrics=MagicMock(),
+            tracer=MagicMock(),
+            health=MagicMock(),
+        )
+        ctx.services.as_dict.return_value = {"scheduler": real_scheduler}
+
+        manager = LifecycleManager(manifest=mock_manifest, ctx=ctx)
+
+        src_dir = mock_manifest.plugin_dir / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+
+    async def _inject_context(self, ctx):
+        self.ctx = ctx
+        ctx.get_service("scheduler").add_job(self.handle, trigger="cron", job_id="nightly")
+""")
+
+        await manager.load()
+        real_scheduler.add_job.assert_called_once()
+        await manager.unload()
+        real_scheduler.remove_job.assert_called_once_with("nightly")
+
+    @pytest.mark.asyncio
+    async def test_unload_removes_health_check(self, mock_manifest):
+        """Un health check enregistré par le plugin doit être désinscrit au unload."""
+        from xcore.kernel.context import KernelContext
+
+        real_health = MagicMock()
+
+        ctx = KernelContext(
+            config=MagicMock(),
+            services=MagicMock(),
+            events=MagicMock(),
+            hooks=MagicMock(),
+            registry=MagicMock(),
+            metrics=MagicMock(),
+            tracer=MagicMock(),
+            health=real_health,
+        )
+        ctx.services.as_dict.return_value = {}
+
+        manager = LifecycleManager(manifest=mock_manifest, ctx=ctx)
+
+        src_dir = mock_manifest.plugin_dir / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+
+    async def _inject_context(self, ctx):
+        self.ctx = ctx
+
+        @ctx.health.register("test_plugin.db")
+        async def check():
+            return True, "ok"
+""")
+
+        await manager.load()
+        real_health.register.assert_called_once_with("test_plugin.db")
+        await manager.unload()
+        real_health.unregister.assert_called_once_with("test_plugin.db")
+
+    @pytest.mark.asyncio
+    async def test_spawn_task_cancelled_on_unload(self, lifecycle_manager, tmp_path):
+        """Une tâche créée via ctx.spawn_task() doit être annulée au unload."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+import asyncio
+from xcore.kernel.api.contract import BasePlugin
+
+class Plugin(BasePlugin):
+    async def handle(self, action, payload):
+        return {"status": "ok"}
+
+    async def _inject_context(self, ctx):
+        self.ctx = ctx
+
+        async def _forever():
+            await asyncio.sleep(3600)
+
+        self.task = ctx.spawn_task(_forever(), name="forever")
+""")
+
+        await lifecycle_manager.load()
+        task = lifecycle_manager._instance.task
+        assert not task.done()
+
+        await lifecycle_manager.unload()
+        await asyncio.sleep(0)  # laisse la cancellation se propager
+
+        assert task.cancelled()
+
+    @pytest.mark.asyncio
     async def test_collect_router(self, lifecycle_manager, tmp_path):
         """Test router collection."""
         src_dir = tmp_path / "src"
