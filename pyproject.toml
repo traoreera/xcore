@@ -1,6 +1,6 @@
 [project]
 name = "XCoreRuntime"
-version = "2.5.2"
+version = "2.6.0"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
@@ -18,9 +18,7 @@ classifiers = [
 requires-python = ">=3.12,<4.0"
 dependencies = [
     "fastapi[standard]>=0.135.1,<1.0.0",
-    "uvicorn>=0.38.0,<1.0.0",
-    "pydantic[email]>=2.11.7,<3.0.0",
-    "pydantic-settings>=2.14.2,<3.0.0",
+    "pydantic>=2.11.7,<3.0.0",
     "sqlalchemy>=2.0.41,<3.0.0",
     "alembic>=1.16.1,<2.0.0",
     "psycopg2>=2.9.11,<3.0.0",
@@ -29,7 +27,6 @@ dependencies = [
     "apscheduler>=3.11.0,<4.0.0",
     "python-dotenv>=1.1.0,<2.0.0",
     "pyyaml>=6.0.3,<7.0.0",
-    "rich>=14.0.0,<15.0.0",
     "celery>=5.6.3,<6.0.0",
     "opentelemetry-api>=1.27.0,<2.0.0",
     "opentelemetry-sdk>=1.27.0,<2.0.0",

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`PermissionEngine` audit log had no way to skip cache-hit entries**: every `allows()`/`check()` cache hit still appended to `_audit_log` unconditionally — the expensive part (event emission) was already skipped on cache hits, but the log append wasn't. New optional `PermissionEngine(audit_cache_hits=False)` skips it; default (`True`) keeps the existing behavior (complete audit trail) unchanged.
 - **Stray temp directories from crashed test runs**: `tests/conftest.py`'s `plugins_dir`/`temp_dir` fixtures already clean up via `yield` + `shutil.rmtree`, but that teardown never runs if a test crashes hard (e.g. `SIGKILL`) before reaching it. `temp_dir` now uses the same distinguishing `xcore_test_` prefix as `plugins_dir`, and a new session-scoped autouse fixture sweeps any `xcore_test_*` directories left behind in the system temp dir at the end of the run — scoped to that exact prefix only, never a broader temp-dir sweep.
 
+### Changed
+- **Trimmed unused core dependencies**: `uvicorn` and `pydantic-settings` were never imported anywhere in `xcore` — both are already pulled in transitively by `fastapi[standard]` (confirmed against its own metadata) for anyone who needs them. `rich` had zero usage in the core package (it belongs to `xcorecli`, a separate install). `pydantic[email]` is now plain `pydantic` — `EmailStr`/`email-validator` were never used, and `fastapi[standard]` already brings in `email-validator` regardless. No behavior change; `poetry.lock` regenerated to match.
+
 ## [2.5.1] - 2026-08-20
 
 ### Fixed

@@ -4525,4 +4525,4 @@ xcli = ["xcorecli"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "4351f42149ca3bd14affc6c5088c32478f5f29f23056f768ac5da484f5174331"
+content-hash = "b6f25778d5af0083617a5b268cc677107c5a99b374f613fcb568aff41e247bb0"

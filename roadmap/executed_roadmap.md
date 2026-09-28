@@ -8,8 +8,8 @@ Ce document présente l'état actuel du framework XCore par rapport aux objectif
 | :--- | :--- | :--- | :--- |
 | **V1** | Fondation Kernel | **Terminé** | 100% |
 | **V2** | Industrialisation | **Terminé** | 100% |
-| **V3** | Distribution | **Avancé** | 60% |
-| **V4** | Cloud Native | **Démarré** | 15% |
+| **V3** | Distribution | **Avancé** | 25% |
+| **V4** | Cloud Native | **Démarré** | 5% |
 | **V5** | Intelligence Native | **Concept** | 0% |
 
 ---
