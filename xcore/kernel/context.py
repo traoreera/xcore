@@ -33,6 +33,7 @@ class KernelContext:
     metrics: MetricsRegistry | None = None
     tracer: Tracer | None = None
     health: HealthChecker | None = None
+    log_level: str = "WARNING"
 
     def as_plugin_context_params(
         self, plugin_name: str, caller: Any = None

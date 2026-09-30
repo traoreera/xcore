@@ -54,6 +54,7 @@ class SandboxProcessManager:
         manifest,
         ctx: "PluginLoader",
         config: SandboxConfig | None = None,
+        log_level: str = "WARNING",
     ) -> None:
         self.manifest = manifest
         self.config = config or SandboxConfig()
@@ -64,6 +65,8 @@ class SandboxProcessManager:
         self._started_at: float | None = None
         self._watch_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
+        self._log_level = log_level
         data_dir = manifest.plugin_dir / "data"
         self._ctx = ctx
 
@@ -94,6 +97,9 @@ class SandboxProcessManager:
         self._restarts = 0
         self._watch_task = asyncio.create_task(
             self._watch_loop(), name=f"watch-{self.manifest.name}"
+        )
+        self._stderr_task = asyncio.create_task(
+            self._stderr_pump(), name=f"stderr-{self.manifest.name}"
         )
         hc = self.manifest.runtime.health_check
         if hc.enabled:
@@ -135,6 +141,7 @@ class SandboxProcessManager:
             "PYTHONUNBUFFERED": "1",
             "_SANDBOX_MAX_MEM_MB": str(self.manifest.resources.max_memory_mb),
             "_SANDBOX_MAX_CPU_SEC": "10",
+            "LOG_LEVEL": self._log_level,
         }
         env |= self.manifest.env
 
@@ -194,18 +201,27 @@ class SandboxProcessManager:
         if self._state == ProcessState.STOPPED:
             return
         logger.warning("subprocess exited", plugin=self.manifest.name, exit_code=code)
-        if self._process.stderr:
-            with contextlib.suppress(Exception):
-                err = await asyncio.wait_for(
-                    self._process.stderr.read(2048), timeout=1.0
-                )
-                if err:
-                    logger.error(
-                        "subprocess stderr output",
-                        plugin=self.manifest.name,
-                        stderr=err.decode("utf-8", "replace").strip(),
-                    )
         await self._handle_crash()
+
+    async def _stderr_pump(self) -> None:
+        """
+        Draine stderr du subprocess en continu pendant toute sa durée de vie.
+        Sans ça, les logs WARNING+ du plugin (niveau lu depuis le pipe) restaient
+        bloqués dans le buffer OS et ne remontaient qu'au crash, en tronqué.
+        """
+        if not self._process or not self._process.stderr:
+            return
+        stream = self._process.stderr
+        with contextlib.suppress(Exception):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    return
+                text = line.decode("utf-8", "replace").rstrip()
+                if text:
+                    logger.warning(
+                        "subprocess stderr", plugin=self.manifest.name, line=text
+                    )
 
     async def _health_loop(self, interval: float, timeout: float) -> None:
         await asyncio.sleep(interval)
@@ -251,12 +267,12 @@ class SandboxProcessManager:
             )
             await asyncio.sleep(delay)
 
-            for task in (self._watch_task, self._health_task):
+            for task in (self._watch_task, self._health_task, self._stderr_task):
                 if task and not task.done():
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await task
-            self._watch_task = self._health_task = None
+            self._watch_task = self._health_task = self._stderr_task = None
             await self._kill()
 
             try:
@@ -270,6 +286,9 @@ class SandboxProcessManager:
             self._started_at = time.monotonic()
             self._watch_task = asyncio.create_task(
                 self._watch_loop(), name=f"watch-{self.manifest.name}"
+            )
+            self._stderr_task = asyncio.create_task(
+                self._stderr_pump(), name=f"stderr-{self.manifest.name}"
             )
             hc = self.manifest.runtime.health_check
             if hc.enabled:
@@ -293,7 +312,7 @@ class SandboxProcessManager:
 
     async def stop(self) -> None:
         self._state = ProcessState.STOPPED
-        for task in (self._watch_task, self._health_task):
+        for task in (self._watch_task, self._health_task, self._stderr_task):
             if task and not task.done():
                 task.cancel()
         if self._channel:

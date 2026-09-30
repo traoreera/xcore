@@ -233,6 +233,7 @@ class Xcore:
             metrics=self.metrics,
             tracer=self.tracer,
             health=self.health,
+            log_level=self._config.observability.logging.level.upper(),
         )
         self.plugins = PluginSupervisor(ctx)
 

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.3] - 2026-09-30
+
+### Fixed
+- **Sandboxed plugin logs never reached the console or `log/app.log`**: `xcore/kernel/sandbox/worker.py` hardcoded the subprocess `LOG_LEVEL` to `WARNING` when the env var wasn't set, and `SandboxProcessManager._spawn()` never set it — so a sandboxed plugin's `self.logger.info(...)` calls were dropped at the source regardless of `integration.yaml`'s `observability.logging.level`. Separately, `_watch_loop()` only ever read subprocess stderr once, in the crash path — so even `WARNING`/`ERROR`-level output from a healthy running plugin sat in the OS pipe buffer and was never drained during normal operation. Since `sandboxed` is now the default execution mode (2.6.2), this affected any plugin that doesn't explicitly declare `execution_mode`.
+  Fixed by threading the real configured level through a new `KernelContext.log_level` field (set from `observability.logging.level` at boot) → `SandboxedActivator` → the subprocess `env` in `SandboxProcessManager._spawn()`, and by replacing the one-shot crash-time stderr read with a `_stderr_pump()` task that drains stderr continuously for the subprocess's whole lifetime and relays each line through the main process's logger (`xcore/kernel/sandbox/process_manager.py`).
+
 ## [2.6.2] - 2026-09-28
 
 ### Security
