@@ -23,15 +23,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from xcore.kernel.observability import get_logger
+from xcore.kernel.observability.logging import _TextFormatter
 
 # ContextVar par tâche asyncio — évite les race conditions entre coroutines
 # qui partageraient le même FilesystemGuard (requis pour la sécurité sandbox).
 _sandbox_in_guard: ContextVar[bool] = ContextVar("sandbox_in_guard", default=False)
 
+# _TextFormatter (le même que le process principal, xcore/kernel/observability/
+# logging.py) et non un simple format="..." : un basicConfig(format=...) plein
+# texte ignore les champs structurés passés en kwargs (logger.info(msg, plugin=...))
+# — ils sont attachés via extra={"xcore_ctx": ...} et seuls _TextFormatter/
+# _JsonFormatter savent les rendre. Sans ça, ces champs étaient silencieusement
+# perdus même une fois le niveau et le drainage stderr corrigés côté kernel.
+_worker_handler = logging.StreamHandler(sys.stderr)
+_worker_handler.setFormatter(_TextFormatter())
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "WARNING"),
-    format="%(asctime)s [%(levelname)s] worker: %(message)s",
-    stream=sys.stderr,
+    handlers=[_worker_handler],
 )
 logger = get_logger("xcore.worker")
 
@@ -292,10 +300,15 @@ class FilesystemGuard:
 
                 if sig is not None:
                     try:
-                        bound = sig.bind_partial(*args, **kwargs).arguments
+                        bound = sig.bind_partial(*args, **kwargs)
+                        # apply_defaults() : sans ça, un appel qui compte sur
+                        # une valeur par défaut (ex: os.listdir() -> cwd) a un
+                        # bound.arguments vide et passait le guard sans aucune
+                        # vérification.
+                        bound.apply_defaults()
                         paths = [
                             v
-                            for k, v in bound.items()
+                            for k, v in bound.arguments.items()
                             if k in pnames and isinstance(v, (str, os.PathLike))
                         ]
                     except Exception:
@@ -345,6 +358,8 @@ class FilesystemGuard:
             "stat",
             "lstat",
             "chmod",
+            "symlink",
+            "link",
         ]:
             if hasattr(os, op):
                 setattr(os, op, _guarded_op(getattr(os, op), f"os.{op}"))
@@ -363,6 +378,8 @@ class FilesystemGuard:
             "exists",
             "is_file",
             "is_dir",
+            "symlink_to",
+            "hardlink_to",
         ]:
             if hasattr(_Path, op):
                 setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
@@ -703,7 +720,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         if not manifest_path.exists():
             continue
         try:
-            return _extracted_from__load_manifest_20(fname, manifest_path, manifest)
+            return _parse_manifest_file(fname, manifest_path, manifest)
         except Exception as e:
             logger.warning("cannot read manifest file", file=fname, error=str(e))
 
@@ -711,7 +728,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
     return manifest
 
 
-def _extracted_from__load_manifest_20(fname, manifest_path, manifest: _PluginManifest):
+def _parse_manifest_file(fname, manifest_path, manifest: _PluginManifest):
     if fname.endswith(".yaml"):
         import yaml
 
@@ -821,6 +838,14 @@ async def _run(plugin_dir: Path) -> None:
             line = await reader.readline()
         except (asyncio.IncompleteReadError, EOFError):
             break
+        except ValueError as e:
+            # Ligne IPC plus longue que la limite du StreamReader (défaut
+            # 64 KiB) : readline() nettoie déjà son buffer interne avant de
+            # relever cette ValueError. Sans ce catch, une seule requête trop
+            # grosse tuait tout le worker (et donc toutes les requêtes en
+            # cours/à venir pour ce plugin), pas seulement celle-là.
+            logger.warning("ipc line too long, skipped", error=str(e))
+            continue
 
         if not line:
             break

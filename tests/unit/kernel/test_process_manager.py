@@ -271,20 +271,58 @@ async def test_stderr_pump_dispatches_by_level_and_survives_bad_line(manager):
 
 def test_worker_stderr_format_stays_compatible_with_level_regex():
     """
-    _STDERR_LEVEL_RE parse le format de logging.basicConfig de worker.py pour
-    router chaque ligne stderr vers le bon niveau. Si ce format change un
-    jour, ce test doit casser bruyamment plutôt que de laisser tout le
-    sandbox logging retomber silencieusement sur le niveau par défaut.
+    _STDERR_LEVEL_RE parse la sortie du _TextFormatter utilisé par worker.py
+    (xcore/kernel/observability/logging.py, même formateur que le process
+    principal) pour router chaque ligne stderr vers le bon niveau. Rend un
+    vrai LogRecord à travers le vrai formateur plutôt que de comparer des
+    chaînes, pour attraper toute dérive future de leur formatage respectif.
     """
-    import inspect
+    import logging
 
+    from xcore.kernel.observability.logging import _TextFormatter
+
+    formatter = _TextFormatter()
+    for level_name, level_no in (
+        ("DEBUG", logging.DEBUG),
+        ("WARNING", logging.WARNING),
+        ("ERROR", logging.ERROR),
+    ):
+        record = logging.LogRecord(
+            name="xcore.worker",
+            level=level_no,
+            pathname=__file__,
+            lineno=1,
+            msg="test message",
+            args=(),
+            exc_info=None,
+        )
+        rendered = formatter.format(record)
+        match = _STDERR_LEVEL_RE.search(rendered)
+        assert match, f"level regex didn't match rendered line: {rendered!r}"
+        assert match.group(1) == level_name
+
+
+def test_worker_formatter_renders_structured_fields():
+    """
+    worker.py doit utiliser _TextFormatter (pas un format="..." brut) pour
+    que les champs structurés (logger.info(msg, plugin=..., error=...))
+    apparaissent dans stderr — sinon ils sont attachés via extra={"xcore_ctx"}
+    et un Formatter texte simple les ignore silencieusement.
+    """
     from xcore.kernel.sandbox import worker
 
-    source = inspect.getsource(worker)
-    assert "[%(levelname)s]" in source, (
-        "worker.py logging format changed — update "
-        "process_manager._STDERR_LEVEL_RE (or restore the bracketed "
-        "levelname) to keep stderr level dispatch working"
+    assert isinstance(worker._worker_handler.formatter, type(worker._TextFormatter()))
+
+    record = worker.logging.LogRecord(
+        name="xcore.worker",
+        level=worker.logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="sandbox filesystem violation",
+        args=(),
+        exc_info=None,
     )
-    rendered = "2026-01-01 00:00:00 [WARNING] worker: test"
-    assert _STDERR_LEVEL_RE.search(rendered)
+    record.xcore_ctx = {"plugin": "test_plugin", "error": "boom"}
+    rendered = worker._worker_handler.formatter.format(record)
+    assert "plugin=test_plugin" in rendered
+    assert "error=boom" in rendered

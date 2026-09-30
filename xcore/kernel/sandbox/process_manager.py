@@ -25,10 +25,12 @@ from .isolation import DiskQuotaExceeded, DiskWatcher
 
 logger = get_logger("xcore.sandbox.process_manager")
 
-# Le worker sandbox formate ses lignes stderr via logging.basicConfig avec
-# "%(levelname)s" entre crochets (voir worker.py) — on s'en sert pour relayer
-# chaque ligne au bon niveau plutôt que de tout logger en warning.
-_STDERR_LEVEL_RE = re.compile(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]")
+# Le worker sandbox formate ses lignes stderr via _TextFormatter (même
+# formateur que le process principal, xcore/kernel/observability/logging.py),
+# qui aligne le levelname sur 8 caractères -> espaces possibles avant le "]"
+# (ex: "[INFO    ]"). On s'en sert pour relayer chaque ligne au bon niveau
+# plutôt que de tout logger en warning.
+_STDERR_LEVEL_RE = re.compile(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s*\]")
 _STDERR_LEVEL_METHODS = {
     "DEBUG": "debug",
     "INFO": "info",
