@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -23,6 +24,18 @@ from .ipc import IPCChannel, IPCProcessDead, IPCTimeoutError
 from .isolation import DiskQuotaExceeded, DiskWatcher
 
 logger = get_logger("xcore.sandbox.process_manager")
+
+# Le worker sandbox formate ses lignes stderr via logging.basicConfig avec
+# "%(levelname)s" entre crochets (voir worker.py) — on s'en sert pour relayer
+# chaque ligne au bon niveau plutôt que de tout logger en warning.
+_STDERR_LEVEL_RE = re.compile(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]")
+_STDERR_LEVEL_METHODS = {
+    "DEBUG": "debug",
+    "INFO": "info",
+    "WARNING": "warning",
+    "ERROR": "error",
+    "CRITICAL": "critical",
+}
 
 
 class ProcessState(Enum):
@@ -212,16 +225,49 @@ class SandboxProcessManager:
         if not self._process or not self._process.stderr:
             return
         stream = self._process.stderr
-        with contextlib.suppress(Exception):
-            while True:
+        while True:
+            try:
                 line = await stream.readline()
-                if not line:
-                    return
+            except ValueError as e:
+                # Ligne plus longue que la limite du StreamReader (défaut 64 KiB) :
+                # readline() nettoie déjà le buffer interne avant de relever cette
+                # ValueError — sans ce catch dédié, le blanket suppress() d'avant
+                # tuait la tâche entière pour le reste de la vie du process.
+                logger.warning(
+                    "subprocess stderr line too long, skipped",
+                    plugin=self.manifest.name,
+                    error=str(e),
+                )
+                continue
+            except Exception as e:
+                logger.error(
+                    "subprocess stderr pump stopped unexpectedly",
+                    plugin=self.manifest.name,
+                    error=str(e),
+                )
+                return
+            if not line:
+                return
+            try:
                 text = line.decode("utf-8", "replace").rstrip()
-                if text:
-                    logger.warning(
-                        "subprocess stderr", plugin=self.manifest.name, line=text
-                    )
+                if not text:
+                    continue
+                # Ligne sans bracket [LEVEL] reconnu (traceback brut, print, ou
+                # "FATAL: ..." émis directement sur stderr par worker.py) : par
+                # défaut en error, comme le faisait l'ancien lecteur au crash —
+                # une ligne non structurée est plus probablement un problème
+                # qu'un warning bénin.
+                match = _STDERR_LEVEL_RE.search(text)
+                method_name = _STDERR_LEVEL_METHODS.get(
+                    match.group(1) if match else "", "error"
+                )
+                getattr(logger, method_name)(
+                    "subprocess stderr", plugin=self.manifest.name, line=text
+                )
+            except Exception:
+                # Un échec du côté décodage/log (jamais vu en pratique) ne doit
+                # pas arrêter le drainage des lignes suivantes.
+                continue
 
     async def _health_loop(self, interval: float, timeout: float) -> None:
         await asyncio.sleep(interval)
