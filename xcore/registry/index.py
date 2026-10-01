@@ -135,6 +135,12 @@ class PluginRegistry:
             for name, meta in self._exported_services.items()
         ]
 
+    def is_core_service(self, service_name: str) -> bool:
+        """Vrai si `service_name` est un service noyau (enregistré par le kernel
+        via register_core_service) et non un service exporté par un plugin."""
+        existing = self._exported_services.get(service_name)
+        return existing is not None and existing.get("plugin") == "kernel"
+
     def is_registered_as(self, service_name: str, obj: Any) -> bool:
         """Vrai si `service_name` est déjà exporté et pointe vers CE MÊME objet
         (identité, pas égalité) — utile pour distinguer une simple ré-injection

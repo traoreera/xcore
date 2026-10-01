@@ -420,7 +420,7 @@ class Plugin(BasePlugin):
         await manager.load()
         real_scheduler.add_job.assert_called_once()
         await manager.unload()
-        real_scheduler.remove_job.assert_called_once_with("nightly")
+        real_scheduler.remove_job.assert_called_once_with("test_plugin:nightly")
 
     @pytest.mark.asyncio
     async def test_unload_removes_health_check(self, mock_manifest):

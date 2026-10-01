@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.5] - 2026-10-01
+
+### Fixed
+- **After boot, the scheduler's forced cleanup silently stopped working — and so did tenant isolation for `get_service()`**: `PluginContext.get_service()` consulted the `PluginRegistry` first. During `load_all()` the registry is still empty of core services, so it fell back to the plugin's own `ctx.services` — where the kernel had put the plugin's `_ScopedScheduler` tracker proxy (and the tenant-aware `db`/`cache` wrappers when tenancy is on). But once `supervisor.boot()` finished and ran `register_core_service()`, the registry started answering with the *raw* core objects. Any plugin loaded or reloaded after boot that did `self.get_service("scheduler").add_job(...)` therefore bypassed the tracker: the job stayed in `_JOB_REGISTRY` and APScheduler after unload, kept firing against a dead plugin, and pinned the unloaded instance, its module and its state in memory forever (verified: instance still alive after `gc.collect()`). The same bypass handed out the raw `db`/`cache` instead of `TenantAwareDB`/`TenantAwareCache`, so a plugin reloaded after boot escaped tenant isolation.
+  `get_service()` now serves **kernel** services from the plugin's own context (new `PluginRegistry.is_core_service()` tells kernel services from plugin exports) and keeps resolving plugin-exported services — with their `public`/`private` scoping — through the registry.
+- **Scheduler job ids collided across plugins**: `_JOB_REGISTRY` and APScheduler are global and keyed by the bare job id (`fn.__name__` by default), so two plugins that both register a `cleanup` job overwrote each other, and unloading one removed the other's job. `_ScopedScheduler` now namespaces ids as `<plugin>:<job_id>` for `add_job`, `cron` and `interval`; plugins keep using their own unprefixed ids (`remove_job`/`pause_job`/`resume_job` translate). Visible side effect: job ids shown by `scheduler.jobs()` and in the Redis job store are now prefixed with the plugin name.
+
+### Added
+- `PluginRegistry.is_core_service(name)`.
+- `tests/unit/kernel/test_plugin_gc_scheduler.py`: job released and instance garbage-collectable after unload *after boot*, no job accumulation across reloads, no collision between plugins, `interval` decorator, tenant wrapping preserved by `get_service()` after boot.
+
 ## [2.6.4] - 2026-10-01
 
 ### Fixed

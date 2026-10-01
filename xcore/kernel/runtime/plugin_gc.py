@@ -33,11 +33,25 @@ logger = get_logger("xcore.runtime.plugin_gc")
 
 
 class _ScopedScheduler:
-    """Proxy autour de SchedulerService : mémorise les job_id créés par CE plugin."""
+    """
+    Proxy autour de SchedulerService : mémorise les job_id créés par CE plugin.
 
-    def __init__(self, real: Any) -> None:
+    Les job_id sont préfixés par le nom du plugin (`<plugin>:<job_id>`) : le
+    registre de jobs du scheduler est global, donc deux plugins avec un job
+    `cleanup` s'écrasaient mutuellement — et le unload de l'un supprimait le
+    job de l'autre. Le plugin continue de manipuler ses ids non préfixés
+    (remove_job/pause_job/resume_job traduisent).
+    """
+
+    def __init__(self, real: Any, plugin_name: str | None = None) -> None:
         self._real = real
+        self._prefix = f"{plugin_name}:" if plugin_name else ""
         self._job_ids: set[str] = set()
+
+    def _scoped_id(self, job_id: str) -> str:
+        if not self._prefix or job_id.startswith(self._prefix):
+            return job_id
+        return f"{self._prefix}{job_id}"
 
     def add_job(
         self,
@@ -46,23 +60,35 @@ class _ScopedScheduler:
         job_id: str | None = None,
         **kwargs: Any,
     ) -> Any:
-        effective_id = job_id or getattr(func, "__name__", repr(func))
+        effective_id = self._scoped_id(job_id or getattr(func, "__name__", repr(func)))
         self._job_ids.add(effective_id)
-        return self._real.add_job(func, trigger=trigger, job_id=job_id, **kwargs)
+        return self._real.add_job(func, trigger=trigger, job_id=effective_id, **kwargs)
 
     def cron(self, expression: str, job_id: str | None = None) -> Callable:
         def decorator(fn: Callable) -> Callable:
-            self._job_ids.add(job_id or fn.__name__)
-            return self._real.cron(expression, job_id=job_id)(fn)
+            effective_id = self._scoped_id(job_id or fn.__name__)
+            self._job_ids.add(effective_id)
+            return self._real.cron(expression, job_id=effective_id)(fn)
 
         return decorator
 
     def interval(self, **kwargs: Any) -> Callable:
         def decorator(fn: Callable) -> Callable:
-            self._job_ids.add(fn.__name__)
-            return self._real.interval(**kwargs)(fn)
+            self.add_job(fn, "interval", **kwargs)
+            return fn
 
         return decorator
+
+    def remove_job(self, job_id: str) -> None:
+        scoped = self._scoped_id(job_id)
+        self._job_ids.discard(scoped)
+        self._real.remove_job(scoped)
+
+    def pause_job(self, job_id: str) -> None:
+        self._real.pause_job(self._scoped_id(job_id))
+
+    def resume_job(self, job_id: str) -> None:
+        self._real.resume_job(self._scoped_id(job_id))
 
     def cleanup(self, plugin_name: str) -> None:
         for job_id in self._job_ids:
@@ -223,7 +249,7 @@ class PluginResourceTracker:
     def wrap_scheduler(self, real: Any) -> Any:
         if real is None:
             return real
-        proxy = _ScopedScheduler(real)
+        proxy = _ScopedScheduler(real, self._plugin_name)
         self._scoped.append(proxy)
         return proxy
 

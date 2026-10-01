@@ -71,8 +71,18 @@ class PluginContext:
         Accès sécurisé à un service avec vérification de scoping via le registry
         si disponible, sinon via le container partagé.
         """
-        # Priorité au registry pour le respect des scopes (public/private/protected)
         if self.registry:
+            # Service noyau (db, cache, scheduler…) : on sert la version injectée
+            # dans CE contexte — proxy de ramasse-miette du plugin, wrappers
+            # tenant-aware — et non l'objet brut du registre. Après le boot, le
+            # registre contient les services noyau bruts : passer par lui
+            # contournait le suivi des jobs au unload et l'isolation tenant.
+            if self.registry.is_core_service(name) is True:
+                svc = self.services.get(name)
+                if svc is not None:
+                    return svc
+
+            # Priorité au registry pour le respect des scopes (public/private/protected)
             try:
                 return self.registry.get_service(name, requester=self.name)
             except (KeyError, PermissionError) as e:

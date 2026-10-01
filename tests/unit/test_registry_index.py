@@ -156,3 +156,15 @@ class TestPluginRegistry:
         assert not reg.has("plugin_x")
         with pytest.raises(KeyError):
             reg.get_service("x_svc")
+
+
+def test_is_core_service_distinguishes_kernel_from_plugin_exports():
+    from xcore.registry.index import PluginRegistry
+
+    reg = PluginRegistry()
+    reg.register_core_service("scheduler", object())
+    reg.register_service("shop", "cart", object())
+
+    assert reg.is_core_service("scheduler") is True
+    assert reg.is_core_service("cart") is False
+    assert reg.is_core_service("missing") is False
