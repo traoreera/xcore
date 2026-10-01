@@ -10,11 +10,14 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import gc
 import importlib.util
 import inspect
+import itertools
 import sys
 import time
 import types
+import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +31,83 @@ from .plugin_gc import PluginResourceTracker, _ScopedScheduler
 from .state_machine import PluginState, StateMachine
 
 logger = get_logger("xcore.runtime.lifecycle")
+
+# Délai avant la collecte qui suit un unload/reload : laisse les tâches annulées,
+# les callbacks et les réponses en vol se terminer, et regroupe plusieurs unloads
+# rapprochés en UNE seule collecte.
+_GC_DELAY_S = 1.0
+
+
+class _ReleaseWatcher:
+    """
+    Contrôle de libération des plugins déchargés.
+
+    Une instance de plugin déchargée vit dans des cycles de références (classe,
+    module, contexte, tâches) : le comptage de références ne la libère jamais, et
+    le GC automatique de Python ne passe en génération ancienne qu'après
+    beaucoup d'allocations — mesuré : un cycle mort promu en vieille génération
+    n'était pas libéré après 11,5 M d'allocations sur un tas de 3 M d'objets.
+    Après un unload/reload, on force donc UNE collecte (différée et regroupée),
+    puis on vérifie via un weakref que l'instance a bien disparu — sinon quelque
+    chose la référence encore (tâche brute, callback enregistré en dehors du
+    ctx…) et on le signale, avec le type de ses référents.
+    """
+
+    def __init__(self) -> None:
+        self._pending: list[tuple[weakref.ref, str]] = []
+        self._handle: asyncio.TimerHandle | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def watch(self, instance: Any, plugin: str, delay: float) -> None:
+        try:
+            ref = weakref.ref(instance)
+        except TypeError:  # classe avec __slots__ sans __weakref__
+            return
+        self._pending.append((ref, plugin))
+        loop = asyncio.get_running_loop()
+        if self._handle is not None and self._loop is loop:
+            return  # une collecte est déjà programmée : on s'y greffe
+        self._loop = loop
+        self._handle = loop.call_later(delay, self._collect)
+
+    def _collect(self) -> None:
+        self._handle = None
+        pending, self._pending = self._pending, []
+        started = time.perf_counter()
+        collected = gc.collect()
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        leaked = [(ref, plugin) for ref, plugin in pending if ref() is not None]
+        logger.debug(
+            "plugin garbage collected",
+            plugins=sorted({plugin for _, plugin in pending}),
+            unreachable_objects=collected,
+            duration_ms=duration_ms,
+        )
+        for ref, plugin in leaked:
+            instance = ref()
+            if instance is None:
+                continue
+            referrers = sorted(
+                {
+                    type(r).__name__
+                    for r in gc.get_referrers(instance)
+                    if not isinstance(r, types.FrameType)
+                }
+            )[:8]
+            logger.warning(
+                "plugin instance still referenced after unload",
+                plugin=plugin,
+                referrers=referrers,
+                hint="a task, callback or service registered outside ctx still holds it",
+            )
+            del instance
+
+
+_release_watcher = _ReleaseWatcher()
+
+# Identifiants d'instances « poolées » (plugins Ephemeral) : chacune reçoit son
+# propre espace de noms de modules.
+_POOLED_INSTANCE_IDS = itertools.count(1)
 
 
 class LoadError(Exception):
@@ -50,9 +130,23 @@ class LifecycleManager:
         manifest,  # PluginManifest
         ctx: "KernelContext",
         caller=None,
+        *,
+        pooled: bool = False,
     ) -> None:
+        """
+        `pooled=True` : instance jetable d'un plugin Ephemeral (plusieurs
+        instances du même manifest coexistent). Elle reçoit son propre espace de
+        noms `sys.modules` et ne désinscrit pas le plugin du registre à son
+        unload — sinon décharger UNE instance cassait les imports paresseux des
+        instances sœurs encore actives et retirait du registre un plugin pourtant
+        toujours actif.
+        """
         self._ctx = ctx
         self.manifest = manifest
+        self._module_name = f"xcore_plugin_{manifest.name}"
+        if pooled:
+            self._module_name += f"__i{next(_POOLED_INSTANCE_IDS)}"
+        self._manages_registry = not pooled
         self._services = ctx.services.as_dict() if ctx.services else {}
         self._events = ctx.events
         self._hooks = ctx.hooks
@@ -155,7 +249,7 @@ class LifecycleManager:
         if not entry.exists():
             raise LoadError(f"Not found entry point: {entry}")
 
-        module_name = f"xcore_plugin_{self.manifest.name}"
+        module_name = self._module_name
         package_name = module_name
 
         # Crée un package namespace virtuel pour isoler le plugin
@@ -413,7 +507,7 @@ class LifecycleManager:
 
         await self._cancel_spawned_tasks()
 
-        if self._registry is not None:
+        if self._registry is not None and self._manages_registry:
             self._registry.unregister(self.manifest.name)
 
         # `unregister()` ne nettoie que le registre : les services que le plugin
@@ -432,7 +526,7 @@ class LifecycleManager:
         self.plugin_router = None
         self.plugin_middlewares = {}
 
-        module_name = f"xcore_plugin_{self.manifest.name}"
+        module_name = self._module_name
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
         sys.modules.pop(module_name, None)
@@ -440,8 +534,19 @@ class LifecycleManager:
         for mod_name in list(sys.modules.keys()):
             if mod_name.startswith(f"{module_name}."):
                 sys.modules.pop(mod_name, None)
-        self._instance = None
+        instance, self._instance = self._instance, None
         self._module = None
+        if instance is not None and self._should_watch_release():
+            _release_watcher.watch(instance, self.manifest.name, _GC_DELAY_S)
+        del instance
+
+    def _should_watch_release(self) -> bool:
+        # Les instances poolées (Ephemeral) sont jetées à chaque appel : le GC
+        # automatique les gère (jeunes cycles) et une collecte complète par appel
+        # coûterait bien plus qu'elle ne rapporte.
+        if not self._manages_registry:
+            return False
+        return getattr(self._ctx.config, "gc_after_unload", True) is not False
 
     # ── Router HTTP custom ────────────────────────────────────
 

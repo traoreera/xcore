@@ -109,6 +109,7 @@ class EphemeralHandler:
                 manifest=self._manifest,
                 ctx=self._ctx,
                 caller=self._caller,
+                pooled=True,
             )
             try:
                 await lm.load()
@@ -125,6 +126,11 @@ class EphemeralHandler:
     async def stop(self) -> None:
         """Arrête le warm pool et décharge toutes les instances."""
         await self._pool.shutdown()
+        # Les instances poolées ne touchent pas au registre : c'est ce handler
+        # (le plugin, pas une instance) qui s'en désinscrit à l'arrêt.
+        registry = getattr(self._ctx, "registry", None)
+        if registry is not None:
+            registry.unregister(self._manifest.name)
         logger.info("ephemeral plugin stopped", plugin=self._manifest.name)
 
     # ── Appel ─────────────────────────────────────────────────────────────────

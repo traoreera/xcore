@@ -20,7 +20,7 @@ Quickstart:
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -133,6 +133,10 @@ class Xcore:
         self._app: "FastAPI | None" = (
             None  # référence conservée pour remount après reload
         )
+        # Objets route réellement ajoutés à l'app par plugin — la seule façon
+        # fiable de les retirer, quelle que soit la façon dont la version de
+        # FastAPI installée stocke un router inclus (voir _mount_plugin_router).
+        self._plugin_routes: dict[str, list[Any]] = {}
 
         self._logger = get_logger("xcore")
 
@@ -281,13 +285,44 @@ class Xcore:
         self._booted = False
         self._logger.info("xcore stopped")
 
+    def _mount_plugin_router(
+        self, app, plugin_name: str, plugin_router, prefix: str, tags: list[str]
+    ) -> str:
+        """
+        Monte le router d'un plugin sous `<prefix>/<plugin_name>` et mémorise les
+        objets route que `include_router()` a ajoutés à l'app.
+
+        Les retrouver par leur `path` ne marche plus : depuis FastAPI 0.14x,
+        `include_router()` stocke un `_IncludedRouter` sans attribut `path`. On
+        compare donc les routes de l'app avant/après l'inclusion.
+        """
+        from fastapi import APIRouter
+
+        plugin_prefix = f"{prefix}/{plugin_name}"
+        mounted: Any = plugin_router
+        if not getattr(plugin_router, "prefix", "").startswith("/plugins/"):
+            # Préfixe automatique si le plugin n'a pas déjà /plugins/...
+            mounted = APIRouter(prefix=plugin_prefix, tags=tags)
+            mounted.include_router(plugin_router)
+
+        before = {id(r) for r in app.router.routes}
+        app.include_router(mounted)
+        self._plugin_routes[plugin_name] = [
+            r for r in app.router.routes if id(r) not in before
+        ]
+        app.openapi_schema = None  # force regen du schéma OpenAPI
+        return getattr(mounted, "prefix", plugin_prefix)
+
     def _unmount_plugin_router(self, plugin_name: str) -> None:
         """
         Retire de l'app FastAPI toutes les routes montées pour ce plugin.
 
-        FastAPI n'offre pas de désinscription native d'un routeur — on filtre
-        donc `app.routes`, seule approche possible. Utilisé au unload/disable
-        et en première étape du remount lors d'un reload.
+        FastAPI n'offre pas de désinscription native d'un routeur. On retire les
+        objets route mémorisés au montage (`_mount_plugin_router`), plus — pour
+        les versions où les routes exposent un `path` — celles dont le chemin est
+        exactement le préfixe du plugin ou en dessous (`/plugins/shop` ne doit
+        pas emporter `/plugins/shop2`). Utilisé au unload/disable et en première
+        étape du remount lors d'un reload.
         """
         app = self._app
         if app is None:
@@ -295,12 +330,22 @@ class Xcore:
 
         prefix = self._config.app.plugin_prefix or "/plugins"
         plugin_prefix = f"{prefix}/{plugin_name}"
+        tracked = {id(r) for r in self._plugin_routes.pop(plugin_name, [])}
 
-        app.routes = [
-            r
-            for r in app.routes
-            if not getattr(r, "path", "").startswith(plugin_prefix)
-        ]
+        def belongs(route) -> bool:
+            if id(route) in tracked:
+                return True
+            path = getattr(route, "path", None)
+            return isinstance(path, str) and (
+                path == plugin_prefix or path.startswith(plugin_prefix + "/")
+            )
+
+        # `app.routes` est une propriété sans setter (Starlette) : on modifie la
+        # liste du router en place.
+        app.router.routes[:] = [r for r in app.router.routes if not belongs(r)]
+        mark_changed = getattr(app.router, "_mark_routes_changed", None)
+        if callable(mark_changed):  # invalide le cache de routes de FastAPI ≥ 0.14x
+            mark_changed()
         app.openapi_schema = None  # force regen du schéma OpenAPI
 
     def _remount_plugin_router(self, plugin_name: str) -> None:
@@ -312,7 +357,6 @@ class Xcore:
         self._unmount_plugin_router(plugin_name)
 
         prefix = self._config.app.plugin_prefix or "/plugins"
-        plugin_prefix = f"{prefix}/{plugin_name}"
 
         # Récupère le nouveau router depuis le handler rechargé
         try:
@@ -324,22 +368,20 @@ class Xcore:
         if plugin_router is None:
             return
 
-        from fastapi import APIRouter
-
-        wrapper = APIRouter(
-            prefix=plugin_prefix,
-            tags=(self._config.app.plugin_tags or []),
+        mounted_prefix = self._mount_plugin_router(
+            app,
+            plugin_name,
+            plugin_router,
+            prefix,
+            self._config.app.plugin_tags or [],
         )
-        wrapper.include_router(plugin_router)
-        app.include_router(wrapper)
-        app.openapi_schema = None  # force regen du schéma OpenAPI
 
         n_routes = len(getattr(plugin_router, "routes", []))
         self._logger.info(
             "plugin routes remounted after reload",
             plugin=plugin_name,
             routes=n_routes,
-            prefix=plugin_prefix,
+            prefix=mounted_prefix,
         )
 
     def _attach_router(
@@ -366,24 +408,19 @@ class Xcore:
         plugin_routers = self.plugins.collect_plugin_routers()
         for plugin_name, plugin_router in plugin_routers:
             # Monte sous /plugins/<plugin_name>/ + le prefix du router du plugin
-            prefixed_router = plugin_router
-            if not getattr(plugin_router, "prefix", "").startswith("/plugins/"):
-                # Préfixe automatique si le plugin n'a pas déjà /plugins/...
-                from fastapi import APIRouter
-
-                wrapper = APIRouter(
-                    prefix=f"{prefix}/{plugin_name}",
-                    tags=(self._config.app.plugin_tags or []) + (tags or []),
-                )
-                wrapper.include_router(plugin_router)
-                prefixed_router = wrapper
-            app.include_router(prefixed_router)
+            mounted_prefix = self._mount_plugin_router(
+                app,
+                plugin_name,
+                plugin_router,
+                prefix or self._config.app.plugin_prefix or "/plugins",
+                (self._config.app.plugin_tags or []) + (tags or []),
+            )
             n_routes = len(getattr(plugin_router, "routes", []))
             self._logger.info(
                 "plugin routes mounted",
                 plugin=plugin_name,
                 routes=n_routes,
-                prefix=wrapper.prefix,
+                prefix=mounted_prefix,
             )
 
         for middleware in self.plugins.collect_app_state():

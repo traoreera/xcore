@@ -273,6 +273,9 @@ class PluginConfig:
     strict_trusted: bool = False
     interval: int = 2  # watcher interval (secondes)
     entry_point: str = "src/main.py"
+    # Force une collecte du GC (différée, regroupée) après un unload/reload de
+    # plugin et signale les instances qui survivent — voir _ReleaseWatcher.
+    gc_after_unload: bool = True
     snapshot: dict[str, Any] = field(
         default_factory=lambda: {
             "extensions": [".log", ".pyc", ".html"],

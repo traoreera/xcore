@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 class TestPluginRegistry:
     def _make(self):
         from xcore.registry.index import PluginRegistry
+
         return PluginRegistry()
 
     def test_register_and_has(self):
@@ -71,7 +72,9 @@ class TestPluginRegistry:
 
     def test_get_service_private_denied(self):
         reg = self._make()
-        reg.register_service("owner_plugin", "private_svc", MagicMock(), scope="private")
+        reg.register_service(
+            "owner_plugin", "private_svc", MagicMock(), scope="private"
+        )
         with pytest.raises(PermissionError):
             reg.get_service("private_svc", requester="other_plugin")
 
@@ -135,7 +138,11 @@ class TestPluginRegistry:
         reg = self._make()
         handler = MagicMock()
         handler.manifest = None
-        reg.register("auth_plugin", handler, metadata={"description": "auth service", "author": "me"})
+        reg.register(
+            "auth_plugin",
+            handler,
+            metadata={"description": "auth service", "author": "me"},
+        )
         result = reg.search("auth")
         assert len(result) >= 1
 
@@ -168,3 +175,15 @@ def test_is_core_service_distinguishes_kernel_from_plugin_exports():
     assert reg.is_core_service("scheduler") is True
     assert reg.is_core_service("cart") is False
     assert reg.is_core_service("missing") is False
+
+
+def test_service_owner_reports_kernel_plugin_or_none():
+    from xcore.registry.index import PluginRegistry
+
+    reg = PluginRegistry()
+    reg.register_core_service("scheduler", object())
+    reg.register_service("shop", "cart", object())
+
+    assert reg.service_owner("scheduler") == "kernel"
+    assert reg.service_owner("cart") == "shop"
+    assert reg.service_owner("missing") is None

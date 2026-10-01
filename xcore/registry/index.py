@@ -135,6 +135,11 @@ class PluginRegistry:
             for name, meta in self._exported_services.items()
         ]
 
+    def service_owner(self, service_name: str) -> str | None:
+        """Nom du propriétaire d'un service exporté ("kernel" ou un plugin), ou None."""
+        existing = self._exported_services.get(service_name)
+        return None if existing is None else existing.get("plugin")
+
     def is_core_service(self, service_name: str) -> bool:
         """Vrai si `service_name` est un service noyau (enregistré par le kernel
         via register_core_service) et non un service exporté par un plugin."""
