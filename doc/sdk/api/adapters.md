@@ -17,6 +17,9 @@ from xcore.sdk import (
 )
 ```
 
+!!! note "SQLAlchemy is an optional dependency"
+    Since 2.7.0 `BaseAsyncRepository` and `BaseSyncRepository` need SQLAlchemy, which is no longer installed with a plain `pip install XCoreRuntime`. Install the extra that matches your database — `XCoreRuntime[postgres]`, `XCoreRuntime[sqlite]` or `XCoreRuntime[db]` (both). Without it, importing these two names raises an `ImportError` that tells you so; the rest of `xcore.sdk` works unchanged.
+
 ---
 
 ## BaseAsyncRepository
