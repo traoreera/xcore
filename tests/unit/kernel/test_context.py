@@ -63,3 +63,24 @@ class TestPluginContext:
     def test_config_default_empty(self):
         ctx = PluginContext(name="auth")
         assert ctx.config == {}
+
+
+    def test_get_service_core_service_served_from_plugin_context(self):
+        """Un service noyau vient du contexte du plugin (proxy/tenant), pas du registre brut."""
+        registry = MagicMock()
+        registry.is_core_service.return_value = True
+        registry.get_service.return_value = "raw_scheduler"
+        ctx = PluginContext(
+            name="auth", services={"scheduler": "scoped_scheduler"}, registry=registry
+        )
+
+        assert ctx.get_service("scheduler") == "scoped_scheduler"
+        registry.get_service.assert_not_called()
+
+    def test_get_service_plugin_export_still_resolved_by_registry(self):
+        registry = MagicMock()
+        registry.is_core_service.return_value = False
+        registry.get_service.return_value = "exported"
+        ctx = PluginContext(name="auth", services={"cart": "stale"}, registry=registry)
+
+        assert ctx.get_service("cart") == "exported"

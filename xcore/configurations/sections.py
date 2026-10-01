@@ -273,6 +273,12 @@ class PluginConfig:
     strict_trusted: bool = False
     interval: int = 2  # watcher interval (secondes)
     entry_point: str = "src/main.py"
+    # Force une collecte du GC (différée, regroupée) après un unload/reload de
+    # plugin et signale les instances qui survivent — voir _ReleaseWatcher.
+    gc_after_unload: bool = True
+    # Un plugin Trusted dont un pas synchrone (entre deux `await`) dépasse ce
+    # seuil en ms est signalé comme gelant le event loop (0 = désactivé).
+    loop_block_warn_ms: int = 250
     snapshot: dict[str, Any] = field(
         default_factory=lambda: {
             "extensions": [".log", ".pyc", ".html"],

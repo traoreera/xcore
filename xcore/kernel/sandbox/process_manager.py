@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -20,9 +21,23 @@ if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
 
 from .ipc import IPCChannel, IPCProcessDead, IPCTimeoutError
-from .isolation import DiskQuotaExceeded, DiskWatcher
+from .isolation import RECYCLE_EXIT_CODE, DiskQuotaExceeded, DiskWatcher
 
 logger = get_logger("xcore.sandbox.process_manager")
+
+# Le worker sandbox formate ses lignes stderr via _TextFormatter (même
+# formateur que le process principal, xcore/kernel/observability/logging.py),
+# qui aligne le levelname sur 8 caractères -> espaces possibles avant le "]"
+# (ex: "[INFO    ]"). On s'en sert pour relayer chaque ligne au bon niveau
+# plutôt que de tout logger en warning.
+_STDERR_LEVEL_RE = re.compile(r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s*\]")
+_STDERR_LEVEL_METHODS = {
+    "DEBUG": "debug",
+    "INFO": "info",
+    "WARNING": "warning",
+    "ERROR": "error",
+    "CRITICAL": "critical",
+}
 
 
 class ProcessState(Enum):
@@ -39,6 +54,16 @@ class SandboxConfig:
     max_restarts: int = 3
     restart_delay: float = 1.0
     startup_timeout: float = 5.0
+    # Budget CPU du worker PAR REQUÊTE (secondes) — 0 = illimité.
+    max_cpu_seconds: int = 10
+    # Plafond de CPU cumulé de la vie d'un worker (secondes), filet noyau
+    # infranchissable pour le plugin. Avant de l'atteindre le worker se recycle
+    # tout seul (RECYCLE_EXIT_CODE) — relance qui ne compte pas comme un plantage.
+    max_cpu_lifetime_seconds: int = 3600
+    # Si le subprocess a tourné au moins aussi longtemps avant de planter, la
+    # séquence de redémarrages repart de zéro : sans ça, un plugin qui plante une
+    # fois par semaine finissait FAILED au 3e plantage en 3 semaines.
+    restart_reset_after: float = 60.0
 
 
 class SandboxProcessManager:
@@ -54,6 +79,7 @@ class SandboxProcessManager:
         manifest,
         ctx: "PluginLoader",
         config: SandboxConfig | None = None,
+        log_level: str = "WARNING",
     ) -> None:
         self.manifest = manifest
         self.config = config or SandboxConfig()
@@ -64,6 +90,8 @@ class SandboxProcessManager:
         self._started_at: float | None = None
         self._watch_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
+        self._log_level = log_level
         data_dir = manifest.plugin_dir / "data"
         self._ctx = ctx
 
@@ -94,6 +122,9 @@ class SandboxProcessManager:
         self._restarts = 0
         self._watch_task = asyncio.create_task(
             self._watch_loop(), name=f"watch-{self.manifest.name}"
+        )
+        self._stderr_task = asyncio.create_task(
+            self._stderr_pump(), name=f"stderr-{self.manifest.name}"
         )
         hc = self.manifest.runtime.health_check
         if hc.enabled:
@@ -134,7 +165,9 @@ class SandboxProcessManager:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
             "_SANDBOX_MAX_MEM_MB": str(self.manifest.resources.max_memory_mb),
-            "_SANDBOX_MAX_CPU_SEC": "10",
+            "_SANDBOX_MAX_CPU_SEC": str(self.config.max_cpu_seconds),
+            "_SANDBOX_MAX_CPU_LIFETIME_SEC": str(self.config.max_cpu_lifetime_seconds),
+            "LOG_LEVEL": self._log_level,
         }
         env |= self.manifest.env
 
@@ -193,19 +226,69 @@ class SandboxProcessManager:
         code = await self._process.wait()
         if self._state == ProcessState.STOPPED:
             return
-        logger.warning("subprocess exited", plugin=self.manifest.name, exit_code=code)
-        if self._process.stderr:
-            with contextlib.suppress(Exception):
-                err = await asyncio.wait_for(
-                    self._process.stderr.read(2048), timeout=1.0
-                )
-                if err:
-                    logger.error(
-                        "subprocess stderr output",
-                        plugin=self.manifest.name,
-                        stderr=err.decode("utf-8", "replace").strip(),
-                    )
+        if code == RECYCLE_EXIT_CODE:
+            # Le worker a atteint son plafond de CPU cumulé et s'est arrêté de
+            # lui-même entre deux requêtes : relance normale, pas un plantage.
+            logger.info("subprocess recycled", plugin=self.manifest.name)
+            self._restarts = 0
+        else:
+            logger.warning(
+                "subprocess exited", plugin=self.manifest.name, exit_code=code
+            )
         await self._handle_crash()
+
+    async def _stderr_pump(self) -> None:
+        """
+        Draine stderr du subprocess en continu pendant toute sa durée de vie.
+        Sans ça, les logs WARNING+ du plugin (niveau lu depuis le pipe) restaient
+        bloqués dans le buffer OS et ne remontaient qu'au crash, en tronqué.
+        """
+        if not self._process or not self._process.stderr:
+            return
+        stream = self._process.stderr
+        while True:
+            try:
+                line = await stream.readline()
+            except ValueError as e:
+                # Ligne plus longue que la limite du StreamReader (défaut 64 KiB) :
+                # readline() nettoie déjà le buffer interne avant de relever cette
+                # ValueError — sans ce catch dédié, le blanket suppress() d'avant
+                # tuait la tâche entière pour le reste de la vie du process.
+                logger.warning(
+                    "subprocess stderr line too long, skipped",
+                    plugin=self.manifest.name,
+                    error=str(e),
+                )
+                continue
+            except Exception as e:
+                logger.error(
+                    "subprocess stderr pump stopped unexpectedly",
+                    plugin=self.manifest.name,
+                    error=str(e),
+                )
+                return
+            if not line:
+                return
+            try:
+                text = line.decode("utf-8", "replace").rstrip()
+                if not text:
+                    continue
+                # Ligne sans bracket [LEVEL] reconnu (traceback brut, print, ou
+                # "FATAL: ..." émis directement sur stderr par worker.py) : par
+                # défaut en error, comme le faisait l'ancien lecteur au crash —
+                # une ligne non structurée est plus probablement un problème
+                # qu'un warning bénin.
+                match = _STDERR_LEVEL_RE.search(text)
+                method_name = _STDERR_LEVEL_METHODS.get(
+                    match.group(1) if match else "", "error"
+                )
+                getattr(logger, method_name)(
+                    "subprocess stderr", plugin=self.manifest.name, line=text
+                )
+            except Exception:
+                # Un échec du côté décodage/log (jamais vu en pratique) ne doit
+                # pas arrêter le drainage des lignes suivantes.
+                continue
 
     async def _health_loop(self, interval: float, timeout: float) -> None:
         await asyncio.sleep(interval)
@@ -237,6 +320,11 @@ class SandboxProcessManager:
         ):
             return  # anti-réentrance
 
+        if (
+            self._started_at is not None
+            and time.monotonic() - self._started_at >= self.config.restart_reset_after
+        ):
+            self._restarts = 0
         self._state = ProcessState.RESTARTING
 
         while self._restarts < self.config.max_restarts:
@@ -251,12 +339,12 @@ class SandboxProcessManager:
             )
             await asyncio.sleep(delay)
 
-            for task in (self._watch_task, self._health_task):
+            for task in (self._watch_task, self._health_task, self._stderr_task):
                 if task and not task.done():
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await task
-            self._watch_task = self._health_task = None
+            self._watch_task = self._health_task = self._stderr_task = None
             await self._kill()
 
             try:
@@ -270,6 +358,9 @@ class SandboxProcessManager:
             self._started_at = time.monotonic()
             self._watch_task = asyncio.create_task(
                 self._watch_loop(), name=f"watch-{self.manifest.name}"
+            )
+            self._stderr_task = asyncio.create_task(
+                self._stderr_pump(), name=f"stderr-{self.manifest.name}"
             )
             hc = self.manifest.runtime.health_check
             if hc.enabled:
@@ -293,7 +384,7 @@ class SandboxProcessManager:
 
     async def stop(self) -> None:
         self._state = ProcessState.STOPPED
-        for task in (self._watch_task, self._health_task):
+        for task in (self._watch_task, self._health_task, self._stderr_task):
             if task and not task.done():
                 task.cancel()
         if self._channel:

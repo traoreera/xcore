@@ -23,15 +23,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from xcore.kernel.observability import get_logger
+from xcore.kernel.observability.logging import _TextFormatter
+from xcore.kernel.sandbox.isolation import RECYCLE_EXIT_CODE
 
 # ContextVar par tâche asyncio — évite les race conditions entre coroutines
 # qui partageraient le même FilesystemGuard (requis pour la sécurité sandbox).
 _sandbox_in_guard: ContextVar[bool] = ContextVar("sandbox_in_guard", default=False)
 
+# _TextFormatter (le même que le process principal, xcore/kernel/observability/
+# logging.py) et non un simple format="..." : un basicConfig(format=...) plein
+# texte ignore les champs structurés passés en kwargs (logger.info(msg, plugin=...))
+# — ils sont attachés via extra={"xcore_ctx": ...} et seuls _TextFormatter/
+# _JsonFormatter savent les rendre. Sans ça, ces champs étaient silencieusement
+# perdus même une fois le niveau et le drainage stderr corrigés côté kernel.
+_worker_handler = logging.StreamHandler(sys.stderr)
+_worker_handler.setFormatter(_TextFormatter())
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "WARNING"),
-    format="%(asctime)s [%(levelname)s] worker: %(message)s",
-    stream=sys.stderr,
+    handlers=[_worker_handler],
 )
 logger = get_logger("xcore.worker")
 
@@ -56,17 +65,87 @@ def _apply_resource_limits() -> None:
             logger.debug("memory limit applied", max_mb=max_mb, resource="DATA+RSS")
 
         # ── CPU ───────────────────────────────────────────────────────────
+        # RLIMIT_CPU compte le temps CPU CUMULÉ du processus depuis son
+        # démarrage : posée une fois à 10 s, elle tuait (SIGXCPU — action par
+        # défaut : terminer) tout worker sain après 10 s de CPU au total sur sa
+        # vie, soit quelques minutes de requêtes ordinaires, puis le plugin
+        # finissait FAILED après `max_restarts`. Deux niveaux à la place :
+        #   - limite SOUPLE = budget PAR REQUÊTE, réarmée avant chaque appel à
+        #     « CPU déjà consommé + budget » (_arm_cpu_budget) ;
+        #   - limite DURE = plafond de CPU cumulé de la vie du worker (+ grace).
+        #     Une limite dure ne peut jamais être relevée sans privilège, donc
+        #     elle reste un filet côté noyau qu'un plugin ne peut pas contourner.
+        #     Avant de l'atteindre le worker se recycle proprement
+        #     (_needs_recycle → RECYCLE_EXIT_CODE) au lieu d'être tué.
+        global _cpu_budget_s, _cpu_lifetime_s
         max_cpu_s = int(os.environ.get("_SANDBOX_MAX_CPU_SEC", "0"))
         if max_cpu_s > 0:
-            # soft = envoi SIGXCPU quand la limite est atteinte (attrapable)
-            # hard = SIGKILL irrécupérable, fixé légèrement au-dessus
-            soft = max_cpu_s
-            hard = max_cpu_s + 5  # 5s de grâce pour un éventuel cleanup
-            resource.setrlimit(resource.RLIMIT_CPU, (soft, hard))
-            logger.debug("cpu limit applied", soft_s=soft, hard_s=hard)
+            _cpu_budget_s = max_cpu_s
+            _cpu_lifetime_s = int(os.environ.get("_SANDBOX_MAX_CPU_LIFETIME_SEC", "0"))
+            hard = _cpu_lifetime_s + 5 if _cpu_lifetime_s > 0 else None
+            _arm_cpu_budget(hard)
+            logger.debug(
+                "cpu limits applied",
+                per_request_s=_cpu_budget_s,
+                lifetime_s=_cpu_lifetime_s,
+            )
 
     except Exception as e:
         logger.warning("failed to apply resource limits", error=str(e))
+
+
+# Budget CPU par requête et plafond cumulé du worker (secondes), 0 = illimité —
+# voir _apply_resource_limits.
+_cpu_budget_s: int = 0
+_cpu_lifetime_s: int = 0
+
+# Importé ici, AVANT l'installation des gardes d'import : `resource` est interdit
+# au code du plugin, mais le worker en a besoin à chaque requête.
+try:
+    import resource as _resource
+except ImportError:  # Windows
+    _resource = None
+
+
+def _cpu_consumed() -> float:
+    usage = _resource.getrusage(_resource.RUSAGE_SELF)
+    return usage.ru_utime + usage.ru_stime
+
+
+def _arm_cpu_budget(hard: int | None = None) -> None:
+    """
+    Réarme la limite SOUPLE de RLIMIT_CPU à « CPU déjà consommé + budget ».
+
+    `hard` n'est passé qu'au premier appel (il fixe la limite dure, irréversible) ;
+    ensuite on garde celle déjà en place. Au dépassement de la limite souple le
+    noyau envoie SIGXCPU ; sans handler (`signal` est interdit au plugin) c'est la
+    fin du processus, que SandboxProcessManager détecte et relance.
+    """
+    if not _cpu_budget_s or _resource is None:
+        return
+    try:
+        soft = int(_cpu_consumed()) + _cpu_budget_s + 1  # +1 : granularité 1 s
+        if hard is None:
+            _, hard = _resource.getrlimit(_resource.RLIMIT_CPU)
+        if hard != _resource.RLIM_INFINITY:
+            soft = min(soft, hard)
+        _resource.setrlimit(_resource.RLIMIT_CPU, (soft, hard))
+    except Exception as e:
+        logger.debug("cannot re-arm cpu budget", error=str(e))
+
+
+def _needs_recycle() -> bool:
+    """
+    Vrai quand la prochaine requête ne pourrait plus avoir son budget complet
+    sous le plafond cumulé : mieux vaut se recycler (proprement, entre deux
+    requêtes) que d'être tué en plein milieu de la suivante.
+    """
+    if not _cpu_lifetime_s or not _cpu_budget_s or _resource is None:
+        return False
+    try:
+        return _cpu_consumed() + _cpu_budget_s + 1 >= _cpu_lifetime_s
+    except Exception:
+        return False
 
 
 builtins_open = _builtins_module.open
@@ -292,10 +371,15 @@ class FilesystemGuard:
 
                 if sig is not None:
                     try:
-                        bound = sig.bind_partial(*args, **kwargs).arguments
+                        bound = sig.bind_partial(*args, **kwargs)
+                        # apply_defaults() : sans ça, un appel qui compte sur
+                        # une valeur par défaut (ex: os.listdir() -> cwd) a un
+                        # bound.arguments vide et passait le guard sans aucune
+                        # vérification.
+                        bound.apply_defaults()
                         paths = [
                             v
-                            for k, v in bound.items()
+                            for k, v in bound.arguments.items()
                             if k in pnames and isinstance(v, (str, os.PathLike))
                         ]
                     except Exception:
@@ -345,6 +429,8 @@ class FilesystemGuard:
             "stat",
             "lstat",
             "chmod",
+            "symlink",
+            "link",
         ]:
             if hasattr(os, op):
                 setattr(os, op, _guarded_op(getattr(os, op), f"os.{op}"))
@@ -363,6 +449,8 @@ class FilesystemGuard:
             "exists",
             "is_file",
             "is_dir",
+            "symlink_to",
+            "hardlink_to",
         ]:
             if hasattr(_Path, op):
                 setattr(_Path, op, _guarded_op(getattr(_Path, op), f"Path.{op}"))
@@ -703,7 +791,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
         if not manifest_path.exists():
             continue
         try:
-            return _extracted_from__load_manifest_20(fname, manifest_path, manifest)
+            return _parse_manifest_file(fname, manifest_path, manifest)
         except Exception as e:
             logger.warning("cannot read manifest file", file=fname, error=str(e))
 
@@ -711,7 +799,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
     return manifest
 
 
-def _extracted_from__load_manifest_20(fname, manifest_path, manifest: _PluginManifest):
+def _parse_manifest_file(fname, manifest_path, manifest: _PluginManifest):
     if fname.endswith(".yaml"):
         import yaml
 
@@ -775,7 +863,9 @@ def _trace_id_from_carrier(carrier: dict | None) -> str | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _run(plugin_dir: Path) -> None:
+async def _run(plugin_dir: Path) -> bool:
+    """Boucle du worker. Retourne True si le worker demande à être recyclé."""
+    recycle = False
     # 1. Lecture du manifeste
     manifest = _load_manifest(plugin_dir)
 
@@ -821,6 +911,14 @@ async def _run(plugin_dir: Path) -> None:
             line = await reader.readline()
         except (asyncio.IncompleteReadError, EOFError):
             break
+        except ValueError as e:
+            # Ligne IPC plus longue que la limite du StreamReader (défaut
+            # 64 KiB) : readline() nettoie déjà son buffer interne avant de
+            # relever cette ValueError. Sans ce catch, une seule requête trop
+            # grosse tuait tout le worker (et donc toutes les requêtes en
+            # cours/à venir pour ce plugin), pas seulement celle-là.
+            logger.warning("ipc line too long, skipped", error=str(e))
+            continue
 
         if not line:
             break
@@ -845,6 +943,7 @@ async def _run(plugin_dir: Path) -> None:
                 _send(transport, response)
                 break
             else:
+                _arm_cpu_budget()
                 result = await plugin.handle(action, payload)
                 response = (
                     result
@@ -871,6 +970,15 @@ async def _run(plugin_dir: Path) -> None:
 
         _send(transport, response)
 
+        if _needs_recycle():
+            logger.info(
+                "cpu ceiling nearly reached, recycling worker",
+                consumed_s=round(_cpu_consumed(), 1),
+                lifetime_s=_cpu_lifetime_s,
+            )
+            recycle = True
+            break
+
     if hasattr(plugin, "on_unload"):
         try:
             await plugin.on_unload()
@@ -881,6 +989,7 @@ async def _run(plugin_dir: Path) -> None:
         plugin._import_hook.uninstall()
 
     logger.info("sandbox worker stopped")
+    return recycle
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -898,7 +1007,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        asyncio.run(_run(plugin_dir))
+        if asyncio.run(_run(plugin_dir)):
+            sys.exit(RECYCLE_EXIT_CODE)
     except KeyboardInterrupt:
         pass
     except Exception as e:

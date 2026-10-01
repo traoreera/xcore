@@ -9,8 +9,13 @@ variables, and the plugin configuration.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine
+
+from ..observability import get_logger
+
+logger = get_logger("xcore.api.context")
 
 if TYPE_CHECKING:
     from ...registry import PluginRegistry
@@ -62,8 +67,26 @@ class PluginContext:
         qu'on_unload/on_stop l'ait fait ou non.
         """
         task = asyncio.create_task(coro, name=name)
-        if self._task_sink is not None:
-            self._task_sink.append(task)
+        sink = self._task_sink
+        if sink is not None:
+            sink.append(task)
+            plugin = self.name
+
+            def _on_done(t: asyncio.Task) -> None:
+                # Une tâche terminée n'a plus rien à annuler : sans ça la liste
+                # grossissait pendant toute la vie du plugin, et chaque tâche
+                # finie restait référencée (avec son résultat / son exception).
+                with contextlib.suppress(ValueError):
+                    sink.remove(t)
+                if not t.cancelled() and t.exception() is not None:
+                    logger.error(
+                        "spawned task failed",
+                        plugin=plugin,
+                        task=t.get_name(),
+                        error=str(t.exception()),
+                    )
+
+            task.add_done_callback(_on_done)
         return task
 
     def get_service(self, name: str) -> Any:
@@ -71,8 +94,18 @@ class PluginContext:
         Accès sécurisé à un service avec vérification de scoping via le registry
         si disponible, sinon via le container partagé.
         """
-        # Priorité au registry pour le respect des scopes (public/private/protected)
         if self.registry:
+            # Service noyau (db, cache, scheduler…) : on sert la version injectée
+            # dans CE contexte — proxy de ramasse-miette du plugin, wrappers
+            # tenant-aware — et non l'objet brut du registre. Après le boot, le
+            # registre contient les services noyau bruts : passer par lui
+            # contournait le suivi des jobs au unload et l'isolation tenant.
+            if self.registry.is_core_service(name) is True:
+                svc = self.services.get(name)
+                if svc is not None:
+                    return svc
+
+            # Priorité au registry pour le respect des scopes (public/private/protected)
             try:
                 return self.registry.get_service(name, requester=self.name)
             except (KeyError, PermissionError) as e:

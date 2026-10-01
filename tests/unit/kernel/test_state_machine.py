@@ -124,12 +124,30 @@ class TestStateMachine:
         sm.transition("error")
         assert sm.state == PluginState.FAILED
 
-        # From FAILED, only reset is valid
+        # From FAILED : "load" reste invalide, mais unload/reload/reset sont possibles
         with pytest.raises(InvalidTransition):
             sm.transition("load")
 
         sm.transition("reset")
         assert sm.state == PluginState.UNLOADED
+
+    def test_failed_can_be_unloaded(self, sm):
+        """Un plugin FAILED doit pouvoir être déchargé (donc nettoyé)."""
+        sm.transition("load")
+        sm.transition("error")
+        sm.transition("unload")
+        assert sm.state == PluginState.UNLOADING
+        sm.transition("ok")
+        assert sm.state == PluginState.UNLOADED
+
+    def test_failed_can_be_reloaded(self, sm):
+        """Un plugin FAILED doit pouvoir être rechargé (nouvel essai)."""
+        sm.transition("load")
+        sm.transition("error")
+        sm.transition("reload")
+        assert sm.state == PluginState.RELOADING
+        sm.transition("ok")
+        assert sm.state == PluginState.READY
 
     def test_callback_on_change(self):
         """Test on_change callback."""

@@ -10,11 +10,14 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import gc
 import importlib.util
 import inspect
+import itertools
 import sys
 import time
 import types
+import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,10 +27,94 @@ if TYPE_CHECKING:
 from ..api.context import PluginContext
 from ..api.contract import BasePlugin
 from ..observability import get_logger
-from .plugin_gc import PluginResourceTracker
+from ..observability.blocking import watch_blocking
+from .plugin_gc import PluginResourceTracker, _ScopedScheduler
 from .state_machine import PluginState, StateMachine
 
 logger = get_logger("xcore.runtime.lifecycle")
+
+# Seuil (ms) au-delà duquel un pas synchrone d'un plugin Trusted — du code qui
+# tourne entre deux `await` — est signalé comme gelant le event loop (0 = off).
+_DEFAULT_LOOP_BLOCK_WARN_MS = 250
+# Au plus un avertissement de gel par plugin sur cette fenêtre (secondes).
+_LOOP_BLOCK_LOG_INTERVAL_S = 10.0
+
+# Délai avant la collecte qui suit un unload/reload : laisse les tâches annulées,
+# les callbacks et les réponses en vol se terminer, et regroupe plusieurs unloads
+# rapprochés en UNE seule collecte.
+_GC_DELAY_S = 1.0
+
+
+class _ReleaseWatcher:
+    """
+    Contrôle de libération des plugins déchargés.
+
+    Une instance de plugin déchargée vit dans des cycles de références (classe,
+    module, contexte, tâches) : le comptage de références ne la libère jamais, et
+    le GC automatique de Python ne passe en génération ancienne qu'après
+    beaucoup d'allocations — mesuré : un cycle mort promu en vieille génération
+    n'était pas libéré après 11,5 M d'allocations sur un tas de 3 M d'objets.
+    Après un unload/reload, on force donc UNE collecte (différée et regroupée),
+    puis on vérifie via un weakref que l'instance a bien disparu — sinon quelque
+    chose la référence encore (tâche brute, callback enregistré en dehors du
+    ctx…) et on le signale, avec le type de ses référents.
+    """
+
+    def __init__(self) -> None:
+        self._pending: list[tuple[weakref.ref, str]] = []
+        self._handle: asyncio.TimerHandle | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def watch(self, instance: Any, plugin: str, delay: float) -> None:
+        try:
+            ref = weakref.ref(instance)
+        except TypeError:  # classe avec __slots__ sans __weakref__
+            return
+        self._pending.append((ref, plugin))
+        loop = asyncio.get_running_loop()
+        if self._handle is not None and self._loop is loop:
+            return  # une collecte est déjà programmée : on s'y greffe
+        self._loop = loop
+        self._handle = loop.call_later(delay, self._collect)
+
+    def _collect(self) -> None:
+        self._handle = None
+        pending, self._pending = self._pending, []
+        started = time.perf_counter()
+        collected = gc.collect()
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        leaked = [(ref, plugin) for ref, plugin in pending if ref() is not None]
+        logger.debug(
+            "plugin garbage collected",
+            plugins=sorted({plugin for _, plugin in pending}),
+            unreachable_objects=collected,
+            duration_ms=duration_ms,
+        )
+        for ref, plugin in leaked:
+            instance = ref()
+            if instance is None:
+                continue
+            referrers = sorted(
+                {
+                    type(r).__name__
+                    for r in gc.get_referrers(instance)
+                    if not isinstance(r, types.FrameType)
+                }
+            )[:8]
+            logger.warning(
+                "plugin instance still referenced after unload",
+                plugin=plugin,
+                referrers=referrers,
+                hint="a task, callback or service registered outside ctx still holds it",
+            )
+            del instance
+
+
+_release_watcher = _ReleaseWatcher()
+
+# Identifiants d'instances « poolées » (plugins Ephemeral) : chacune reçoit son
+# propre espace de noms de modules.
+_POOLED_INSTANCE_IDS = itertools.count(1)
 
 
 class LoadError(Exception):
@@ -41,14 +128,32 @@ class LifecycleManager:
 
     PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
 
+    # Délai accordé aux tâches annulées au unload pour exécuter leurs `finally`
+    # avant que le module du plugin soit retiré de sys.modules.
+    _TASK_CANCEL_TIMEOUT_S = 2.0
+
     def __init__(
         self,
         manifest,  # PluginManifest
         ctx: "KernelContext",
         caller=None,
+        *,
+        pooled: bool = False,
     ) -> None:
+        """
+        `pooled=True` : instance jetable d'un plugin Ephemeral (plusieurs
+        instances du même manifest coexistent). Elle reçoit son propre espace de
+        noms `sys.modules` et ne désinscrit pas le plugin du registre à son
+        unload — sinon décharger UNE instance cassait les imports paresseux des
+        instances sœurs encore actives et retirait du registre un plugin pourtant
+        toujours actif.
+        """
         self._ctx = ctx
         self.manifest = manifest
+        self._module_name = f"xcore_plugin_{manifest.name}"
+        if pooled:
+            self._module_name += f"__i{next(_POOLED_INSTANCE_IDS)}"
+        self._manages_registry = not pooled
         self._services = ctx.services.as_dict() if ctx.services else {}
         self._events = ctx.events
         self._hooks = ctx.hooks
@@ -71,6 +176,20 @@ class LifecycleManager:
         # unload, indépendamment de ce que fait on_unload/on_stop.
         self._resource_tracker: PluginResourceTracker | None = None
         self._spawned_tasks: list[asyncio.Task] = []
+
+        # Services injectés par le noyau dans ctx.services (après wrapping
+        # tenant/ramasse-miette), au moment du load : nom → objet exact reçu.
+        # Sert à distinguer, dans propagate_services(), ce que le plugin a
+        # *exporté* de ce qu'il a simplement reçu en injection — ces derniers
+        # ne doivent jamais être réécrits dans le container partagé.
+        self._injected_services: dict[str, Any] = {}
+        # Services que CE plugin a écrits dans le container partagé (nom → objet),
+        # retirés au unload pour ne pas laisser un plugin mort appelable.
+        self._exported_to_container: dict[str, Any] = {}
+
+        # Gel du event loop par du code synchrone du plugin (voir watch_blocking)
+        self._max_block_ms: float = 0.0
+        self._last_block_log: float = float("-inf")
 
         self._sm = StateMachine(
             manifest.name,
@@ -133,6 +252,7 @@ class LifecycleManager:
             logger.exception(
                 "plugin load failed", plugin=self.manifest.name, error=str(e)
             )
+            await self._cleanup_after_failure()
             raise LoadError(f"[{self.manifest.name}] Loading failed: {e}") from e
 
     async def _do_load(self) -> None:
@@ -140,7 +260,7 @@ class LifecycleManager:
         if not entry.exists():
             raise LoadError(f"Not found entry point: {entry}")
 
-        module_name = f"xcore_plugin_{self.manifest.name}"
+        module_name = self._module_name
         package_name = module_name
 
         # Crée un package namespace virtuel pour isoler le plugin
@@ -206,6 +326,7 @@ class LifecycleManager:
             )
         self._resource_tracker = tracker
         ctx._task_sink = self._spawned_tasks
+        self._injected_services = dict(ctx.services)
 
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -273,6 +394,28 @@ class LifecycleManager:
 
     # ── Appel ─────────────────────────────────────────────────
 
+    def _loop_block_warn_ms(self) -> float:
+        value = getattr(self._ctx.config, "loop_block_warn_ms", None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return _DEFAULT_LOOP_BLOCK_WARN_MS
+        return value
+
+    def _on_loop_block(self, action: str, seconds: float) -> None:
+        """Un pas synchrone du plugin vient de geler le event loop `seconds`."""
+        self._max_block_ms = max(self._max_block_ms, seconds * 1000)
+        now = time.monotonic()
+        if now - self._last_block_log < _LOOP_BLOCK_LOG_INTERVAL_S:
+            return
+        self._last_block_log = now
+        logger.warning(
+            "plugin blocked the event loop",
+            plugin=self.manifest.name,
+            action=action,
+            blocked_ms=round(seconds * 1000),
+            hint="synchronous CPU/IO between two awaits; use await, "
+            "asyncio.to_thread, or execution_mode: sandboxed",
+        )
+
     async def call(self, action: str, payload: dict) -> dict:
         if self._instance is None:
             raise RuntimeError(f"[{self.manifest.name}] not loaded")
@@ -285,7 +428,11 @@ class LifecycleManager:
         timeout = self.manifest.resources.timeout_seconds
         try:
             result = await asyncio.wait_for(
-                self._instance.handle(action, payload),
+                watch_blocking(
+                    self._instance.handle(action, payload),
+                    self._loop_block_warn_ms(),
+                    lambda seconds: self._on_loop_block(action, seconds),
+                ),
                 timeout=timeout if timeout > 0 else None,
             )
         except asyncio.TimeoutError:
@@ -316,6 +463,10 @@ class LifecycleManager:
             logger.info("plugin reloaded", plugin=self.manifest.name)
         except Exception as e:
             self._sm.transition("error")
+            logger.error(
+                "plugin reload failed", plugin=self.manifest.name, error=str(e)
+            )
+            await self._cleanup_after_failure()
             raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
 
     # ── Unload ────────────────────────────────────────────────
@@ -330,8 +481,49 @@ class LifecycleManager:
             self._sm.transition("error")
             raise
 
-    async def _do_unload(self) -> None:
-        if self._instance:
+    async def _cleanup_after_failure(self) -> None:
+        """
+        Ramasse-miette forcé après un load()/reload() raté, sans rappeler les
+        hooks du plugin (son état interne est incohérent). Sans ça, ce qu'il a
+        déjà enregistré (jobs, abonnements, tâches, module dans sys.modules)
+        restait en place alors que le plugin passe en FAILED.
+        """
+        try:
+            await self._do_unload(run_hooks=False)
+        except Exception as e:  # pragma: no cover — best-effort
+            logger.error(
+                "forced cleanup after failure failed",
+                plugin=self.manifest.name,
+                error=str(e),
+            )
+
+    async def _cancel_spawned_tasks(self) -> None:
+        """
+        Annule les tâches créées via ctx.spawn_task() et ATTEND qu'elles se
+        terminent (délai borné) : un simple cancel() ne fait que programmer
+        l'annulation, leurs `finally` s'exécutaient donc après que le module du
+        plugin ait été retiré de sys.modules.
+        """
+        current = asyncio.current_task()  # un unload peut venir d'une de ces tâches
+        pending = [t for t in self._spawned_tasks if t is not current and not t.done()]
+        self._spawned_tasks = []
+        for task in pending:
+            task.cancel()
+        if not pending:
+            return
+        _, still_running = await asyncio.wait(
+            pending, timeout=self._TASK_CANCEL_TIMEOUT_S
+        )
+        if still_running:
+            logger.warning(
+                "spawned tasks ignored cancellation",
+                plugin=self.manifest.name,
+                tasks=sorted(t.get_name() for t in still_running),
+                timeout_s=self._TASK_CANCEL_TIMEOUT_S,
+            )
+
+    async def _do_unload(self, *, run_hooks: bool = True) -> None:
+        if self._instance and run_hooks:
             # Best-effort : on essaie les hooks du plugin, mais une erreur ici
             # ne doit pas empêcher le ramasse-miette forcé ci-dessous — c'est
             # justement le filet de sécurité pour un on_unload/on_stop bâclé.
@@ -350,15 +542,28 @@ class LifecycleManager:
             self._resource_tracker.cleanup()
             self._resource_tracker = None
 
-        for task in self._spawned_tasks:
-            if not task.done():
-                task.cancel()
-        self._spawned_tasks = []
+        await self._cancel_spawned_tasks()
 
-        if self._registry is not None:
+        if self._registry is not None and self._manages_registry:
             self._registry.unregister(self.manifest.name)
 
-        module_name = f"xcore_plugin_{self.manifest.name}"
+        # `unregister()` ne nettoie que le registre : les services que le plugin
+        # a exportés restaient aussi dans le dict partagé du ServiceContainer,
+        # donc appelables par les autres plugins (et le plugin déchargé épinglé
+        # en mémoire). On ne retire que ce que CE plugin y a mis, tel quel.
+        for name, obj in self._exported_to_container.items():
+            if self._services.get(name) is obj:
+                self._services.pop(name, None)
+        self._exported_to_container = {}
+        self._injected_services = {}
+
+        # Router HTTP / middlewares du plugin : sans ça, un handler déchargé
+        # gardait l'ancien router (et via ses closures l'ancien module), et un
+        # reload dont le nouveau code n'en expose plus gardait l'ancien actif.
+        self.plugin_router = None
+        self.plugin_middlewares = {}
+
+        module_name = self._module_name
         # Nettoie le module principal et le package namespace
         sys.modules.pop(f"{module_name}.main", None)
         sys.modules.pop(module_name, None)
@@ -366,8 +571,19 @@ class LifecycleManager:
         for mod_name in list(sys.modules.keys()):
             if mod_name.startswith(f"{module_name}."):
                 sys.modules.pop(mod_name, None)
-        self._instance = None
+        instance, self._instance = self._instance, None
         self._module = None
+        if instance is not None and self._should_watch_release():
+            _release_watcher.watch(instance, self.manifest.name, _GC_DELAY_S)
+        del instance
+
+    def _should_watch_release(self) -> bool:
+        # Les instances poolées (Ephemeral) sont jetées à chaque appel : le GC
+        # automatique les gère (jeunes cycles) et une collecte complète par appel
+        # coûterait bien plus qu'elle ne rapporte.
+        if not self._manages_registry:
+            return False
+        return getattr(self._ctx.config, "gc_after_unload", True) is not False
 
     # ── Router HTTP custom ────────────────────────────────────
 
@@ -409,7 +625,7 @@ class LifecycleManager:
         try:
             middlewares = add_middlewares()
             if middlewares is not None:
-                self.plugin_middlewares.update(middlewares)
+                self.plugin_middlewares = dict(middlewares)
                 logger.info(
                     "middlewares collected",
                     plugin=self.manifest.name,
@@ -421,6 +637,17 @@ class LifecycleManager:
             )
 
     # ── Propagation des services (fix #3 v1) ──────────────────
+
+    def _is_injected(self, name: str, obj: Any) -> bool:
+        """Vrai si `obj` est exactement l'objet injecté par le noyau sous `name`."""
+        return name in self._injected_services and self._injected_services[name] is obj
+
+    @staticmethod
+    def _unwrap_proxy(obj: Any) -> Any:
+        """Retire tous les niveaux de proxy de ramasse-miette autour d'un service."""
+        while isinstance(obj, _ScopedScheduler):
+            obj = obj._real
+        return obj
 
     def propagate_services(self, *, is_reload: bool = False) -> dict:
         """
@@ -453,6 +680,11 @@ class LifecycleManager:
         # la source de vérité et assure la protection des services noyau.
         if self._registry:
             for name, obj in instance_services.items():
+                # Service reçu en injection (db, cache, scheduler…), pas exporté
+                # par ce plugin : ni à enregistrer ni à réécrire dans le
+                # container partagé.
+                if self._is_injected(name, obj):
+                    continue
                 svc_meta = manifest_services_config.get(name, {})
                 scope = svc_meta.get("scope", "public")
 
@@ -482,10 +714,10 @@ class LifecycleManager:
                     # différent, c'est une vraie tentative malveillante : on
                     # relève l'erreur telle quelle. `obj` peut être un proxy de
                     # ramasse-miette (_ScopedScheduler, etc.) posé par ce même
-                    # LifecycleManager autour du service réel — on déballe un
-                    # niveau (`_real`) avant de comparer, sinon l'identité ne
-                    # matcherait jamais pour un service ainsi enveloppé.
-                    underlying = getattr(obj, "_real", obj)
+                    # LifecycleManager autour du service réel — on déballe tous
+                    # les niveaux de proxy avant de comparer, sinon l'identité
+                    # ne matcherait jamais pour un service ainsi enveloppé.
+                    underlying = self._unwrap_proxy(obj)
                     if self._registry.is_registered_as(
                         name, obj
                     ) or self._registry.is_registered_as(name, underlying):
@@ -500,7 +732,11 @@ class LifecycleManager:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger
             protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
-            if collisions := set(instance_services.keys()) & protected:
+            if collisions := {
+                k
+                for k, v in instance_services.items()
+                if k in protected and not self._is_injected(k, v)
+            }:
                 raise PermissionError(
                     f"[{self.manifest.name}] Tentative d'écrasement de services "
                     f"noyau sans registre : {collisions}"
@@ -517,18 +753,28 @@ class LifecycleManager:
                 },
             )
 
-        # Mise à jour du container local (rétro-compatibilité et accès rapide)
+        # Mise à jour du container local (rétro-compatibilité et accès rapide).
+        # `self._services` EST le dict partagé du ServiceContainer : on n'y
+        # écrit que ce que le plugin a exporté, jamais les services du noyau
+        # reçus en injection — sinon un reload y laissait le proxy de
+        # ramasse-miette du plugin à la place du vrai service (et chaque reload
+        # empilait un proxy de plus, cassant le reload/load suivant de
+        # n'importe quel plugin).
+        exported = {
+            k: v for k, v in instance_services.items() if not self._is_injected(k, v)
+        }
+        self._exported_to_container.update(exported)
         if is_reload:
-            self._services.update(instance_services)
+            self._services.update(exported)
             logger.info(
                 "services updated on reload",
                 plugin=self.manifest.name,
-                services=sorted(instance_services.keys()),
+                services=sorted(exported.keys()),
             )
         else:
-            new_keys = set(instance_services.keys()) - set(self._services.keys())
+            new_keys = set(exported.keys()) - set(self._services.keys())
             for k in new_keys:
-                self._services[k] = instance_services[k]
+                self._services[k] = exported[k]
             if new_keys:
                 logger.info(
                     "services registered",
@@ -547,4 +793,5 @@ class LifecycleManager:
             "state": self._sm.state.value,
             "loaded": self._instance is not None,
             "uptime": round(self.uptime, 1) if self.uptime else None,
+            "max_loop_block_ms": round(self._max_block_ms),
         }

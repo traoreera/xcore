@@ -134,6 +134,7 @@ class Plugin(TrustedBase):
 | `get_service(name)` | Returns a service from the container. Supports literal overloads for IDE typing. |
 | `get_service_as(name, type)` | Returns a service cast to a specific type (e.g., `AsyncSQLAdapter`). |
 | `call_plugin(name, action, payload)` | IPC helper to call another plugin from within the Trusted environment. |
+| `ctx.spawn_task(coro, name=None)` | Creates a background task tracked by the kernel: it is cancelled **and awaited** when the plugin is unloaded or reloaded. Use it instead of a bare `asyncio.create_task()`. |
 
 ---
 
@@ -156,8 +157,30 @@ entry_point: "src/main.py"
     **Fix**: Prefix your service names (e.g., `myplugin_db`) or use the `PluginRegistry` to set them as private.
 
 !!! warning "Synchronous Blocking"
-    Trusted plugins run in the main event loop. If you perform blocking I/O (like `time.sleep()` or synchronous requests) inside a hook or `handle`, you will freeze the entire application.
-    **Fix**: Always use `async`/`await` or `run_in_executor`.
+    Trusted plugins run in the main event loop, in a single thread. Anything your code does *between two `await`s* — CPU work, `time.sleep()`, a synchronous HTTP or database call — freezes the **entire application**, and the Python GIL means threads do not change that for CPU-bound work.
+    **Fix**: use `async`/`await`; for blocking I/O use `asyncio.to_thread()`; for heavy CPU work use `execution_mode: sandboxed` (one process per plugin, outside the main loop and its GIL).
+
+!!! warning "`timeout_seconds` cannot interrupt synchronous code"
+    The `resources.timeout_seconds` limit is enforced with `asyncio.wait_for`, which can only act at an `await`. A `handle()` that burns 1 s of CPU without awaiting and has `timeout_seconds: 0.2` still returns normally after 1 s.
+    Xcore now **reports** it instead: a synchronous step longer than `plugins.loop_block_warn_ms` (default `250`, `0` disables) logs `plugin blocked the event loop` with the plugin and action, rate-limited to one warning per plugin every 10 s, and `status()` exposes `max_loop_block_ms`. The same warning exists for scheduler jobs (`scheduler job blocked the event loop`) and for synchronous hooks that exceed their timeout (their worker thread cannot be interrupted and keeps running).
+
+---
+
+### Reload, Unload and Memory
+
+When a plugin is unloaded or reloaded, the kernel releases what it can track: scheduler jobs, health checks, event/hook subscriptions, services you exported, your router and middlewares, and tasks created with `ctx.spawn_task()`. A plugin instance lives in reference cycles, so Xcore also schedules a garbage collection shortly afterwards (`plugins.gc_after_unload`, default `true`) and checks that the old instance is really gone.
+
+If you see `plugin instance still referenced after unload` in the logs, something outside the plugin context still holds it — typically:
+
+- a task started with a bare `asyncio.create_task()` (use `ctx.spawn_task()`),
+- a callback or bound method registered on a global object you imported yourself,
+- a service object stored somewhere that outlives the plugin.
+
+!!! note "Scheduler job ids are namespaced"
+    Jobs you register are stored as `<plugin>:<job_id>` so two plugins can both have a `cleanup` job. Inside your plugin you keep using your own id (`remove_job("cleanup")`).
+
+!!! warning "Reload only affects one worker process"
+    With several server workers (`uvicorn --workers N`, `xcli manager start --workers N`) each worker process loads its own copy of every plugin. A `POST /plugins/<name>/reload` is handled by **one** worker only; the others keep running the old code until restarted. There is no cross-worker reload broadcast yet: restart the workers (or reload through each of them) to roll out a new plugin version.
 
 ---
 

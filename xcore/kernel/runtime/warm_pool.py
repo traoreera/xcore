@@ -259,6 +259,7 @@ class WarmPool:
             manifest=self._manifest,
             ctx=self._ctx,
             caller=self._caller,
+            pooled=True,
         )
         try:
             await asyncio.wait_for(lm.load(), timeout=self._boot_timeout)

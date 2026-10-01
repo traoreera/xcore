@@ -197,6 +197,8 @@ class ConfigLoader:
             strict_trusted=d.get("strict_trusted", True),
             interval=d.get("interval", 2),
             entry_point=d.get("entry_point", "src/main.py"),
+            gc_after_unload=d.get("gc_after_unload", True),
+            loop_block_warn_ms=d.get("loop_block_warn_ms", 250),
             snapshot=d.get(
                 "snapshot",
                 {

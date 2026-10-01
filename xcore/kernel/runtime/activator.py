@@ -91,7 +91,8 @@ class SandboxedActivator(PluginActivator):
         if not scan.passed:
             raise ValueError("scan failed")
 
-        mgr = SandboxProcessManager(manifest=manifest, ctx=loader)
+        log_level = getattr(loader._ctx, "log_level", "WARNING")
+        mgr = SandboxProcessManager(manifest=manifest, ctx=loader, log_level=log_level)
         await mgr.start()
         return mgr
 

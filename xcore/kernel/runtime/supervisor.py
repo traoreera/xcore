@@ -148,6 +148,13 @@ class PluginSupervisor:
         # ── 5. Enregistrement services noyau (inchangé) ─────────
         if self._registry:
             for name, svc in self._services.as_dict().items():
+                # Les plugins viennent de propager leurs services exportés dans
+                # ce même dict : ils restent la propriété du plugin. Les marquer
+                # « kernel » (protégés) empêchait ensuite le reload du plugin qui
+                # les exporte (« Impossible d'écraser le service protégé »).
+                owner = self._registry.service_owner(name)
+                if owner not in (None, "kernel"):
+                    continue
                 try:
                     self._registry.register_core_service(name, svc)
                 except Exception as e:

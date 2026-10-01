@@ -170,6 +170,24 @@ class HookManager:
                 result=result,
                 execution_time_ms=(time.time() - start) * 1000,
             )
+        except asyncio.TimeoutError as e:
+            if not hook_info.is_async:
+                # wait_for() annule l'attente, pas le thread : un hook synchrone
+                # qui dépasse son timeout continue de tourner (en tenant le GIL
+                # par tranches) et occupe un worker du pool par défaut.
+                logger.warning(
+                    "sync hook timed out, its worker thread keeps running",
+                    hook=hook_name,
+                    event=event.name,
+                    timeout_s=hook_info.timeout,
+                    hint="make the hook async, or have it honour its own deadline",
+                )
+            return HookResult(
+                hook_name=hook_name,
+                event_name=event.name,
+                error=e,
+                execution_time_ms=(time.time() - start) * 1000,
+            )
         except Exception as e:
             return HookResult(
                 hook_name=hook_name,
