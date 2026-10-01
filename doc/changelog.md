@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.4] - 2026-10-01
+
+### Fixed
+- **After boot, the second plugin reload/load of the whole process failed and left the plugin stuck in `FAILED`**: `LifecycleManager.propagate_services(is_reload=True)` ran `self._services.update(instance_services)`, but `self._services` *is* the `ServiceContainer`'s shared dict and `instance_services` is the plugin's `ctx.services` copy — which holds the plugin's own garbage-collection proxy (`_ScopedScheduler`) in place of the real scheduler (and tenant wrappers in place of `db`/`cache` when tenancy is on). The first reload therefore replaced the kernel's real `scheduler` in the shared container with that plugin's proxy; the next reload/load of *any* plugin then received a proxy-of-a-proxy, which the one-level `_real` unwrapping could not match against the kernel-protected service, raising `PermissionError: Impossible d'écraser le service protégé 'scheduler'`. The proxy chain also grew by one level per reload. Reproduced against a real `PluginRegistry` + `ServiceContainer` (the existing tests mocked the registry, so none of this was visible): `reload(A)` OK, then `reload(B)`, `load(C)` and `reload(A)` all failed.
+  `LifecycleManager` now snapshots the services it injected (`_injected_services`, taken after tenant/GC wrapping, before `on_load`) and `propagate_services()` ignores any entry that is still *exactly* that injected object — it is received, not exported — in the registry loop, in the shared-container update and in the no-registry fallback check. Only services the plugin actually exported are written back; an attempt to replace a core service with a *different* object is still rejected. The proxy unwrapping fallback now strips every proxy level instead of one.
+- **A plugin in `FAILED` could never be unloaded or reloaded**: the state machine only allowed `reset` from `FAILED`, and nothing in the kernel ever calls `reset` — so `_do_unload()` never ran for a plugin that failed mid-reload and its jobs, subscriptions, tasks and `sys.modules` entries stayed registered forever. `FAILED` now also accepts `unload` (forced cleanup) and `reload` (retry).
+- **A failed `load()`/`reload()` left everything the plugin had already registered in place**: scheduler jobs, event/hook subscriptions, health checks, spawned tasks and `sys.modules` entries of a half-initialized plugin were never released. Both paths now run the forced cleanup (without calling the plugin's own hooks, whose state is inconsistent) before raising `LoadError`.
+
+### Added
+- `tests/unit/kernel/test_lifecycle_reload.py`: regression suite for reload/load *after* boot with a real registry and container (repeated reloads, cross-plugin reload, hot-load after a reload, exported services still propagated, core-service override still rejected, failed-load cleanup, unload/reload from `FAILED`).
+
 ## [2.6.3] - 2026-09-30
 
 ### Fixed

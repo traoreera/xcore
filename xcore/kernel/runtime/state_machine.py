@@ -8,6 +8,8 @@ Transitions valides :
     READY     ──reload►  RELOADING──►  READY
     *         ──error──►  FAILED
     FAILED    ──reset──►  UNLOADED
+    FAILED    ──unload►  UNLOADING──►  UNLOADED   (nettoyage forcé d'un plugin planté)
+    FAILED    ──reload►  RELOADING──►  READY      (nouvel essai)
 """
 
 from __future__ import annotations
@@ -36,7 +38,14 @@ _TRANSITIONS: dict[PluginState, dict[str, PluginState]] = {
     },
     PluginState.UNLOADING: {"ok": PluginState.UNLOADED, "error": PluginState.FAILED},
     PluginState.RELOADING: {"ok": PluginState.READY, "error": PluginState.FAILED},
-    PluginState.FAILED: {"reset": PluginState.UNLOADED},
+    # FAILED doit rester récupérable : sans "unload", un plugin planté en plein
+    # reload ne pouvait plus jamais être déchargé (donc nettoyé) ni rechargé —
+    # "reset" n'est appelé par aucun code du noyau.
+    PluginState.FAILED: {
+        "reset": PluginState.UNLOADED,
+        "unload": PluginState.UNLOADING,
+        "reload": PluginState.RELOADING,
+    },
 }
 
 

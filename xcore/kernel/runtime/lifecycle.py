@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 from ..api.context import PluginContext
 from ..api.contract import BasePlugin
 from ..observability import get_logger
-from .plugin_gc import PluginResourceTracker
+from .plugin_gc import PluginResourceTracker, _ScopedScheduler
 from .state_machine import PluginState, StateMachine
 
 logger = get_logger("xcore.runtime.lifecycle")
@@ -71,6 +71,13 @@ class LifecycleManager:
         # unload, indépendamment de ce que fait on_unload/on_stop.
         self._resource_tracker: PluginResourceTracker | None = None
         self._spawned_tasks: list[asyncio.Task] = []
+
+        # Services injectés par le noyau dans ctx.services (après wrapping
+        # tenant/ramasse-miette), au moment du load : nom → objet exact reçu.
+        # Sert à distinguer, dans propagate_services(), ce que le plugin a
+        # *exporté* de ce qu'il a simplement reçu en injection — ces derniers
+        # ne doivent jamais être réécrits dans le container partagé.
+        self._injected_services: dict[str, Any] = {}
 
         self._sm = StateMachine(
             manifest.name,
@@ -133,6 +140,7 @@ class LifecycleManager:
             logger.exception(
                 "plugin load failed", plugin=self.manifest.name, error=str(e)
             )
+            await self._cleanup_after_failure()
             raise LoadError(f"[{self.manifest.name}] Loading failed: {e}") from e
 
     async def _do_load(self) -> None:
@@ -206,6 +214,7 @@ class LifecycleManager:
             )
         self._resource_tracker = tracker
         ctx._task_sink = self._spawned_tasks
+        self._injected_services = dict(ctx.services)
 
         if hasattr(self._instance, "_inject_context"):
             await self._instance._inject_context(ctx)
@@ -316,6 +325,10 @@ class LifecycleManager:
             logger.info("plugin reloaded", plugin=self.manifest.name)
         except Exception as e:
             self._sm.transition("error")
+            logger.error(
+                "plugin reload failed", plugin=self.manifest.name, error=str(e)
+            )
+            await self._cleanup_after_failure()
             raise LoadError(f"[{self.manifest.name}] failed reload : {e}") from e
 
     # ── Unload ────────────────────────────────────────────────
@@ -330,8 +343,24 @@ class LifecycleManager:
             self._sm.transition("error")
             raise
 
-    async def _do_unload(self) -> None:
-        if self._instance:
+    async def _cleanup_after_failure(self) -> None:
+        """
+        Ramasse-miette forcé après un load()/reload() raté, sans rappeler les
+        hooks du plugin (son état interne est incohérent). Sans ça, ce qu'il a
+        déjà enregistré (jobs, abonnements, tâches, module dans sys.modules)
+        restait en place alors que le plugin passe en FAILED.
+        """
+        try:
+            await self._do_unload(run_hooks=False)
+        except Exception as e:  # pragma: no cover — best-effort
+            logger.error(
+                "forced cleanup after failure failed",
+                plugin=self.manifest.name,
+                error=str(e),
+            )
+
+    async def _do_unload(self, *, run_hooks: bool = True) -> None:
+        if self._instance and run_hooks:
             # Best-effort : on essaie les hooks du plugin, mais une erreur ici
             # ne doit pas empêcher le ramasse-miette forcé ci-dessous — c'est
             # justement le filet de sécurité pour un on_unload/on_stop bâclé.
@@ -422,6 +451,17 @@ class LifecycleManager:
 
     # ── Propagation des services (fix #3 v1) ──────────────────
 
+    def _is_injected(self, name: str, obj: Any) -> bool:
+        """Vrai si `obj` est exactement l'objet injecté par le noyau sous `name`."""
+        return name in self._injected_services and self._injected_services[name] is obj
+
+    @staticmethod
+    def _unwrap_proxy(obj: Any) -> Any:
+        """Retire tous les niveaux de proxy de ramasse-miette autour d'un service."""
+        while isinstance(obj, _ScopedScheduler):
+            obj = obj._real
+        return obj
+
     def propagate_services(self, *, is_reload: bool = False) -> dict:
         """
         Propage les services enregistrés par le plugin vers le container partagé.
@@ -453,6 +493,11 @@ class LifecycleManager:
         # la source de vérité et assure la protection des services noyau.
         if self._registry:
             for name, obj in instance_services.items():
+                # Service reçu en injection (db, cache, scheduler…), pas exporté
+                # par ce plugin : ni à enregistrer ni à réécrire dans le
+                # container partagé.
+                if self._is_injected(name, obj):
+                    continue
                 svc_meta = manifest_services_config.get(name, {})
                 scope = svc_meta.get("scope", "public")
 
@@ -482,10 +527,10 @@ class LifecycleManager:
                     # différent, c'est une vraie tentative malveillante : on
                     # relève l'erreur telle quelle. `obj` peut être un proxy de
                     # ramasse-miette (_ScopedScheduler, etc.) posé par ce même
-                    # LifecycleManager autour du service réel — on déballe un
-                    # niveau (`_real`) avant de comparer, sinon l'identité ne
-                    # matcherait jamais pour un service ainsi enveloppé.
-                    underlying = getattr(obj, "_real", obj)
+                    # LifecycleManager autour du service réel — on déballe tous
+                    # les niveaux de proxy avant de comparer, sinon l'identité
+                    # ne matcherait jamais pour un service ainsi enveloppé.
+                    underlying = self._unwrap_proxy(obj)
                     if self._registry.is_registered_as(
                         name, obj
                     ) or self._registry.is_registered_as(name, underlying):
@@ -500,7 +545,11 @@ class LifecycleManager:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger
             protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
-            if collisions := set(instance_services.keys()) & protected:
+            if collisions := {
+                k
+                for k, v in instance_services.items()
+                if k in protected and not self._is_injected(k, v)
+            }:
                 raise PermissionError(
                     f"[{self.manifest.name}] Tentative d'écrasement de services "
                     f"noyau sans registre : {collisions}"
@@ -517,18 +566,27 @@ class LifecycleManager:
                 },
             )
 
-        # Mise à jour du container local (rétro-compatibilité et accès rapide)
+        # Mise à jour du container local (rétro-compatibilité et accès rapide).
+        # `self._services` EST le dict partagé du ServiceContainer : on n'y
+        # écrit que ce que le plugin a exporté, jamais les services du noyau
+        # reçus en injection — sinon un reload y laissait le proxy de
+        # ramasse-miette du plugin à la place du vrai service (et chaque reload
+        # empilait un proxy de plus, cassant le reload/load suivant de
+        # n'importe quel plugin).
+        exported = {
+            k: v for k, v in instance_services.items() if not self._is_injected(k, v)
+        }
         if is_reload:
-            self._services.update(instance_services)
+            self._services.update(exported)
             logger.info(
                 "services updated on reload",
                 plugin=self.manifest.name,
-                services=sorted(instance_services.keys()),
+                services=sorted(exported.keys()),
             )
         else:
-            new_keys = set(instance_services.keys()) - set(self._services.keys())
+            new_keys = set(exported.keys()) - set(self._services.keys())
             for k in new_keys:
-                self._services[k] = instance_services[k]
+                self._services[k] = exported[k]
             if new_keys:
                 logger.info(
                     "services registered",
