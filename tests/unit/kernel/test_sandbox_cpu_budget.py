@@ -74,16 +74,26 @@ def test_a_single_request_over_budget_is_still_killed():
     assert time.monotonic() - started < 15
 
 
-def test_worker_asks_to_be_recycled_before_the_lifetime_ceiling_is_hit():
+def test_worker_asks_to_be_recycled_before_the_lifetime_ceiling_is_hit(
+    monkeypatch,
+):
     """
-    Plafond de vie 4 s, budget 1 s : après ≥ 2 s de CPU consommées la requête
-    suivante ne pourrait plus avoir son budget complet (2 + 1 + 1 >= 4) — le
-    worker doit demander son recyclage plutôt que d'être tué en pleine requête.
+    Plafond de vie 4 s, budget 1 s : dès que ≥ 2 s de CPU sont consommées la
+    requête suivante ne pourrait plus avoir son budget complet (2 + 1 + 1 >= 4) —
+    le worker doit demander son recyclage plutôt que d'être tué en pleine requête.
+    Déterministe : la consommation CPU est simulée (aucune limite posée sur pytest).
     """
-    result = _run(requests=4, burn_s=0.6, lifetime_s=4)  # ≈ 2,4 s de CPU cumulées
+    from xcore.kernel.sandbox import worker
 
-    assert result.returncode == 0, result.stderr
-    assert "survived True" in result.stdout
+    monkeypatch.setattr(worker, "_cpu_budget_s", 1)
+    monkeypatch.setattr(worker, "_cpu_lifetime_s", 4)
+
+    for consumed, expected in ((0.2, False), (1.9, False), (2.0, True), (3.5, True)):
+        monkeypatch.setattr(worker, "_cpu_consumed", lambda c=consumed: c)
+        assert worker._needs_recycle() is expected, consumed
+
+    monkeypatch.setattr(worker, "_cpu_lifetime_s", 0)  # aucun plafond configuré
+    assert worker._needs_recycle() is False
 
 
 def test_worker_does_not_recycle_while_far_from_the_ceiling():
