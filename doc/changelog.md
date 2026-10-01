@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.6] - 2026-10-01
+
+### Fixed
+- **Unloading a plugin left its exported services callable in the shared container**: `PluginRegistry.unregister()` only cleans the registry, but `propagate_services()` also writes a plugin's exported services into the `ServiceContainer`'s shared dict — where they stayed after unload, reachable by every other plugin through `ctx.services` and pinning the dead plugin (instance, module, state) in memory. `LifecycleManager` now remembers what *it* wrote and removes exactly those entries at unload — never one that another plugin has since replaced.
+- **A plugin's HTTP router and middlewares survived unload and reload**: `plugin_router`/`plugin_middlewares` were never reset in `_do_unload()`, so an unloaded handler kept the old router (and, through its closures, the old module), and a reload whose new code no longer exposed a router kept serving the previous one. `_collect_middlewares()` also *merged* the new `add_state()` result into the old dict (`.update`), so removed middlewares lived on. Both are now cleared at unload and replaced, not merged, on load.
+- **Cancelled background tasks were not awaited before the plugin's module was dropped**: `_do_unload()` called `task.cancel()` and moved on, so the tasks' `finally` blocks ran *after* `sys.modules` had been purged. Tasks created with `ctx.spawn_task()` are now awaited after cancellation (bounded by `_TASK_CANCEL_TIMEOUT_S`, 2 s; a task that swallows `CancelledError` is logged and no longer blocks the unload). An unload triggered from inside one of those tasks no longer cancels itself.
+- **`ctx.spawn_task()` leaked every finished task**: the tracking list only ever grew for the lifetime of the plugin. Finished tasks are now dropped as they complete, and a task that fails logs `spawned task failed` instead of surfacing as an unretrieved exception at garbage-collection time.
+
+### Added
+- `tests/unit/kernel/test_lifecycle_unload_cleanup.py`: router/middleware reset and replacement, exported-service removal (and respect for a service another plugin took over), cancelled-task cleanup ordering, tracking-list hygiene, unload from inside a spawned task.
+
 ## [2.6.5] - 2026-10-01
 
 ### Fixed

@@ -41,6 +41,10 @@ class LifecycleManager:
 
     PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
 
+    # Délai accordé aux tâches annulées au unload pour exécuter leurs `finally`
+    # avant que le module du plugin soit retiré de sys.modules.
+    _TASK_CANCEL_TIMEOUT_S = 2.0
+
     def __init__(
         self,
         manifest,  # PluginManifest
@@ -78,6 +82,9 @@ class LifecycleManager:
         # *exporté* de ce qu'il a simplement reçu en injection — ces derniers
         # ne doivent jamais être réécrits dans le container partagé.
         self._injected_services: dict[str, Any] = {}
+        # Services que CE plugin a écrits dans le container partagé (nom → objet),
+        # retirés au unload pour ne pas laisser un plugin mort appelable.
+        self._exported_to_container: dict[str, Any] = {}
 
         self._sm = StateMachine(
             manifest.name,
@@ -359,6 +366,31 @@ class LifecycleManager:
                 error=str(e),
             )
 
+    async def _cancel_spawned_tasks(self) -> None:
+        """
+        Annule les tâches créées via ctx.spawn_task() et ATTEND qu'elles se
+        terminent (délai borné) : un simple cancel() ne fait que programmer
+        l'annulation, leurs `finally` s'exécutaient donc après que le module du
+        plugin ait été retiré de sys.modules.
+        """
+        current = asyncio.current_task()  # un unload peut venir d'une de ces tâches
+        pending = [t for t in self._spawned_tasks if t is not current and not t.done()]
+        self._spawned_tasks = []
+        for task in pending:
+            task.cancel()
+        if not pending:
+            return
+        _, still_running = await asyncio.wait(
+            pending, timeout=self._TASK_CANCEL_TIMEOUT_S
+        )
+        if still_running:
+            logger.warning(
+                "spawned tasks ignored cancellation",
+                plugin=self.manifest.name,
+                tasks=sorted(t.get_name() for t in still_running),
+                timeout_s=self._TASK_CANCEL_TIMEOUT_S,
+            )
+
     async def _do_unload(self, *, run_hooks: bool = True) -> None:
         if self._instance and run_hooks:
             # Best-effort : on essaie les hooks du plugin, mais une erreur ici
@@ -379,13 +411,26 @@ class LifecycleManager:
             self._resource_tracker.cleanup()
             self._resource_tracker = None
 
-        for task in self._spawned_tasks:
-            if not task.done():
-                task.cancel()
-        self._spawned_tasks = []
+        await self._cancel_spawned_tasks()
 
         if self._registry is not None:
             self._registry.unregister(self.manifest.name)
+
+        # `unregister()` ne nettoie que le registre : les services que le plugin
+        # a exportés restaient aussi dans le dict partagé du ServiceContainer,
+        # donc appelables par les autres plugins (et le plugin déchargé épinglé
+        # en mémoire). On ne retire que ce que CE plugin y a mis, tel quel.
+        for name, obj in self._exported_to_container.items():
+            if self._services.get(name) is obj:
+                self._services.pop(name, None)
+        self._exported_to_container = {}
+        self._injected_services = {}
+
+        # Router HTTP / middlewares du plugin : sans ça, un handler déchargé
+        # gardait l'ancien router (et via ses closures l'ancien module), et un
+        # reload dont le nouveau code n'en expose plus gardait l'ancien actif.
+        self.plugin_router = None
+        self.plugin_middlewares = {}
 
         module_name = f"xcore_plugin_{self.manifest.name}"
         # Nettoie le module principal et le package namespace
@@ -438,7 +483,7 @@ class LifecycleManager:
         try:
             middlewares = add_middlewares()
             if middlewares is not None:
-                self.plugin_middlewares.update(middlewares)
+                self.plugin_middlewares = dict(middlewares)
                 logger.info(
                     "middlewares collected",
                     plugin=self.manifest.name,
@@ -576,6 +621,7 @@ class LifecycleManager:
         exported = {
             k: v for k, v in instance_services.items() if not self._is_injected(k, v)
         }
+        self._exported_to_container.update(exported)
         if is_reload:
             self._services.update(exported)
             logger.info(
