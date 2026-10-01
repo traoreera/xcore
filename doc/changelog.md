@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-10-01
+
+### Changed
+- **BREAKING (packaging): most backend-specific dependencies moved from hard requirements to opt-in extras.** A plain `pip install XCoreRuntime` no longer pulls in SQLAlchemy, database drivers, Redis, Celery, Alembic, the OTLP exporter, or `python-dotenv`. Each one was audited against actual usage in `xcore/` — `ServiceContainer`'s per-service providers (`xcore/services/container.py`) already import these lazily, only when the matching `services.*` config entry is present — and moved into a matching extra if it isn't needed for `import xcore` or the zero-config boot path:
+  - `XCoreRuntime[postgres]` — SQLAlchemy (`[asyncio]`) + `psycopg2`, for `postgresql://` URLs in `services.databases`
+  - `XCoreRuntime[sqlite]` — SQLAlchemy (`[asyncio]`) + `aiosqlite`, for `sqlite+aiosqlite://` URLs
+  - `XCoreRuntime[db]` — both of the above combined
+  - `XCoreRuntime[migrations]` — Alembic, only used by `MigrationRunner` (already imported on demand, with a clear `ImportError` message if missing)
+  - `XCoreRuntime[redis]` — for `services.cache`/`services.scheduler` `backend: redis` or `tiered` (the default `memory` backend needs none of it)
+  - `XCoreRuntime[worker]` — Celery, only instantiated when `services.xworker.enabled: true` (`False` by default)
+  - `XCoreRuntime[tracing]` — the OTLP/HTTP exporter, only imported when `observability.tracing.endpoint` is set (console export, already in core, is the default)
+  - `XCoreRuntime[dotenv]` — `.env` loading, already gracefully optional in the code (`try`/`except ImportError`)
+  - `XCoreRuntime[metrics]` — `prometheus-client`, for `observability.metrics.backend: prometheus`. This closes a real gap: the package was imported by core runtime code (`kernel/observability/metrics.py`, `xcore/__init__.py`) but previously only listed under dev dependencies — a production install could never actually get it.
+  - `XCoreRuntime[all]` — everything above, plus `sdk`/`xcli`/`cpp`
+
+  **If you relied on a bare `pip install XCoreRuntime` for a working database, Redis cache/scheduler, Celery worker, migrations, OTLP export, `.env` loading, or Prometheus metrics, add the matching extra(s).** `apscheduler` stays in core: `SchedulerConfig.enabled` defaults to `True`, so the scheduler runs out of the box (in-memory backend) even with zero configuration — same for `opentelemetry-api`/`-sdk`, imported unconditionally at module load by `kernel/observability/tracing.py`.
+- **Dependency versions refreshed**: `fastapi[standard]` 0.135→0.141, `pydantic` 2.11→2.13, `sqlalchemy` 2.0→2.1 (now pinned with `[asyncio]` in every DB extra — it was previously relying on `aiosqlite` to pull in `greenlet` transitively, which silently broke a Postgres-only install), `redis[hiredis]` upper bound raised 8→9, `apscheduler` →3.11.3, `opentelemetry-api`/`-sdk`/`-exporter-otlp-proto-http` 1.27→1.45, `alembic` →1.20, `python-dotenv` →1.2, `psycopg2` →2.9.13, `prometheus-client` 0.25→0.26 (dev dependency and new `metrics` extra aligned to the same constraint — `poetry lock` rejects mismatched ones for the same package). All backend extras are duplicated into `[tool.poetry.group.dev.dependencies]` so `poetry install --with dev` (what CI runs, without `--extras`) still exercises every backend in tests.
+
 ## [2.6.8] - 2026-10-01
 
 ### Fixed
