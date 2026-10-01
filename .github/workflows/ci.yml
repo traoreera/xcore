@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.14"
   POETRY_VERSION: "2.4.1"
 
 # ──────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.14"]
 
     steps:
       - uses: actions/checkout@v4

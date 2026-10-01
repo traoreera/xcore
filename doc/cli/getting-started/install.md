@@ -4,7 +4,7 @@ Getting started with `xcorecli` is straightforward. The project uses [Poetry](ht
 
 ## Prerequisites
 
-- **Python**: 3.12 or higher.
+- **Python**: 3.14 or higher.
 - **Poetry**: Recommended for environment management.
 - **Make**: To use the provided automation scripts.
 

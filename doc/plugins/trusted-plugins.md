@@ -13,7 +13,7 @@ Trusted plugins are native Python extensions that run directly in the main Xcore
 ### Prerequisites
 
 - [x] [Plugin Anatomy](./plugin-anatomy.md) understood
-- [x] Python 3.12+ and `asyncio` proficiency
+- [x] Python 3.14+ and `asyncio` proficiency
 
 ---
 

@@ -6,7 +6,7 @@ icon: material/download
 
 # Installation & Setup
 
-Xcore requires **Python 3.12** or higher.
+Xcore requires **Python 3.14** or higher.
 
 ## Using Xcore in a project (PyPI)
 
@@ -41,7 +41,7 @@ no external dependency. `[sdk]` unlocks the extended feature set above.
 
 ## Contributing to Xcore itself (from source)
 
-- [x] Python 3.12+ installed
+- [x] Python 3.14+ installed
 - [x] [Poetry](https://python-poetry.org/docs/#installation) installed
 - [x] C++ compiler (GCC, Clang, or MSVC) — only needed to build the optional `scanner_core` accelerator in-place
 - [ ] Redis (optional, required for Redis cache and background workers)

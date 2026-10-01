@@ -12,7 +12,7 @@
 - **Security**: Supports plugin signing, manifest validation, and strict import/resource restriction.
 
 ### Main Technologies
-- **Language**: Python 3.12+ (with C++ extensions for security)
+- **Language**: Python 3.14+ (with C++ extensions for security)
 - **Framework**: FastAPI [standard]
 - **Dependency Management**: Poetry / UV
 - **Data Validation**: Pydantic v2
@@ -26,7 +26,7 @@
 ## Building and Running
 
 ### Prerequisites
-- Python 3.12 or higher
+- Python 3.14 or higher
 - [Poetry](https://python-poetry.org/) 2.0+
 
 ### Key Commands

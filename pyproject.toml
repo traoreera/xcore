@@ -1,6 +1,6 @@
 [project]
 name = "XCoreRuntime"
-version = "2.7.0"
+version = "2.8.0"
 description = "Plugin-first orchestration framework built on FastAPI"
 authors = [
     { name = "Eliezer Traore", email = "68350805+traoreera@users.noreply.github.com" },
@@ -15,7 +15,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.14,<4.0"
 
 # ── Noyau ───────────────────────────────────────────────────────────────────────
 # Ce que `import xcore` et la config par défaut (zero-config) chargent
@@ -138,7 +138,10 @@ markdown              = "^3.8.2"
 # ── Linting ────────────────────────────────────────────────────────────────────
 [tool.black]
 line-length    = 88
-target-version = ["py312"]   # était py311, ton requires-python est >=3.12
+# py313 et non py314 : avec py314, black réécrit `except (A, B):` en `except A, B:`
+# (PEP 758, sans parenthèses) — valide en 3.14 mais trompeur à lire et mal géré par
+# une partie de l'outillage. Le code reste valide sur 3.14 (requires-python >=3.14).
+target-version = ["py313"]
 
 [tool.isort]
 profile     = "black"

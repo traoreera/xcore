@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Présentation
 
-**xcore v2.7.0** — framework d'orchestration plugin-first construit sur FastAPI.
+**xcore v2.8.0** — framework d'orchestration plugin-first construit sur FastAPI.
 Charge, isole et gère des plugins modulaires dans un environnement sandboxé.
 
-- **Language** : Python 3.12+
+- **Language** : Python 3.14+
 - **Framework** : FastAPI + uvicorn
 - **Dépendances** : Poetry
 - **Config** : `integration.yaml` (principal) — pas `xcore.yaml`

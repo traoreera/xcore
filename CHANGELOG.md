@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-10-01
+
+### Changed
+- **BREAKING: the minimum supported Python is now 3.14** (`requires-python = ">=3.14,<4.0"`, was `>=3.12`). Development, the benchmarks behind the 2.6.x lifecycle/GC work and every release smoke test already ran on CPython 3.14, while the CI matrix only exercised 3.12 and 3.13 — so the versions the project claimed to support were not the ones it was actually run on. Consequences for users: `pip install XCoreRuntime` on Python 3.12 or 3.13 will no longer select this version or later (pip's `Requires-Python` check falls back to 2.7.x); stay on `XCoreRuntime<2.8` there.
+- **CI now runs on 3.14 only**: the `Tests & Coverage` matrix is `["3.14"]` (jobs are renamed `Tests & Coverage (3.14)`; there is no required-status-check rule on those names), and the lint, docs, security, PR and both release workflows moved to 3.14 (they were pinned to 3.12 or 3.13). The wheel published by `release.yml` is built on 3.14 (pure Python, `py3-none-any`).
+- `poetry.lock` regenerated for the new floor: only the Python-version markers and metadata change (the `python_version < "3.13"` backport markers on `typing-extensions` and the pydantic marker ladder collapse); **no package version changes**.
+- `.devcontainer` image moved to `python:3.14`; install/requirements pages, `CLAUDE.md` and `GEMINI.md` updated.
+
+### Known limitation
+- **The `[cpp]` extra (`xcorescanner`) has no 3.14 wheel yet**: `xcorescanner 0.1.0` on PyPI ships `cp312` and `cp313` wheels plus an sdist, so on Python 3.14 `pip install 'XCoreRuntime[cpp]'` builds it from source and needs a C++ toolchain until a `cp314` wheel is published. Without the extra, xcore falls back to the Python AST scanner.
+
+### Notes
+- Black stays on `target-version = ["py313"]`: with `py314` it rewrites `except (A, B):` into the PEP 758 form `except A, B:` across the code base — valid on 3.14, but easy to misread and not handled by all tooling. The code itself already requires 3.14 through `requires-python`.
+- The `Upload to Codecov` step in `ci.yml` is still guarded by `matrix.python-version == '3.11'` (a leftover that has been false for a long time), so it still never runs; left untouched here.
+
 ## [2.7.0] - 2026-10-01
 
 ### Changed
