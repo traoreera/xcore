@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Présentation
 
-**xcore v2.5.3** — framework d'orchestration plugin-first construit sur FastAPI.
+**xcore v2.6.8** — framework d'orchestration plugin-first construit sur FastAPI.
 Charge, isole et gère des plugins modulaires dans un environnement sandboxé.
 
 - **Language** : Python 3.12+
@@ -240,3 +240,10 @@ Le cache `.venv` est clé sur `poetry.lock` — un changement de dépendances in
 - **Branche principale** : `main`. Ne pas confondre avec les branches de feature (`add-ephemeral`, etc.).
 - **Seuil de coverage** : `fail_under = 80` dans `pyproject.toml` (`branch = true`). Le CI échoue en dessous. Patcher les imports locaux dans `boot()` au niveau du module source (`xcore.services.container.ServiceContainer`) et non au niveau `xcore`.
 - **`asyncio_mode = auto`** dans `pyproject.toml` — pas besoin de `@pytest.mark.asyncio` sur chaque test async.
+- **Tâches de fond d'un plugin** — `ctx.spawn_task()`, jamais `asyncio.create_task()` brut : seules les tâches suivies par le kernel sont annulées *et attendues* au unload/reload. Une tâche brute épingle l'ancienne génération du plugin (visible dans les logs : `plugin instance still referenced after unload`).
+- **`self._services` d'un plugin est le dict partagé du `ServiceContainer`** (`LifecycleManager._services`) : n'y écrire que des services *exportés* par le plugin. `propagate_services()` ignore ce qui est identique à l'objet injecté (`_injected_services`) — ne jamais réintroduire un `update()` brut des services injectés (proxy de ramasse-miette, wrappers tenant) dans ce dict : ça casse le reload/load de tous les plugins.
+- **`get_service()` des services noyau** — `PluginContext.get_service()` sert les services noyau (`PluginRegistry.is_core_service`) depuis `ctx.services` du plugin, pas depuis le registre (qui contient les objets bruts après le boot : le suivi des jobs et l'isolation tenant seraient contournés).
+- **Plugins Ephemeral** — chaque instance poolée est un `LifecycleManager(..., pooled=True)` : espace de noms `sys.modules` propre, pas de désinscription du registre à l'unload.
+- **Routes de plugin** — monter/retirer via `Xcore._mount_plugin_router` / `_unmount_plugin_router` (suivi des objets route) ; `app.routes` n'a pas de setter et les `_IncludedRouter` de FastAPI ≥ 0.14x n'ont pas de `.path`.
+- **Budget CPU du sandbox** — `RLIMIT_CPU` est cumulatif : limite souple réarmée par requête dans `worker.py` (`_arm_cpu_budget`), limite dure = plafond de vie du worker (`max_cpu_lifetime_seconds`), recyclage propre via `RECYCLE_EXIT_CODE`. Ne pas reposer une limite unique au démarrage.
+- **Tests d'intégration du reload** — utiliser un vrai `PluginRegistry` + `ServiceContainer` (+ `register_core_service` pour simuler « après boot »), pas des `MagicMock` : les mocks avaient masqué ces bugs.

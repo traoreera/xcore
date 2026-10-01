@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..runtime.loader import PluginLoader
 
 from .ipc import IPCChannel, IPCProcessDead, IPCTimeoutError
-from .isolation import DiskQuotaExceeded, DiskWatcher
+from .isolation import RECYCLE_EXIT_CODE, DiskQuotaExceeded, DiskWatcher
 
 logger = get_logger("xcore.sandbox.process_manager")
 
@@ -54,6 +54,16 @@ class SandboxConfig:
     max_restarts: int = 3
     restart_delay: float = 1.0
     startup_timeout: float = 5.0
+    # Budget CPU du worker PAR REQUÊTE (secondes) — 0 = illimité.
+    max_cpu_seconds: int = 10
+    # Plafond de CPU cumulé de la vie d'un worker (secondes), filet noyau
+    # infranchissable pour le plugin. Avant de l'atteindre le worker se recycle
+    # tout seul (RECYCLE_EXIT_CODE) — relance qui ne compte pas comme un plantage.
+    max_cpu_lifetime_seconds: int = 3600
+    # Si le subprocess a tourné au moins aussi longtemps avant de planter, la
+    # séquence de redémarrages repart de zéro : sans ça, un plugin qui plante une
+    # fois par semaine finissait FAILED au 3e plantage en 3 semaines.
+    restart_reset_after: float = 60.0
 
 
 class SandboxProcessManager:
@@ -155,7 +165,8 @@ class SandboxProcessManager:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
             "_SANDBOX_MAX_MEM_MB": str(self.manifest.resources.max_memory_mb),
-            "_SANDBOX_MAX_CPU_SEC": "10",
+            "_SANDBOX_MAX_CPU_SEC": str(self.config.max_cpu_seconds),
+            "_SANDBOX_MAX_CPU_LIFETIME_SEC": str(self.config.max_cpu_lifetime_seconds),
             "LOG_LEVEL": self._log_level,
         }
         env |= self.manifest.env
@@ -215,7 +226,15 @@ class SandboxProcessManager:
         code = await self._process.wait()
         if self._state == ProcessState.STOPPED:
             return
-        logger.warning("subprocess exited", plugin=self.manifest.name, exit_code=code)
+        if code == RECYCLE_EXIT_CODE:
+            # Le worker a atteint son plafond de CPU cumulé et s'est arrêté de
+            # lui-même entre deux requêtes : relance normale, pas un plantage.
+            logger.info("subprocess recycled", plugin=self.manifest.name)
+            self._restarts = 0
+        else:
+            logger.warning(
+                "subprocess exited", plugin=self.manifest.name, exit_code=code
+            )
         await self._handle_crash()
 
     async def _stderr_pump(self) -> None:
@@ -301,6 +320,11 @@ class SandboxProcessManager:
         ):
             return  # anti-réentrance
 
+        if (
+            self._started_at is not None
+            and time.monotonic() - self._started_at >= self.config.restart_reset_after
+        ):
+            self._restarts = 0
         self._state = ProcessState.RESTARTING
 
         while self._restarts < self.config.max_restarts:

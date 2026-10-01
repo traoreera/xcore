@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.8] - 2026-10-01
+
+### Fixed
+- **A healthy sandboxed worker was killed after 10 cumulative CPU-seconds, then the plugin went `FAILED`**: `RLIMIT_CPU` counts the process's *total* CPU time since it started, but the worker set it once at startup (soft 10 s / hard 15 s, from a hardcoded `_SANDBOX_MAX_CPU_SEC=10`). The kernel's default `SIGXCPU` action terminates the process, and no handler exists (`signal` is forbidden to plugins) — so any plugin doing real work was killed after a few minutes of ordinary requests, restarted, killed again, and marked `FAILED` after `max_restarts` (3). Since `sandboxed` is the default execution mode (2.6.2), this hit every plugin that doesn't declare `execution_mode`. The limit is now two-level:
+  - **soft limit = CPU budget per request** (`SandboxConfig.max_cpu_seconds`, default 10): the worker re-arms it to "CPU already consumed + budget" before every call (`_arm_cpu_budget`, `resource` is imported before the import guards go up). A request that burns more than its budget is still killed by `SIGXCPU`.
+  - **hard limit = lifetime ceiling of a worker generation** (`SandboxConfig.max_cpu_lifetime_seconds`, default 3600, +5 s grace). A hard limit can never be raised without privilege, so it stays a kernel-enforced backstop a plugin cannot lift. Before reaching it the worker **recycles itself** between two requests (exit code `RECYCLE_EXIT_CODE`, 75) instead of being killed mid-request; `SandboxProcessManager` restarts it without counting a crash.
+  Verified end-to-end with the real worker process: 8 requests of 0.5 s CPU each under a 1 s per-request budget all succeed (4 s cumulative — the old behavior killed the worker after the first couple); with a 4 s lifetime ceiling the worker exits with code 75 after 3 requests, not `-24` (`SIGXCPU`).
+  **Behavior change to be aware of**: the kernel-enforced CPU backstop moves from 15 CPU-seconds per worker to 3600 per worker generation. Runaway requests are still bounded by the 10 s per-request soft limit and by the manager's wall-clock IPC timeout (`resources.timeout_seconds`, which kills and restarts a stuck worker); both settings are configurable.
+- **A sandboxed plugin that crashed rarely still ended up `FAILED` for good**: `SandboxProcessManager._restarts` was only reset in `start()`, so three crashes spread over weeks exhausted `max_restarts`. If the subprocess ran at least `SandboxConfig.restart_reset_after` (60 s) before crashing, the restart sequence now starts over; a crash loop is still capped.
+
+### Added
+- **The event loop being frozen by synchronous plugin code is now visible and attributable.** A Trusted plugin runs on the application's single event-loop thread: CPU work, `time.sleep()` or a blocking call between two `await`s suspends every request, `asyncio.wait_for(timeout=...)` cannot interrupt it (measured: a `handle()` burning 1 s of CPU with `timeout_seconds: 0.2` returned `status: ok` after 1000 ms), and under the GIL threads do not help CPU-bound work. `LifecycleManager.call()` now times each synchronous *step* of `handle()` (`xcore.kernel.observability.blocking.watch_blocking`, transparent to results, exceptions, cancellation and timeouts) and logs `plugin blocked the event loop` with the plugin, the action and the blocked time when a step exceeds `plugins.loop_block_warn_ms` (default `250`, `0` disables; one warning per plugin per 10 s). `status()` gains `max_loop_block_ms`.
+- Same detection for scheduler jobs (`scheduler job blocked the event loop` — a synchronous job runs entirely on the loop) and for synchronous hooks that exceed their `timeout` (`sync hook timed out, its worker thread keeps running`: `wait_for` stops waiting, not the thread).
+- `SandboxConfig.max_cpu_seconds`, `max_cpu_lifetime_seconds`, `restart_reset_after`; `plugins.loop_block_warn_ms`.
+
+### Documentation
+- `doc/plugins/trusted-plugins.md`: why `timeout_seconds` cannot interrupt synchronous code and what the new warning means; a "Reload, Unload and Memory" section (`ctx.spawn_task` vs bare `asyncio.create_task`, what the kernel releases, `plugin instance still referenced after unload`, namespaced scheduler job ids); and the known limitation that **a reload only affects the server worker that handled the request** — there is no cross-worker reload broadcast yet.
+- `CLAUDE.md`: version synced (it still said 2.5.3) and the plugin lifecycle/reload pitfalls fixed in 2.6.4–2.6.8 recorded.
+
+### Not changed (deliberately)
+- Synchronous scheduler jobs are **not** moved to `asyncio.to_thread` here: it would silently change the threading model for existing jobs (no running loop in the thread, non-thread-safe state). They are reported instead; moving them is a decision for a minor release.
+
 ## [2.6.7] - 2026-10-01
 
 ### Fixed

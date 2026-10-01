@@ -27,10 +27,17 @@ if TYPE_CHECKING:
 from ..api.context import PluginContext
 from ..api.contract import BasePlugin
 from ..observability import get_logger
+from ..observability.blocking import watch_blocking
 from .plugin_gc import PluginResourceTracker, _ScopedScheduler
 from .state_machine import PluginState, StateMachine
 
 logger = get_logger("xcore.runtime.lifecycle")
+
+# Seuil (ms) au-delà duquel un pas synchrone d'un plugin Trusted — du code qui
+# tourne entre deux `await` — est signalé comme gelant le event loop (0 = off).
+_DEFAULT_LOOP_BLOCK_WARN_MS = 250
+# Au plus un avertissement de gel par plugin sur cette fenêtre (secondes).
+_LOOP_BLOCK_LOG_INTERVAL_S = 10.0
 
 # Délai avant la collecte qui suit un unload/reload : laisse les tâches annulées,
 # les callbacks et les réponses en vol se terminer, et regroupe plusieurs unloads
@@ -179,6 +186,10 @@ class LifecycleManager:
         # Services que CE plugin a écrits dans le container partagé (nom → objet),
         # retirés au unload pour ne pas laisser un plugin mort appelable.
         self._exported_to_container: dict[str, Any] = {}
+
+        # Gel du event loop par du code synchrone du plugin (voir watch_blocking)
+        self._max_block_ms: float = 0.0
+        self._last_block_log: float = float("-inf")
 
         self._sm = StateMachine(
             manifest.name,
@@ -383,6 +394,28 @@ class LifecycleManager:
 
     # ── Appel ─────────────────────────────────────────────────
 
+    def _loop_block_warn_ms(self) -> float:
+        value = getattr(self._ctx.config, "loop_block_warn_ms", None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return _DEFAULT_LOOP_BLOCK_WARN_MS
+        return value
+
+    def _on_loop_block(self, action: str, seconds: float) -> None:
+        """Un pas synchrone du plugin vient de geler le event loop `seconds`."""
+        self._max_block_ms = max(self._max_block_ms, seconds * 1000)
+        now = time.monotonic()
+        if now - self._last_block_log < _LOOP_BLOCK_LOG_INTERVAL_S:
+            return
+        self._last_block_log = now
+        logger.warning(
+            "plugin blocked the event loop",
+            plugin=self.manifest.name,
+            action=action,
+            blocked_ms=round(seconds * 1000),
+            hint="synchronous CPU/IO between two awaits; use await, "
+            "asyncio.to_thread, or execution_mode: sandboxed",
+        )
+
     async def call(self, action: str, payload: dict) -> dict:
         if self._instance is None:
             raise RuntimeError(f"[{self.manifest.name}] not loaded")
@@ -395,7 +428,11 @@ class LifecycleManager:
         timeout = self.manifest.resources.timeout_seconds
         try:
             result = await asyncio.wait_for(
-                self._instance.handle(action, payload),
+                watch_blocking(
+                    self._instance.handle(action, payload),
+                    self._loop_block_warn_ms(),
+                    lambda seconds: self._on_loop_block(action, seconds),
+                ),
                 timeout=timeout if timeout > 0 else None,
             )
         except asyncio.TimeoutError:
@@ -756,4 +793,5 @@ class LifecycleManager:
             "state": self._sm.state.value,
             "loaded": self._instance is not None,
             "uptime": round(self.uptime, 1) if self.uptime else None,
+            "max_loop_block_ms": round(self._max_block_ms),
         }

@@ -47,12 +47,14 @@ Les autres workers voient le lock occupé et skippent silencieusement.
 from __future__ import annotations
 
 import inspect
+import time
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from ...configurations.sections import SchedulerConfig
 
 from ...kernel.observability import get_logger
+from ...kernel.observability.blocking import watch_blocking
 from ..base import BaseService, ServiceStatus
 
 logger = get_logger("xcore.services.scheduler")
@@ -69,6 +71,32 @@ _REDIS_LOCK_CLIENT: Any = None
 # TTL du lock en secondes — suffisant pour les jobs les plus longs.
 # Si un job dépasse cette durée, le lock expire et un autre worker peut prendre la main.
 _LOCK_TTL = 300
+
+
+# Seuil (ms) au-delà duquel un job qui tourne entre deux `await` est signalé
+# comme gelant le event loop — les jobs s'exécutent dans le loop de l'application.
+_BLOCK_WARN_MS = 250
+
+
+def _warn_blocking(job_id: str, seconds: float) -> None:
+    logger.warning(
+        "scheduler job blocked the event loop",
+        job_id=job_id,
+        blocked_ms=round(seconds * 1000),
+        hint="a sync job runs on the event loop; make it async or use asyncio.to_thread",
+    )
+
+
+async def _run_job(fn: Callable, job_id: str) -> None:
+    started = time.perf_counter()
+    result = fn()  # un job synchrone s'exécute ENTIÈREMENT ici, sur le loop
+    elapsed = time.perf_counter() - started
+    if elapsed * 1000 >= _BLOCK_WARN_MS:
+        _warn_blocking(job_id, elapsed)
+    if inspect.isawaitable(result):
+        await watch_blocking(
+            result, _BLOCK_WARN_MS, lambda seconds: _warn_blocking(job_id, seconds)
+        )
 
 
 async def _dispatch_job(job_id: str) -> None:
@@ -90,15 +118,11 @@ async def _dispatch_job(job_id: str) -> None:
             )
             return
         try:
-            result = fn()
-            if inspect.isawaitable(result):
-                await result
+            await _run_job(fn, job_id)
         finally:
             await _REDIS_LOCK_CLIENT.delete(lock_key)
     else:
-        result = fn()
-        if inspect.isawaitable(result):
-            await result
+        await _run_job(fn, job_id)
 
 
 class SchedulerService(BaseService):
