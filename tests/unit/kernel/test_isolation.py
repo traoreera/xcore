@@ -69,10 +69,31 @@ class TestMemoryLimiter:
         MemoryLimiter.apply(-1)  # should not raise
 
     def test_apply_positive(self):
+        """
+        Vérifie l'appel à setrlimit SANS l'exécuter : RLIMIT_AS est irréversible
+        (la limite dure baisse) et s'appliquerait à tout le process pytest — chaque
+        thread créé ensuite (TestClient, to_thread…) réserve ~72 Mo d'espace
+        d'adressage, et au bout de quelques-uns `can't start new thread`. Les tests
+        placés après celui-ci dans la session plantaient selon l'empreinte mémoire
+        de l'interpréteur (vu sur Python 3.14).
+        """
+        import resource
         import sys
+        from unittest.mock import patch
+
         if sys.platform == "win32":
             pytest.skip("Not supported on Windows")
-        try:
-            MemoryLimiter.apply(512)  # may raise or not depending on OS limits
-        except Exception:
-            pass  # some systems don't allow raising RLIMIT_AS
+        with patch("resource.setrlimit") as mock_setrlimit:
+            MemoryLimiter.apply(512)
+
+        limit = 512 * 1024 * 1024
+        mock_setrlimit.assert_called_once_with(resource.RLIMIT_AS, (limit, limit))
+
+    def test_apply_failure_is_logged_not_raised(self):
+        import sys
+        from unittest.mock import patch
+
+        if sys.platform == "win32":
+            pytest.skip("Not supported on Windows")
+        with patch("resource.setrlimit", side_effect=ValueError("not allowed")):
+            MemoryLimiter.apply(512)  # ne lève pas

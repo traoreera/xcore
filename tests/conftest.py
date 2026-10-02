@@ -6,6 +6,7 @@ Utilisées automatiquement par pytest dans tous les fichiers de test.
 
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from typing import Generator
@@ -161,6 +162,47 @@ def _cleanup_stray_tmp_dirs() -> Generator[None, None, None]:
     """
     yield
     sweep_stray_tmp_dirs()
+
+
+@pytest.fixture(autouse=True)
+def _no_process_rlimit_leak() -> Generator[None, None, None]:
+    """
+    Un test ne doit jamais modifier les limites de ressources du process pytest.
+
+    RLIMIT_AS / RLIMIT_DATA / RLIMIT_CPU sont globaux au process et la limite DURE
+    ne se relève pas : un `setrlimit` réel dans un test s'applique à tous les tests
+    suivants de la session. RLIMIT_AS à 512 Mo suffisait à faire échouer
+    `threading.Thread.start()` (« can't start new thread ») dans les tests placés
+    plus loin — selon l'empreinte mémoire de l'interpréteur. Tester ces limites en
+    patchant `resource.setrlimit`, ou dans un sous-processus.
+    """
+    if sys.platform == "win32":
+        yield
+        return
+    import resource
+
+    tracked = [
+        getattr(resource, name)
+        for name in ("RLIMIT_AS", "RLIMIT_DATA", "RLIMIT_CPU")
+        if hasattr(resource, name)
+    ]
+    before = {r: resource.getrlimit(r) for r in tracked}
+    yield
+    changed = {
+        r: resource.getrlimit(r) for r in tracked if resource.getrlimit(r) != before[r]
+    }
+    if changed:
+        for r, (soft, _hard) in changed.items():  # remet au moins la limite souple
+            try:
+                resource.setrlimit(r, (before[r][0], resource.getrlimit(r)[1]))
+            except (ValueError, OSError):
+                pass
+        pytest.fail(
+            "ce test a modifié les limites de ressources du process pytest "
+            f"({sorted(changed)}) — irréversible et valable pour toute la session ; "
+            "patcher resource.setrlimit ou utiliser un sous-processus",
+            pytrace=False,
+        )
 
 
 @pytest.fixture
