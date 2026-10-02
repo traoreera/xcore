@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-10-02
+
+Maintenance release — **no runtime change**: `xcore/` and the dependency ranges in `pyproject.toml` are identical to 2.7.0, so the published wheel behaves exactly like 2.7.0. It ships the repository-side security refresh and test/CI fixes below.
+
+### Security
+- **`poetry.lock` refreshed to close 11 Dependabot alerts** (1 critical, 6 high, 4 medium) by a targeted update of four packages, with no change to `pyproject.toml` constraints: `anyio` 4.14.1 → 4.15.1 (fixed in 4.14.2), `urllib3` 2.7.0 → 2.8.0, `virtualenv` 21.6.0 → 21.14.3 (fixed in 21.7.13) with its dependency `python-discovery` 1.4.3 → 1.6.1, and `mkdocs-material` 9.7.6 → 9.7.7. This matters for anything that installs from the lock — development, CI, Docker builds based on it; users who `pip install XCoreRuntime` resolve their own dependency versions and are not pinned by it.
+- CodeQL alert #29 (`py/clear-text-logging-sensitive-data`) reviewed and dismissed as a false positive: the flagged "secret" is the enum literal `ExecutionMode.TRUSTED = "trusted"`, logged by `ActivatorRegistry.register()`. No code change.
+
+### Fixed
+- **A test permanently lowered the pytest process's address-space limit**: `TestMemoryLimiter.test_apply_positive` really called `MemoryLimiter.apply(512)` in the test process. `RLIMIT_AS` is irreversible (the hard limit drops) and applies to the rest of the session: each thread created afterwards reserves ~72 MB of address space, and after about eight `threading.Thread.start()` raised `RuntimeError: can't start new thread` — which failed the `TestClient`-based tests placed later in the run on Python 3.14 (never on 3.12/3.13, depending on the interpreter's memory footprint). The test now asserts the `setrlimit` call with `resource.setrlimit` patched, and an autouse fixture in `tests/conftest.py` fails any test that changes `RLIMIT_AS`/`RLIMIT_DATA`/`RLIMIT_CPU` of the process.
+
+### Changed
+- **CI now also tests on Python 3.14** (matrix `3.12`, `3.13`, `3.14`): 3.14 is inside the supported range (`requires-python >=3.12,<4.0`) and is the development version, but was never exercised by the matrix.
+
+### Notes
+- On non-`main` branches the `Tests & Coverage` jobs run with `STRICT=0` (`make test-cov STRICT=0 || echo …`), so a failing test does not turn them red; only `Quick Test` and the strict run on `main` do. Unchanged here.
+
 ## [2.7.0] - 2026-10-01
 
 ### Changed
