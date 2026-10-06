@@ -20,6 +20,7 @@ from ..permissions.engine import PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry
 from .loader import PluginLoader
 from .middlewares import (
+    AuthResolverMiddleware,
     Middleware,
     MiddlewarePipeline,
     MiddlewareRegistry,
@@ -82,6 +83,9 @@ class PluginSupervisor:
             "rate_limit", lambda ctx: RateLimitMiddleware(ctx.get("rate"))
         )
         self._middleware_registry.register(
+            "auth_resolver", lambda ctx: AuthResolverMiddleware()
+        )
+        self._middleware_registry.register(
             "permissions", lambda ctx: PermissionMiddleware(ctx.get("permissions"))
         )
         self._middleware_registry.register("retry", lambda _: RetryMiddleware())
@@ -112,7 +116,7 @@ class PluginSupervisor:
             "permissions": self._permissions,
         }
         self._pipeline = self._middleware_registry.create_pipeline(
-            names=["tracing", "rate_limit", "permissions", "retry"],
+            names=["tracing", "rate_limit", "auth_resolver", "permissions", "retry"],
             context=mw_context,
             final_handler=self._dispatch,
         )
@@ -245,12 +249,20 @@ class PluginSupervisor:
         resource=None,
         caller=None,
         tenant_id: str = "default",
+        token: str | None = None,
+        principal: dict | None = None,
     ) -> dict:
         """
         Appelle une action sur un plugin via la pipeline de middlewares.
         caller=None     → appel HTTP direct (non IPC)
         caller="crm"    → appel IPC depuis le plugin "crm"
         tenant_id       → identifiant du tenant courant
+        token           → token brut (ex: extrait d'une requête HTTP entrante),
+                          résolu en `principal` par AuthResolverMiddleware via
+                          l'AuthBackend enregistré.
+        principal       → AuthPayload déjà résolu (ex: propagé depuis l'appel
+                          parent par TrustedBase.call_plugin()) — prioritaire
+                          sur `token`, pas de nouvelle résolution.
         """
         if self._loader is None or self._pipeline is None:
             return self._err("Supervisor non démarré", "not_ready")
@@ -271,6 +283,8 @@ class PluginSupervisor:
             resource=resource,
             caller=caller,
             tenant_id=tenant_id,
+            token=token,
+            principal=principal,
         )
         duration_ms = (time.monotonic() - t0) * 1000
         self._audit_ipc_call(
@@ -314,6 +328,7 @@ class PluginSupervisor:
         self, plugin_name: str, action: str, payload: dict, handler, **kwargs
     ) -> dict:
         """Dernière étape du pipeline : exécution réelle."""
+        from ..api.auth import _current_principal
         from ..tenancy.services import _current_tenant_id
 
         if handler is None:
@@ -325,18 +340,27 @@ class PluginSupervisor:
         tenant_id: str = kwargs.get(
             "tenant_id", getattr(tenancy, "default_tenant", "default")
         )
+        principal = kwargs.get("principal")
 
-        # Les services du plugin sont déjà wrappés (TenantAwareDB/Cache) au chargement.
-        # On positionne uniquement le ContextVar pour que les wrappers lisent le bon tenant.
-        # Chaque tâche asyncio a sa propre valeur — pas de mutation d'état partagé.
-        if tenancy is not None and tenancy.enabled:
-            token = _current_tenant_id.set(tenant_id)
-            try:
-                return await handler.call(action, payload)
-            finally:
-                _current_tenant_id.reset(token)
+        # Même pattern que le ContextVar tenant : posé une fois ici pour l'appel
+        # en cours, lu par get_current_principal() dans le plugin — jamais de
+        # mutation d'un objet PluginContext partagé entre requêtes concurrentes.
+        principal_token = _current_principal.set(principal)
+        try:
+            # Les services du plugin sont déjà wrappés (TenantAwareDB/Cache) au
+            # chargement. On positionne uniquement le ContextVar pour que les
+            # wrappers lisent le bon tenant. Chaque tâche asyncio a sa propre
+            # valeur — pas de mutation d'état partagé.
+            if tenancy is not None and tenancy.enabled:
+                tenant_token = _current_tenant_id.set(tenant_id)
+                try:
+                    return await handler.call(action, payload)
+                finally:
+                    _current_tenant_id.reset(tenant_token)
 
-        return await handler.call(action, payload)
+            return await handler.call(action, payload)
+        finally:
+            _current_principal.reset(principal_token)
 
     # ── Gestion dynamique ─────────────────────────────────────
 

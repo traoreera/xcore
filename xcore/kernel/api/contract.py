@@ -158,12 +158,17 @@ class TrustedBase(ABC):
                 f"[{self.ctx.name}] call_plugin() non disponible "
                 "(plugin sandboxed ou test sans caller)."
             )
+        from .auth import get_current_principal
+
         return await self.ctx.caller(
             plugin_name,
             action,
             payload or {},
             caller=self.ctx.name,
             tenant_id=self.ctx.tenant_id,
+            # Propage le principal déjà résolu de l'appel parent — pas de
+            # nouveau contact avec l'AuthBackend pour un appel IPC imbriqué.
+            principal=get_current_principal(),
         )
 
     # ── get_service — overloads typés ─────────────────────────────────────────
