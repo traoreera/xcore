@@ -12,7 +12,7 @@ All action and route decorators are importable from `xcore.sdk`.
 
 ## @action
 
-Registers an async method as a dispatchable action.
+Registers an async method as a dispatchable action, resolved by `AutoDispatchMixin.handle(action_name, payload)`.
 
 ```python
 from xcore.sdk import action
@@ -24,11 +24,20 @@ async def get_user(self, payload: dict) -> dict:
 
 **Parameters**
 
-| Name | Type | Description |
-|------|------|-------------|
-| `name` | `str` | Action identifier used in `handle(name, payload)` |
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `name` | `str` | — | Action identifier used in `handle(name, payload)` |
+| `permissions` | `list[str] \| None` | `None` | Roles/permissions required to invoke this action — stored on `fn._xcore_action_permissions`. Declarative only today: nothing in the kernel enforces it yet (see [Auth](./auth.md#resolving-the-current-user-on-ipc-calls)); it's the hook a future per-action RBAC middleware will read. |
 
-The decorated method must be `async`, accept `self` and `payload: dict`, and return a `dict`.
+Just these two parameters — nothing else. The decorated method must be `async`, accept `self` and `payload: dict`, and return a `dict`.
+
+`@action` and `@schema` are fully independent decorators — stack them (in either order) when an action also needs a versioned schema:
+
+```python
+@action("create_user", permissions=["admin"])
+@schema(version="2.0", input={"email": (str, ...)})
+async def create_user(self, payload: dict) -> dict: ...
+```
 
 ---
 
@@ -68,6 +77,8 @@ async def create_item(self, body: dict):
 ## @schema
 
 Declares a versioned schema for an action — stores it on `fn._xcore_schema` for the SchemaRegistry — and optionally applies `@validate_payload` automatically.
+
+Independent from `@action`: it can be stacked under `@action` in either order, or used alone on a method that isn't a dispatchable action at all (the schema metadata is just attached to the function; `AutoDispatchMixin` only registers it in the `SchemaRegistry` when `_xcore_action` is also present).
 
 ```python
 from xcore.sdk import action, schema

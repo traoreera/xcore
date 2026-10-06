@@ -20,9 +20,10 @@ graph TD
     A[Supervisor.call] --> M1[IPC Auth]
     M1 --> M2[Tracing]
     M2 --> M3[Rate Limit]
-    M3 --> M4[Permissions]
-    M4 --> M5[Retry]
-    M5 --> D[Final Dispatch]
+    M3 --> M4[Auth Resolver]
+    M4 --> M5[Permissions]
+    M5 --> M6[Retry]
+    M6 --> D[Final Dispatch]
     D --> P[Plugin.handle]
 ```
 
@@ -50,12 +51,19 @@ Enforces the quotas defined in the plugin's `plugin.yaml`.
 - Uses a sliding window algorithm.
 - Blocks calls once the `calls` per `period_seconds` threshold is exceeded.
 
-#### 4. Permissions (`PermissionMiddleware`)
+#### 4. Auth Resolver (`AuthResolverMiddleware`)
+Resolves the calling user (`principal`) via the registered `AuthBackend` — see [Auth: Resolving the current user on IPC calls](../sdk/api/auth.md#resolving-the-current-user-on-ipc-calls).
+- If `principal` is already set in kwargs (propagated from a parent IPC call), passes it through unchanged — the backend is **not** contacted again.
+- Otherwise, if a raw `token` kwarg is present and a backend is registered, calls `backend.decode_token(token)`.
+- Best-effort only: never raises, never blocks a call. `principal` is simply `None` when no backend/token is available.
+
+#### 5. Permissions (`PermissionMiddleware`)
 Evaluates the `resource` and `action` against the plugin's `PolicySet`.
 - Replaces the generic `execute` action with a specific resource string if provided.
 - Raises `PermissionDenied` on failure.
+- Separate system from the `principal` resolved above — this checks plugin-to-plugin resource ACLs, not user roles/permissions.
 
-#### 5. Retry (`RetryMiddleware`)
+#### 6. Retry (`RetryMiddleware`)
 Automatically retries failed calls to **Sandboxed** plugins if the worker process crashes or the IPC channel times out.
 - Configurable via the `retry:` block in `plugin.yaml`.
 
@@ -91,7 +99,7 @@ xcore.plugins.register_middleware(AuditMiddleware())
 | `payload` | `dict` | Input data for the call. |
 | `next_call` | `Callable`| The next step in the pipeline (must be awaited). |
 | `handler` | `Handler` | The supervisor handler for the target plugin. |
-| `**kwargs` | `dict` | Contextual data: `caller`, `tenant_id`, `resource`. |
+| `**kwargs` | `dict` | Contextual data: `caller`, `tenant_id`, `resource`, `token`, `principal`. |
 
 ---
 

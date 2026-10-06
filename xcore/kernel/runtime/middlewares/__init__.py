@@ -1,4 +1,5 @@
 from xcore.kernel.middlewares import (
+    AuthResolverMiddleware,
     Middleware,
     MiddlewarePipeline,
     MiddlewareRegistry,
@@ -11,6 +12,7 @@ from xcore.kernel.middlewares import (
 from .ipc_auth import IPCAuthMiddleware
 
 __all__ = [
+    "AuthResolverMiddleware",
     "Middleware",
     "MiddlewarePipeline",
     "MiddlewareRegistry",
