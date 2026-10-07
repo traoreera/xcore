@@ -74,6 +74,179 @@ class TestRateLimitMiddleware:
         assert result["status"] == "ok"
 
 
+class TestAuthResolverMiddleware:
+    @pytest.mark.asyncio
+    async def test_principal_already_resolved_skips_backend(self, monkeypatch):
+        from xcore.kernel.middlewares.auth_resolver import AuthResolverMiddleware
+
+        backend = MagicMock()
+        monkeypatch.setattr(
+            "xcore.kernel.middlewares.auth_resolver.get_auth_backend",
+            lambda: backend,
+        )
+        mw = AuthResolverMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        await mw("plugin", "action", {}, next_call, MagicMock(), principal={"sub": "u1"})
+
+        backend.decode_token.assert_not_called()
+        assert next_call.call_args.kwargs["principal"] == {"sub": "u1"}
+
+    @pytest.mark.asyncio
+    async def test_token_resolved_via_backend(self, monkeypatch):
+        from xcore.kernel.middlewares.auth_resolver import AuthResolverMiddleware
+
+        backend = MagicMock()
+        backend.decode_token = AsyncMock(return_value={"sub": "u1", "roles": ["admin"]})
+        monkeypatch.setattr(
+            "xcore.kernel.middlewares.auth_resolver.get_auth_backend",
+            lambda: backend,
+        )
+        mw = AuthResolverMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        await mw("plugin", "action", {}, next_call, MagicMock(), token="tok123")
+
+        backend.decode_token.assert_awaited_once_with("tok123")
+        kwargs = next_call.call_args.kwargs
+        assert kwargs["principal"] == {"sub": "u1", "roles": ["admin"]}
+        assert "token" not in kwargs
+
+    @pytest.mark.asyncio
+    async def test_no_backend_registered_yields_no_principal(self, monkeypatch):
+        from xcore.kernel.middlewares.auth_resolver import AuthResolverMiddleware
+
+        monkeypatch.setattr(
+            "xcore.kernel.middlewares.auth_resolver.get_auth_backend",
+            lambda: None,
+        )
+        mw = AuthResolverMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        await mw("plugin", "action", {}, next_call, MagicMock(), token="tok123")
+
+        assert next_call.call_args.kwargs["principal"] is None
+
+    @pytest.mark.asyncio
+    async def test_decode_token_exception_is_swallowed(self, monkeypatch):
+        from xcore.kernel.middlewares.auth_resolver import AuthResolverMiddleware
+
+        backend = MagicMock()
+        backend.decode_token = AsyncMock(side_effect=RuntimeError("boom"))
+        monkeypatch.setattr(
+            "xcore.kernel.middlewares.auth_resolver.get_auth_backend",
+            lambda: backend,
+        )
+        mw = AuthResolverMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        result = await mw("plugin", "action", {}, next_call, MagicMock(), token="bad")
+
+        assert result == {"status": "ok"}
+        assert next_call.call_args.kwargs["principal"] is None
+
+
+class TestActionPermissionMiddleware:
+    @pytest.mark.asyncio
+    async def test_no_permissions_declared_passes_through(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        result = await mw("plugin", "ping", {}, next_call, handler, principal=None)
+
+        assert result == {"status": "ok"}
+        next_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_denied_when_no_principal(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = ["admin"]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock()
+        result = await mw(
+            "plugin", "delete_user", {}, next_call, handler, principal=None
+        )
+
+        assert result["status"] == "error"
+        assert result["code"] == "action_permission_denied"
+        next_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_denied_when_role_missing(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = ["admin"]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock()
+        principal = {"sub": "u1", "roles": ["viewer"]}
+        result = await mw(
+            "plugin", "delete_user", {}, next_call, handler, principal=principal
+        )
+
+        assert result["status"] == "error"
+        assert result["code"] == "action_permission_denied"
+        next_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_allowed_when_role_present(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = ["admin"]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        principal = {"sub": "u1", "roles": ["admin"]}
+        result = await mw(
+            "plugin", "delete_user", {}, next_call, handler, principal=principal
+        )
+
+        assert result == {"status": "ok"}
+        next_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_allowed_when_permission_present_instead_of_role(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = ["write:users"]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        principal = {"sub": "u1", "permissions": ["write:users"]}
+        result = await mw(
+            "plugin", "create_user", {}, next_call, handler, principal=principal
+        )
+
+        assert result == {"status": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_handler_without_get_action_permissions_passes_through(self):
+        """Virtual plugins (ex: KernelHandler) don't expose get_action_permissions."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = object()
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        result = await mw(
+            "xcore", "plugin.list", {}, next_call, handler, principal=None
+        )
+
+        assert result == {"status": "ok"}
+
+
 class TestMiddlewareRegistry:
     def test_register_and_create_pipeline(self):
         from xcore.kernel.middlewares.middleware_registry import MiddlewareRegistry

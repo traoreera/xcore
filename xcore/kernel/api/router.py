@@ -160,10 +160,18 @@ def build_router(
         body: CallRequest,
         request: Request,
     ) -> CallResponse:
+        from .auth import resolve_principal_from_request
 
         tenant_id = getattr(request.state, "tenant_id", "default")
+        # Résolution best-effort de l'utilisateur appelant via l'AuthBackend
+        # enregistré — None si pas de backend/token, jamais d'erreur ici.
+        principal = await resolve_principal_from_request(request)
         result = await supervisor.call(
-            plugin_name, action, body.payload, tenant_id=tenant_id
+            plugin_name,
+            action,
+            body.payload,
+            tenant_id=tenant_id,
+            principal=principal,
         )
 
         if not result:

@@ -47,6 +47,13 @@ def _type_name(t: Any) -> str:
     return str(t)
 
 
+def _normalize_input(input: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalise les types simples du dict `input` en tuples pydantic (type, ...)."""
+    return {
+        k: (v if isinstance(v, tuple) else (v, ...)) for k, v in (input or {}).items()
+    }
+
+
 def schema(
     version: str,
     input: dict[str, Any] | None = None,
@@ -62,6 +69,11 @@ def schema(
     Déclare le schéma versionné d'une action, l'enregistre dans le SchemaRegistry,
     et applique automatiquement la validation du payload (validate=True par défaut).
 
+    Utilisable seul (sur n'importe quelle méthode) ou empilé avec @action — dans
+    ce dernier cas l'ordre n'importe pas, les deux décorateurs posent des
+    attributs distincts (_xcore_schema / _xcore_action) sur la même fonction.
+    @action accepte aussi directement ces mêmes paramètres pour l'usage fusionné.
+
     Le format du dict `input` suit la convention pydantic create_model :
       - type seul          → champ requis       : {"email": str}
       - (type, ...)        → champ requis       : {"email": (str, ...)}
@@ -75,8 +87,6 @@ def schema(
             output={"user_id": int, "created_at": str},
             deprecated_fields={"username": "Supprimé en v2.0 — utiliser email"},
             breaking_since="2.0",
-            type_response:Literal['dict', 'model', "_"]= "_",
-            unset:bool=False,
         )
         async def create_user(self, payload: dict) -> dict:
             # payload est déjà validé — email et role sont garantis
@@ -84,10 +94,7 @@ def schema(
     """
 
     def decorator(fn: Callable) -> Callable:
-        # Normalise les types simples en tuples pydantic (type, ...)
-        input_fields = {}
-        for k, v in (input or {}).items():
-            input_fields[k] = v if isinstance(v, tuple) else (v, ...)
+        input_fields = _normalize_input(input)
 
         # Applique validate_payload automatiquement si input est défini
         wrapped = (
@@ -111,14 +118,25 @@ def schema(
     return decorator
 
 
-def action(name: str):
+def action(name: str, permissions: list[str] | None = None):
     """
     Marque une méthode comme handler d'action.
     Génère automatiquement un dispatch dans handle() si utilisé avec AutoDispatchMixin.
+
+    `permissions` déclare les rôles/permissions RBAC requis pour l'appeler —
+    stocké sur fn._xcore_action_permissions. Purement déclaratif pour l'instant :
+    rien dans le kernel ne l'applique encore (voir doc/sdk/api/auth.md).
+
+    Pour un schéma versionné, empilez @schema séparément (voir sa docstring) :
+        @action("create_user", permissions=["admin"])
+        @schema(version="2.0", input={"email": (str, ...)})
+        async def create_user(self, payload: dict) -> dict:
+            ...
     """
 
     def decorator(fn: Callable) -> Callable:
         fn._xcore_action = name
+        fn._xcore_action_permissions = permissions or []
         return fn
 
     return decorator
