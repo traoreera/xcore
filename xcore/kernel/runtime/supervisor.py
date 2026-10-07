@@ -20,6 +20,7 @@ from ..permissions.engine import PermissionEngine
 from ..sandbox.limits import RateLimiterRegistry
 from .loader import PluginLoader
 from .middlewares import (
+    ActionPermissionMiddleware,
     AuthResolverMiddleware,
     Middleware,
     MiddlewarePipeline,
@@ -86,6 +87,9 @@ class PluginSupervisor:
             "auth_resolver", lambda ctx: AuthResolverMiddleware()
         )
         self._middleware_registry.register(
+            "action_permissions", lambda ctx: ActionPermissionMiddleware()
+        )
+        self._middleware_registry.register(
             "permissions", lambda ctx: PermissionMiddleware(ctx.get("permissions"))
         )
         self._middleware_registry.register("retry", lambda _: RetryMiddleware())
@@ -116,7 +120,14 @@ class PluginSupervisor:
             "permissions": self._permissions,
         }
         self._pipeline = self._middleware_registry.create_pipeline(
-            names=["tracing", "rate_limit", "auth_resolver", "permissions", "retry"],
+            names=[
+                "tracing",
+                "rate_limit",
+                "auth_resolver",
+                "action_permissions",
+                "permissions",
+                "retry",
+            ],
             context=mw_context,
             final_handler=self._dispatch,
         )

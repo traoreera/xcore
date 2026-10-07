@@ -231,6 +231,36 @@ class Plugin(BasePlugin):
         assert result["action"] == "test_action"
 
     @pytest.mark.asyncio
+    async def test_get_action_permissions(self, lifecycle_manager, tmp_path):
+        """Test get_action_permissions reads @action(permissions=...) declarations."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+from xcore.sdk.decorators import action
+from xcore.sdk.mixin.ipc import AutoDispatchMixin
+
+class Plugin(AutoDispatchMixin, BasePlugin):
+    @action("ping")
+    async def ping(self, payload):
+        return {"status": "ok"}
+
+    @action("delete_user", permissions=["admin"])
+    async def delete_user(self, payload):
+        return {"status": "ok"}
+""")
+
+        await lifecycle_manager.load()
+
+        assert lifecycle_manager.get_action_permissions("ping") == []
+        assert lifecycle_manager.get_action_permissions("delete_user") == ["admin"]
+        assert lifecycle_manager.get_action_permissions("unknown_action") == []
+
+    def test_get_action_permissions_not_loaded(self, lifecycle_manager):
+        """Test get_action_permissions is safe to call before the plugin is loaded."""
+        assert lifecycle_manager.get_action_permissions("anything") == []
+
+    @pytest.mark.asyncio
     async def test_call_not_loaded(self, lifecycle_manager):
         """Test call raises error when plugin not loaded."""
         with pytest.raises(RuntimeError) as exc_info:

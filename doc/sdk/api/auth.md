@@ -135,7 +135,7 @@ from xcore.kernel.api.rbac import RBACChecker, require_permission, require_role,
 
 Separately from the HTTP-route RBAC above, the **IPC call path** (`supervisor.call()` / `TrustedBase.call_plugin()`) resolves the calling user and makes it available to plugin code, via the same registered `AuthBackend` — without requiring `@route`.
 
-This is resolution only — it does not enforce anything by itself. The goal is to make "who is calling" available to plugin logic and to a future per-action permission check (`@action(permissions=[...])`, see [@action](./decorators.md#action)), while leaving existing behavior (requests with no backend registered, or no token) completely unaffected.
+By itself, resolving the principal doesn't block anything — see [Enforcing action permissions](#enforcing-action-permissions) below for what actually denies a call. Existing behavior (requests with no backend registered, or no token, and actions declaring no `permissions`) is completely unaffected either way.
 
 ### How a token becomes a principal
 
@@ -203,8 +203,20 @@ class Plugin(TrustedBase):
         ...
 ```
 
-### What this does *not* do (yet)
+## Enforcing action permissions
 
-- No action is blocked based on `principal` today — `@action(permissions=[...])` only stores the requirement on the function (`fn._xcore_action_permissions`); nothing in the kernel reads it yet.
-- `PermissionEngine` / `PolicySet` (plugin-to-plugin resource ACL, see [Permissions & Policies](../../plugins/permissions.md)) is a separate system and is not merged with this — it still answers "can plugin A call plugin B", not "does this user have this role".
-- If no plugin has called `register_auth_backend(...)`, every `principal` is always `None`, silently — no error, no behavior change versus before this feature existed.
+`ActionPermissionMiddleware` sits right after `AuthResolverMiddleware` in the pipeline (before `PermissionMiddleware`). For the action being called, it reads the declared requirement via `handler.get_action_permissions(action)` (`LifecycleManager.get_action_permissions()`, which looks up `fn._xcore_action_permissions` on the dispatched method — see [@action](./decorators.md#action)):
+
+- **No `permissions` declared** (the default) → no check at all, fully backward compatible.
+- **`permissions` declared** → the principal must have at least one matching entry in `roles` or `permissions` for *every* required item, or the call is denied with `{"status": "error", "code": "action_permission_denied"}`. No `principal` (no backend registered, or no token on this call) with a declared requirement is a denial, not a silent pass — fail-closed: an explicit requirement with nobody to prove it can't be waved through.
+
+```python
+@action("delete_user", permissions=["admin"])
+async def delete_user(self, payload: dict) -> dict:
+    # only reached if the resolved principal has "admin" in roles or permissions
+    ...
+```
+
+This is a separate system from `PermissionEngine` / `PolicySet` (plugin-to-plugin resource ACL, see [Permissions & Policies](../../plugins/permissions.md)) — that one answers "can plugin A call plugin B", this one answers "does this user have this role". Neither is merged into the other.
+
+No `AuthBackend` implementation ships in this repository — the kernel only ever depends on the protocol (`decode_token`/`extract_token`/`has_permission`), never on how tokens are produced or stored. A plugin author provides one (signed JWT, a shared session store, an external IdP...) and registers it with `register_auth_backend()` in `on_load()`.

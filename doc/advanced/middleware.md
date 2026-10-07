@@ -21,9 +21,10 @@ graph TD
     M1 --> M2[Tracing]
     M2 --> M3[Rate Limit]
     M3 --> M4[Auth Resolver]
-    M4 --> M5[Permissions]
-    M5 --> M6[Retry]
-    M6 --> D[Final Dispatch]
+    M4 --> M5[Action Permissions]
+    M5 --> M6[Permissions]
+    M6 --> M7[Retry]
+    M7 --> D[Final Dispatch]
     D --> P[Plugin.handle]
 ```
 
@@ -57,13 +58,19 @@ Resolves the calling user (`principal`) via the registered `AuthBackend` — see
 - Otherwise, if a raw `token` kwarg is present and a backend is registered, calls `backend.decode_token(token)`.
 - Best-effort only: never raises, never blocks a call. `principal` is simply `None` when no backend/token is available.
 
-#### 5. Permissions (`PermissionMiddleware`)
+#### 5. Action Permissions (`ActionPermissionMiddleware`)
+Enforces `@action(name, permissions=[...])` against the `principal` resolved above — see [Auth: Enforcing action permissions](../sdk/api/auth.md#enforcing-action-permissions).
+- No `permissions` declared on the action → no-op, fully backward compatible.
+- `permissions` declared → `principal`'s `roles`/`permissions` must cover all of them, or the call is denied (`action_permission_denied`). No `principal` with a declared requirement is a denial (fail-closed).
+- Reads the requirement via `handler.get_action_permissions(action)` — virtual/legacy handlers that don't expose it (e.g. the `xcore` kernel handler) are simply treated as declaring none.
+
+#### 6. Permissions (`PermissionMiddleware`)
 Evaluates the `resource` and `action` against the plugin's `PolicySet`.
 - Replaces the generic `execute` action with a specific resource string if provided.
 - Raises `PermissionDenied` on failure.
-- Separate system from the `principal` resolved above — this checks plugin-to-plugin resource ACLs, not user roles/permissions.
+- Separate system from the user-role check above — this checks plugin-to-plugin resource ACLs, not user roles/permissions.
 
-#### 6. Retry (`RetryMiddleware`)
+#### 7. Retry (`RetryMiddleware`)
 Automatically retries failed calls to **Sandboxed** plugins if the worker process crashes or the IPC channel times out.
 - Configurable via the `retry:` block in `plugin.yaml`.
 

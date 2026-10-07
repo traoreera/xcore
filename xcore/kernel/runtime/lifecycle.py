@@ -448,6 +448,25 @@ class LifecycleManager:
             result if isinstance(result, dict) else {"status": "ok", "result": result}
         )
 
+    def get_action_permissions(self, action: str) -> list[str]:
+        """
+        Permissions requises pour une action, déclarées via
+        @action(name, permissions=[...]). Liste vide si l'action n'en déclare
+        pas, si le plugin n'utilise pas AutoDispatchMixin, ou si l'action est
+        inconnue — ne jamais lever ici, un ActionPermissionMiddleware strict
+        s'appuie dessus avant même de savoir si l'action existe.
+        """
+        instance = self._instance
+        if instance is None:
+            return []
+        if not getattr(instance, "_action_map_built", False):
+            build = getattr(instance, "_build_action_map", None)
+            if build is None:
+                return []
+            build()
+        method = getattr(instance, "_action_map", {}).get(action)
+        return list(getattr(method, "_xcore_action_permissions", None) or [])
+
     # ── Reload ────────────────────────────────────────────────
 
     async def reload(self) -> None:
