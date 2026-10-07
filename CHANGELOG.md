@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-10-07
+
+### Added
+- **Action permissions middleware** (`ActionPermissionMiddleware`): enforces `@action(name, permissions=[...])` declarations against the resolved principal. Fail-closed: explicit permissions without principal are denied. Separate from `PermissionEngine/PolicySet` (plugin-to-plugin ACL). New `get_action_permissions()` method on `LifecycleManager`.
+
+### Changed
+- Middleware pipeline updated: `tracing → rate_limit → auth_resolver → action_permissions → permissions → retry`
+- Version bump to 2.8.1 across `__version__.py`, `pyproject.toml`, and `CLAUDE.md`
+
 ## [2.7.1] - 2026-10-02
 
 Maintenance release — **no runtime change**: `xcore/` and the dependency ranges in `pyproject.toml` are identical to 2.7.0, so the published wheel behaves exactly like 2.7.0. It ships the repository-side security refresh and test/CI fixes below.
