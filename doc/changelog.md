@@ -5,18 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.8.0] - 2026-10-06
+## [2.8.1] - 2026-10-07
 
 ### Added
-- **IPC calls can now resolve the calling user via the registered `AuthBackend`**, separately from the existing HTTP-route RBAC (`RBACChecker`). A new `AuthResolverMiddleware` sits in the plugin-call pipeline just before `PermissionMiddleware`: it resolves a `principal` (`AuthPayload`) from a raw `token` by calling `AuthBackend.decode_token()`, or passes through an already-resolved `principal` without contacting the backend again. `PluginSupervisor._dispatch()` exposes it for the duration of the call via a new `ContextVar` (`kernel/api/auth.py`), read with `get_current_principal()` — never by mutating the plugin's shared `PluginContext`. The generic HTTP endpoint `POST /{plugin}/{action}` resolves it best-effort from the incoming request (`resolve_principal_from_request()`); `TrustedBase.call_plugin()` forwards the current principal automatically on nested plugin-to-plugin IPC calls, with no re-decoding. This is resolution only — nothing in the kernel enforces anything on it yet. See [Auth: Resolving the current user on IPC calls](sdk/api/auth.md#resolving-the-current-user-on-ipc-calls).
-- **`@action(name, permissions=None)`** — optional `permissions` list, stored on `fn._xcore_action_permissions`, mirroring `@route`'s existing `permissions` param. Declarative only for now: the hook a future per-action permission check will read.
-- `xcdk` (`>=0.2.0,<0.3.0`) and `xcorecli` (`>=2.3.0,<3.0.0`) added as dependencies — both now published on PyPI, moving `xcore` towards depending on the real `xcoreSDK`/`xcoreCli` packages instead of only the vendored `xcore/sdk/` fallback.
+- **Action permissions middleware** (`ActionPermissionMiddleware`): enforces `@action(name, permissions=[...])` declarations against the resolved principal. Fail-closed: explicit permissions without principal are denied. Separate from `PermissionEngine/PolicySet` (plugin-to-plugin ACL). New `get_action_permissions()` method on `LifecycleManager`.
 
 ### Changed
-- `makefile` trimmed: removed the plugin clone/symlink/deploy/service-management targets (`add-plugin`, `rm-plugin`, `link`, `unlink`, `deploy`, `start`/`stop`/`restart`, `poetry-ri`, …), now superseded by `xcorecli`.
-
-### Removed
-- Stale generated report files that shouldn't have been tracked: `reports/bandit.{json,txt}`, `reports/bench_report_data.json`, `reports/report_analysis.md`, `reports/technical_debt_remediation_2026-08-10.md`, `reports/technical_debt_remediation_verification_2026-08-11.md`.
+- Middleware pipeline updated: `tracing → rate_limit → auth_resolver → action_permissions → permissions → retry`
+- Version bump to 2.8.1 across `__version__.py`, `pyproject.toml`, and `CLAUDE.md`
 
 ## [2.7.1] - 2026-10-02
 
