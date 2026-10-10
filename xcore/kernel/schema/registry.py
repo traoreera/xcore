@@ -1,11 +1,15 @@
 """
 SchemaRegistry — Registre central des schémas d'actions de plugins.
 
-Chaque action décorée avec @schema y est enregistrée automatiquement.
-Le registry permet de :
+Chaque action décorée avec @action y est enregistrée automatiquement, que
+@schema soit empilé dessous ou pas — une action sans @schema y apparaît avec
+input/output vides mais permissions/permission_groups renseignés s'ils sont
+déclarés. Le registry permet de :
   - valider les entrées/sorties au dispatch
   - persister les schémas (JSON) pour détecter les breaking changes entre déploiements
   - exposer la liste des actions versionnées via le CLI
+  - servir de catalogue complet (schéma + permissions) pour un consommateur
+    externe (génération de tools LLM, audit...) sans instancier chaque plugin
 """
 
 from __future__ import annotations
@@ -30,6 +34,32 @@ class ActionSchema:
     deprecated_fields: dict[str, str] = field(default_factory=dict)  # {field: reason}
     breaking_since: str | None = None
     description: str = ""
+    # JSON Schema complet (champs imbriqués, défauts, contraintes...) produit par
+    # le Model pydantic réel construit dans @schema — {} si l'action n'a pas de
+    # schéma d'entrée/sortie. `input`/`output` ci-dessus restent la source pour
+    # BreakingChangeDetector (comparaison type-par-type) ; ces deux champs sont
+    # pour les consommateurs externes (génération de tools LLM, OpenAPI, etc.)
+    # qui ont besoin de la forme complète, pas juste du nom du type.
+    input_json_schema: dict[str, Any] = field(default_factory=dict)
+    output_json_schema: dict[str, Any] = field(default_factory=dict)
+    # Miroir de fn._xcore_action_permissions / _xcore_action_permission_groups
+    # (@action(permissions=..., permission_groups=...), voir sdk/decorators.py).
+    # Dupliqué ici pour qu'un consommateur externe (catalogue d'outils LLM,
+    # audit, doc...) lise permissions ET schéma pour TOUTE action depuis ce
+    # seul registre — sans instancier le LifecycleManager de chaque plugin
+    # (seule autre source : LifecycleManager.get_action_permissions()/
+    # get_action_permission_groups(), qui exige une instance de plugin vivante
+    # et reste la source d'autorité pour ActionPermissionMiddleware).
+    permissions: list[str] = field(default_factory=list)
+    permission_groups: list[list[str]] = field(default_factory=list)
+    # Miroir de fn._xcore_action_side_effect (@action(side_effect=...)) —
+    # "read" | "write" | "outbound" | None. Axe orthogonal aux permissions :
+    # dit quel risque représente l'action une fois l'appel autorisé, pas qui
+    # peut l'appeler. Purement déclaratif ici aussi — xcore n'en fait rien,
+    # c'est un consommateur externe (ex : génération de tools LLM) qui décide
+    # si une action sans side_effect déclaré doit être traitée comme la plus
+    # risquée avant de l'exposer comme tool auto-approuvé.
+    side_effect: str | None = None
 
     @property
     def key(self) -> str:

@@ -27,9 +27,23 @@ async def get_user(self, payload: dict) -> dict:
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `name` | `str` | — | Action identifier used in `handle(name, payload)` |
-| `permissions` | `list[str] \| None` | `None` | Roles/permissions required to invoke this action — stored on `fn._xcore_action_permissions`. Declarative only today: nothing in the kernel enforces it yet (see [Auth](./auth.md#resolving-the-current-user-on-ipc-calls)); it's the hook a future per-action RBAC middleware will read. |
+| `permissions` | `list[str] \| None` | `None` | Roles/permissions required to invoke this action — **all** of them (AND). Stored on `fn._xcore_action_permissions`, enforced by `ActionPermissionMiddleware` against the `principal` resolved by `AuthResolverMiddleware` (see [Auth: Enforcing action permissions](./auth.md#enforcing-action-permissions)). No `principal` with a declared requirement is a denial (fail-closed). |
+| `permission_groups` | `list[list[str]] \| None` | `None` | Alternative permission groups — satisfied if the principal fully covers **at least one** group (OR of AND). For a role hierarchy where several distinct permissions each grant sufficient access on their own (e.g. a tenant owner *or* a platform admin) — `permissions` alone can't express that, it would require both. Independent and combinable with `permissions`: if both are set, `permissions` must be fully satisfied *and* at least one group must be too. |
+| `side_effect` | `"read" \| "write" \| "outbound" \| None` | `None` | Declares how consequential the action is — orthogonal to `permissions`: `permissions` says *who* can call it, `side_effect` says *what risk* it carries once the call is authorized. Purely declarative — the kernel does nothing with it itself; it's for an external consumer (e.g. a bridge exposing actions as LLM tools) to decide whether an action can be a direct tool or needs human approval first. Raises `ValueError` at decoration time if given anything other than one of the three values. An action without a declared `side_effect` should be treated by such a consumer as the riskiest tier — no declaration is not an implicit green light. |
 
-Just these two parameters — nothing else. The decorated method must be `async`, accept `self` and `payload: dict`, and return a `dict`.
+The decorated method must be `async`, accept `self` and `payload: dict`, and return a `dict`.
+
+```python
+@action("team_report", permission_groups=[["tenants:write"], ["admin:*"]])
+async def team_report(self, payload: dict) -> dict:
+    # allowed for the tenant owner (tenants:write) OR a platform admin
+    # (admin:*) — never both required at once.
+    ...
+
+@action("send_email", permissions=["admin"], side_effect="outbound")
+async def send_email(self, payload: dict) -> dict:
+    ...
+```
 
 `@action` and `@schema` are fully independent decorators — stack them (in either order) when an action also needs a versioned schema:
 
@@ -38,6 +52,10 @@ Just these two parameters — nothing else. The decorated method must be `async`
 @schema(version="2.0", input={"email": (str, ...)})
 async def create_user(self, payload: dict) -> dict: ...
 ```
+
+### Reading permissions/side_effect without a live plugin instance
+
+Both `fn._xcore_action_permissions`/`_xcore_action_permission_groups`/`_xcore_action_side_effect` (read per-call by `ActionPermissionMiddleware` via `LifecycleManager.get_action_permissions()`/`get_action_permission_groups()`, which need a loaded plugin instance) **and** a mirror of all three on `SchemaRegistry`'s `ActionSchema` (see [Schema metadata](#schema-metadata)) are populated — the registry entry exists for *every* `@action`, with or without `@schema`, specifically so an external consumer can read permissions and schema for the whole system from `schema_registry` alone, without instantiating each plugin's `LifecycleManager`.
 
 ---
 
@@ -138,18 +156,32 @@ When `type_response="_"` (default), validation is skipped; `@schema` only stores
 
 ### Schema metadata
 
-The schema is stored on the function as `fn._xcore_schema`:
+The schema is stored on the function as `fn._xcore_schema`. `@schema` builds the pydantic model **once** from `input` (and once from `output`) and reuses that same model for both validation (via `@validate_payload` internally) and the JSON Schema below — it doesn't rebuild a separate model for each:
 
 ```python
 {
     "version": "2.0",
-    "input": {"email": "str", "role": "str"},
+    "input": {"email": "str", "role": "str"},        # {field: type name} — used by BreakingChangeDetector
     "output": {"user_id": "int", "created_at": "str"},
     "deprecated_fields": {},
     "breaking_since": None,
     "description": "Create a new user account",
+    "input_json_schema": {                            # full JSON Schema from the real pydantic model
+        "title": "DynamicSchema",
+        "type": "object",
+        "properties": {
+            "email": {"title": "Email", "type": "string"},
+            "role": {"title": "Role", "type": "string", "default": "user"},
+        },
+        "required": ["email"],
+    },
+    "output_json_schema": {"...": "same shape, from `output`"},
 }
 ```
+
+`input`/`output` stay flat `{field: type_name}` dicts — that's what `BreakingChangeDetector` compares field-by-field to flag breaking changes, and a full JSON Schema diff would be a different (stricter) comparison. `input_json_schema`/`output_json_schema` are for consumers that need the real shape (nested fields, defaults, constraints) — generating an LLM tool definition, OpenAPI, documentation — not just a type name. Both are `{}` when the corresponding `input`/`output` wasn't declared.
+
+This is also mirrored on `SchemaRegistry`'s `ActionSchema.input_json_schema`/`.output_json_schema` (see [Reading permissions/side_effect without a live plugin instance](#reading-permissionsside_effect-without-a-live-plugin-instance)).
 
 ### Deprecation tracking
 

@@ -205,18 +205,30 @@ class Plugin(TrustedBase):
 
 ## Enforcing action permissions
 
-`ActionPermissionMiddleware` sits right after `AuthResolverMiddleware` in the pipeline (before `PermissionMiddleware`). For the action being called, it reads the declared requirement via `handler.get_action_permissions(action)` (`LifecycleManager.get_action_permissions()`, which looks up `fn._xcore_action_permissions` on the dispatched method — see [@action](./decorators.md#action)):
+`ActionPermissionMiddleware` sits right after `AuthResolverMiddleware` in the pipeline (before `PermissionMiddleware`). For the action being called, it reads the declared requirements via `handler.get_action_permissions(action)` / `handler.get_action_permission_groups(action)` (`LifecycleManager`, which look up `fn._xcore_action_permissions` / `fn._xcore_action_permission_groups` on the dispatched method — see [@action](./decorators.md#action)):
 
-- **No `permissions` declared** (the default) → no check at all, fully backward compatible.
-- **`permissions` declared** → the principal must have at least one matching entry in `roles` or `permissions` for *every* required item, or the call is denied with `{"status": "error", "code": "action_permission_denied"}`. No `principal` (no backend registered, or no token on this call) with a declared requirement is a denial, not a silent pass — fail-closed: an explicit requirement with nobody to prove it can't be waved through.
+- **Neither `permissions` nor `permission_groups` declared** (the default) → no check at all, fully backward compatible.
+- **`permissions` declared** (AND) → the principal must have a matching entry in `roles` or `permissions` for *every* required item.
+- **`permission_groups` declared** (OR of AND) → the principal must fully cover *at least one* of the declared groups — for a role hierarchy where several distinct permissions each grant sufficient access on their own (`permissions` alone would require all of them at once).
+- If both are declared on the same action, both conditions apply: `permissions` must be fully satisfied *and* at least one group must be too.
+- Either requirement, if declared, is denied with `{"status": "error", "code": "action_permission_denied"}` when unmet. No `principal` (no backend registered, or no token on this call) with a declared requirement is a denial, not a silent pass — fail-closed: an explicit requirement with nobody to prove it can't be waved through.
 
 ```python
 @action("delete_user", permissions=["admin"])
 async def delete_user(self, payload: dict) -> dict:
     # only reached if the resolved principal has "admin" in roles or permissions
     ...
+
+@action("team_report", permission_groups=[["tenants:write"], ["admin:*"]])
+async def team_report(self, payload: dict) -> dict:
+    # the tenant owner (tenants:write) OR a platform admin (admin:*) — never both
+    ...
 ```
 
 This is a separate system from `PermissionEngine` / `PolicySet` (plugin-to-plugin resource ACL, see [Permissions & Policies](../../plugins/permissions.md)) — that one answers "can plugin A call plugin B", this one answers "does this user have this role". Neither is merged into the other.
+
+`permissions`/`permission_groups` are also mirrored on `ActionSchema` in `schema_registry` for every `@action` (schema or not) — see [decorators: reading permissions/side_effect without a live plugin instance](./decorators.md#reading-permissionsside_effect-without-a-live-plugin-instance). That registry entry is a read-only catalog for external tooling; `ActionPermissionMiddleware` itself still reads the live `LifecycleManager` at call time, not the registry.
+
+Authorization (`permissions`/`permission_groups`) is a different axis from risk/supervision level: a legitimate, authorized caller can still trigger something irreversible. `@action(..., side_effect="read"|"write"|"outbound")` declares that separately and is purely informational to the kernel — see [@action](./decorators.md#action).
 
 No `AuthBackend` implementation ships in this repository — the kernel only ever depends on the protocol (`decode_token`/`extract_token`/`has_permission`), never on how tokens are produced or stored. A plugin author provides one (signed JWT, a shared session store, an external IdP...) and registers it with `register_auth_backend()` in `on_load()`.

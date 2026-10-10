@@ -96,13 +96,29 @@ def schema(
     def decorator(fn: Callable) -> Callable:
         input_fields = _normalize_input(input)
 
+        # Construit le Model une seule fois ici — validate_payload le reçoit
+        # tout fait au lieu de refaire son propre create_model() à partir du
+        # même dict. C'est aussi ce Model qui donne le JSON Schema complet
+        # (champs imbriqués, défauts, contraintes...), que le seul dict
+        # {field: type_name} ci-dessous ne peut pas exprimer.
+        InputModel = (
+            create_model("DynamicSchema", **input_fields) if input_fields else None
+        )
+
         # Applique validate_payload automatiquement si input est défini
         wrapped = (
             validate_payload(
-                schema=input_fields, type_response=type_response, unset=unset
+                schema=InputModel, type_response=type_response, unset=unset
             )(fn)
-            if validate and input_fields and type_response != "_"
+            if validate and InputModel is not None and type_response != "_"
             else fn
+        )
+
+        output_fields = _normalize_input(output)
+        OutputModel = (
+            create_model("DynamicOutputSchema", **output_fields)
+            if output_fields
+            else None
         )
 
         wrapped._xcore_schema = {
@@ -112,16 +128,24 @@ def schema(
             "deprecated_fields": deprecated_fields or {},
             "breaking_since": breaking_since,
             "description": description,
+            "input_json_schema": InputModel.model_json_schema() if InputModel else {},
+            "output_json_schema": (
+                OutputModel.model_json_schema() if OutputModel else {}
+            ),
         }
         return wrapped
 
     return decorator
 
 
+_VALID_SIDE_EFFECTS = frozenset({"read", "write", "outbound"})
+
+
 def action(
     name: str,
     permissions: list[str] | None = None,
     permission_groups: list[list[str]] | None = None,
+    side_effect: Literal["read", "write", "outbound"] | None = None,
 ):
     """
     Marque une méthode comme handler d'action.
@@ -146,17 +170,37 @@ def action(
             # plateforme (admin:*) — jamais les deux à la fois exigés.
             ...
 
+    `side_effect` déclare le niveau de conséquence de l'action — "read" (aucun
+    effet de bord), "write" (modifie un état interne) ou "outbound" (quitte le
+    système : email, paiement, appel HTTP sortant, message posté...). C'est un
+    axe orthogonal à `permissions` : `permissions` dit QUI peut appeler,
+    `side_effect` dit QUEL RISQUE ça représente une fois l'appel autorisé — un
+    appelant légitime peut quand même déclencher quelque chose d'irréversible.
+    Purement déclaratif, stocké sur fn._xcore_action_side_effect : xcore n'en
+    fait rien lui-même, ni n'en déduit l'enforcement. L'usage prévu est qu'un
+    consommateur externe (ex : un pont qui expose les actions comme tools LLM)
+    lise cette valeur via ActionSchema.side_effect pour décider seul si une
+    action peut être un tool direct ou doit passer par une approbation — en
+    traitant toute action sans `side_effect` déclaré comme la plus risquée
+    (pas de valeur = pas de feu vert implicite).
+
     Pour un schéma versionné, empilez @schema séparément (voir sa docstring) :
         @action("create_user", permissions=["admin"])
         @schema(version="2.0", input={"email": (str, ...)})
         async def create_user(self, payload: dict) -> dict:
             ...
     """
+    if side_effect is not None and side_effect not in _VALID_SIDE_EFFECTS:
+        raise ValueError(
+            f"side_effect invalide : {side_effect!r} — attendu l'un de "
+            f"{sorted(_VALID_SIDE_EFFECTS)} ou None"
+        )
 
     def decorator(fn: Callable) -> Callable:
         fn._xcore_action = name
         fn._xcore_action_permissions = permissions or []
         fn._xcore_action_permission_groups = permission_groups or []
+        fn._xcore_action_side_effect = side_effect
         return fn
 
     return decorator
