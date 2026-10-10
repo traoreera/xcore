@@ -261,6 +261,39 @@ class Plugin(AutoDispatchMixin, BasePlugin):
         assert lifecycle_manager.get_action_permissions("anything") == []
 
     @pytest.mark.asyncio
+    async def test_get_action_permission_groups(self, lifecycle_manager, tmp_path):
+        """Test get_action_permission_groups reads @action(permission_groups=...) declarations."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "main.py").write_text("""
+from xcore.kernel.api.contract import BasePlugin
+from xcore.sdk.decorators import action
+from xcore.sdk.mixin.ipc import AutoDispatchMixin
+
+class Plugin(AutoDispatchMixin, BasePlugin):
+    @action("ping")
+    async def ping(self, payload):
+        return {"status": "ok"}
+
+    @action("team_report", permission_groups=[["tenants:write"], ["admin:*"]])
+    async def team_report(self, payload):
+        return {"status": "ok"}
+""")
+
+        await lifecycle_manager.load()
+
+        assert lifecycle_manager.get_action_permission_groups("ping") == []
+        assert lifecycle_manager.get_action_permission_groups("team_report") == [
+            ["tenants:write"],
+            ["admin:*"],
+        ]
+        assert lifecycle_manager.get_action_permission_groups("unknown_action") == []
+
+    def test_get_action_permission_groups_not_loaded(self, lifecycle_manager):
+        """Test get_action_permission_groups is safe to call before the plugin is loaded."""
+        assert lifecycle_manager.get_action_permission_groups("anything") == []
+
+    @pytest.mark.asyncio
     async def test_call_not_loaded(self, lifecycle_manager):
         """Test call raises error when plugin not loaded."""
         with pytest.raises(RuntimeError) as exc_info:

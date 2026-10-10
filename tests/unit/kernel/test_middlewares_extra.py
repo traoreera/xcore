@@ -151,6 +151,7 @@ class TestActionPermissionMiddleware:
 
         handler = MagicMock()
         handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = []
         mw = ActionPermissionMiddleware()
         next_call = AsyncMock(return_value={"status": "ok"})
         result = await mw("plugin", "ping", {}, next_call, handler, principal=None)
@@ -166,6 +167,7 @@ class TestActionPermissionMiddleware:
 
         handler = MagicMock()
         handler.get_action_permissions.return_value = ["admin"]
+        handler.get_action_permission_groups.return_value = []
         mw = ActionPermissionMiddleware()
         next_call = AsyncMock()
         result = await mw(
@@ -184,6 +186,7 @@ class TestActionPermissionMiddleware:
 
         handler = MagicMock()
         handler.get_action_permissions.return_value = ["admin"]
+        handler.get_action_permission_groups.return_value = []
         mw = ActionPermissionMiddleware()
         next_call = AsyncMock()
         principal = {"sub": "u1", "roles": ["viewer"]}
@@ -203,6 +206,7 @@ class TestActionPermissionMiddleware:
 
         handler = MagicMock()
         handler.get_action_permissions.return_value = ["admin"]
+        handler.get_action_permission_groups.return_value = []
         mw = ActionPermissionMiddleware()
         next_call = AsyncMock(return_value={"status": "ok"})
         principal = {"sub": "u1", "roles": ["admin"]}
@@ -221,6 +225,7 @@ class TestActionPermissionMiddleware:
 
         handler = MagicMock()
         handler.get_action_permissions.return_value = ["write:users"]
+        handler.get_action_permission_groups.return_value = []
         mw = ActionPermissionMiddleware()
         next_call = AsyncMock(return_value={"status": "ok"})
         principal = {"sub": "u1", "permissions": ["write:users"]}
@@ -242,6 +247,172 @@ class TestActionPermissionMiddleware:
         next_call = AsyncMock(return_value={"status": "ok"})
         result = await mw(
             "xcore", "plugin.list", {}, next_call, handler, principal=None
+        )
+
+        assert result == {"status": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_group_satisfied_by_first_group(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = [
+            ["tenants:write"],
+            ["admin:*"],
+        ]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        principal = {"sub": "owner", "permissions": ["tenants:write"]}
+        result = await mw(
+            "chat", "team_report", {}, next_call, handler, principal=principal
+        )
+
+        assert result == {"status": "ok"}
+        next_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_group_satisfied_by_second_group(self):
+        """L'autre moitié de l'alternative : admin plateforme sans être owner du tenant."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = [
+            ["tenants:write"],
+            ["admin:*"],
+        ]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        principal = {"sub": "platform_admin", "permissions": ["admin:*"]}
+        result = await mw(
+            "chat", "team_report", {}, next_call, handler, principal=principal
+        )
+
+        assert result == {"status": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_denied_when_no_group_fully_satisfied(self):
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = [
+            ["tenants:write"],
+            ["admin:*"],
+        ]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock()
+        principal = {"sub": "member", "permissions": ["conversations:read"]}
+        result = await mw(
+            "chat", "team_report", {}, next_call, handler, principal=principal
+        )
+
+        assert result["status"] == "error"
+        assert result["code"] == "action_permission_denied"
+        next_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_group_requires_every_permission_within_it(self):
+        """Un groupe à plusieurs permissions est un ET interne : en manquer une le disqualifie."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = [["a", "b"]]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock()
+        principal = {"sub": "u1", "permissions": ["a"]}
+        result = await mw(
+            "plugin", "action", {}, next_call, handler, principal=principal
+        )
+
+        assert result["status"] == "error"
+        assert result["code"] == "action_permission_denied"
+
+    @pytest.mark.asyncio
+    async def test_denied_when_groups_declared_but_no_principal(self):
+        """Fail-closed : mêmes règles que `permissions` seul."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = []
+        handler.get_action_permission_groups.return_value = [["admin:*"]]
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock()
+        result = await mw(
+            "chat", "team_report", {}, next_call, handler, principal=None
+        )
+
+        assert result["status"] == "error"
+        assert result["code"] == "action_permission_denied"
+
+    @pytest.mark.asyncio
+    async def test_permissions_and_groups_both_declared_both_must_pass(self):
+        """`permissions` (ET) et `permission_groups` (OU de ET) cumulés : les deux conditions s'appliquent."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock()
+        handler.get_action_permissions.return_value = ["base:access"]
+        handler.get_action_permission_groups.return_value = [
+            ["tenants:write"],
+            ["admin:*"],
+        ]
+        mw = ActionPermissionMiddleware()
+
+        # Le ET (`permissions`) passe mais aucun groupe n'est couvert → refusé.
+        next_call = AsyncMock()
+        principal = {"sub": "u1", "permissions": ["base:access"]}
+        result = await mw(
+            "plugin", "action", {}, next_call, handler, principal=principal
+        )
+        assert result["status"] == "error"
+        next_call.assert_not_called()
+
+        # Un groupe est couvert mais le ET échoue → refusé.
+        next_call = AsyncMock()
+        principal = {"sub": "u2", "permissions": ["tenants:write"]}
+        result = await mw(
+            "plugin", "action", {}, next_call, handler, principal=principal
+        )
+        assert result["status"] == "error"
+        next_call.assert_not_called()
+
+        # Les deux conditions tiennent → autorisé.
+        next_call = AsyncMock(return_value={"status": "ok"})
+        principal = {"sub": "u3", "permissions": ["base:access", "tenants:write"]}
+        result = await mw(
+            "plugin", "action", {}, next_call, handler, principal=principal
+        )
+        assert result == {"status": "ok"}
+        next_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handler_without_get_action_permission_groups_passes_through(self):
+        """Rétrocompatible avec un handler qui n'expose pas get_action_permission_groups
+        (ex: un LifecycleManager d'une version xcore antérieure à cette fonctionnalité)."""
+        from xcore.kernel.middlewares.action_permissions import (
+            ActionPermissionMiddleware,
+        )
+
+        handler = MagicMock(spec=["get_action_permissions"])
+        handler.get_action_permissions.return_value = []
+        mw = ActionPermissionMiddleware()
+        next_call = AsyncMock(return_value={"status": "ok"})
+        result = await mw(
+            "plugin", "action", {}, next_call, handler, principal=None
         )
 
         assert result == {"status": "ok"}
