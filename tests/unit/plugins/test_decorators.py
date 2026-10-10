@@ -36,6 +36,91 @@ class TestActionDecorator:
         assert hasattr(plugin.process_action, "_xcore_action")
         assert plugin.process_action._xcore_action == "process"
 
+    def test_side_effect_stored(self):
+        class Plugin:
+            @action("send_email", side_effect="outbound")
+            async def send_email(self, payload):
+                return {"status": "ok"}
+
+            @action("ping")
+            async def ping(self, payload):
+                return {"status": "ok"}
+
+        plugin = Plugin()
+        assert plugin.send_email._xcore_action_side_effect == "outbound"
+        # Non déclaré : None, jamais une valeur par défaut qui ressemblerait
+        # à un feu vert implicite.
+        assert plugin.ping._xcore_action_side_effect is None
+
+    def test_side_effect_rejects_unknown_value(self):
+        with pytest.raises(ValueError):
+
+            class Plugin:
+                @action("bad", side_effect="delete_everything")
+                async def bad(self, payload):
+                    return {"status": "ok"}
+
+
+class TestSchemaDecorator:
+    """Test @schema decorator — Model pydantic unifié + JSON Schema."""
+
+    def test_input_json_schema_reflects_real_model(self):
+        from xcore.sdk import schema
+
+        class Plugin:
+            @action("create_user")
+            @schema(
+                version="2.0",
+                input={"email": (str, ...), "role": (str, "user")},
+                output={"user_id": int},
+            )
+            async def create_user(self, payload):
+                return {"status": "ok"}
+
+        meta = Plugin.create_user._xcore_schema
+        js = meta["input_json_schema"]
+        assert js["required"] == ["email"]
+        assert js["properties"]["role"]["default"] == "user"
+        assert meta["output_json_schema"]["properties"]["user_id"]["type"] == "integer"
+
+    def test_no_input_no_json_schema(self):
+        from xcore.sdk import schema
+
+        class Plugin:
+            @action("ping")
+            @schema(version="1.0")
+            async def ping(self, payload):
+                return {"status": "ok"}
+
+        meta = Plugin.ping._xcore_schema
+        assert meta["input_json_schema"] == {}
+        assert meta["output_json_schema"] == {}
+
+    @pytest.mark.asyncio
+    async def test_validation_still_applies_through_unified_model(self):
+        """La validation de payload doit continuer à fonctionner alors que le
+        Model est désormais construit une seule fois dans @schema (et non
+        plus refait séparément par @validate_payload)."""
+        from xcore.sdk import error, schema
+
+        class Plugin:
+            @action("create_user")
+            @schema(
+                version="1.0",
+                input={"email": (str, ...)},
+                type_response="dict",
+            )
+            async def create_user(self, payload):
+                return {"status": "ok", "email": payload["email"]}
+
+        plugin = Plugin()
+        ok_result = await plugin.create_user({"email": "a@b.com"})
+        assert ok_result["status"] == "ok"
+
+        bad_result = await plugin.create_user({})
+        assert bad_result["status"] == "error"
+        assert bad_result["code"] == "validation_error"
+
 
 class TestTrustedDecorator:
     """Test @trusted decorator."""
@@ -275,6 +360,35 @@ class TestAutoDispatchMixin:
 
         assert "action1" in result["msg"]
         assert "action2" in result["msg"]
+
+    def test_register_schemas_covers_every_action_not_just_schema(self):
+        """Une action sans @schema (seulement @action, avec ou sans
+        permissions) doit quand même apparaître dans le SchemaRegistry —
+        sinon un consommateur qui ne lit que ce registre perd silencieusement
+        ses permissions."""
+        from xcore.kernel.schema.registry import schema_registry
+
+        class TestPlugin(AutoDispatchMixin):
+            @action("bare_ping")
+            async def bare_ping(self, payload: dict) -> dict:
+                return {"status": "ok"}
+
+            @action("delete_user", permissions=["admin"], side_effect="write")
+            async def delete_user(self, payload: dict) -> dict:
+                return {"status": "ok"}
+
+        plugin = TestPlugin()
+        plugin._register_schemas("test_register_plugin")
+
+        bare = schema_registry.get("test_register_plugin", "bare_ping")
+        assert bare is not None
+        assert bare.permissions == []
+        assert bare.input_json_schema == {}
+
+        delete = schema_registry.get("test_register_plugin", "delete_user")
+        assert delete is not None
+        assert delete.permissions == ["admin"]
+        assert delete.side_effect == "write"
 
 
 class TestRoutedPlugin:

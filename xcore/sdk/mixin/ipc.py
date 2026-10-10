@@ -33,7 +33,16 @@ class AutoDispatchMixin:
         self._action_map_built = True
 
     def _register_schemas(self, plugin_name: str) -> None:
-        """Enregistre tous les schémas @schema de ce plugin dans le SchemaRegistry."""
+        """
+        Enregistre une ActionSchema par méthode @action de ce plugin — schéma
+        (@schema, optionnel) ET permissions (@action(permissions=...,
+        permission_groups=...), optionnelles elles aussi) dans le même
+        SchemaRegistry. Une action sans l'un ou l'autre y apparaît quand même
+        (champs vides) : le registre reste le catalogue complet de TOUTES les
+        actions du plugin, pas seulement celles qui ont un @schema — sinon un
+        consommateur externe qui ne lirait que ce registre perdrait
+        silencieusement les permissions des actions sans schéma déclaré.
+        """
         from xcore.kernel.schema.registry import ActionSchema, schema_registry
 
         for attr_name in dir(self.__class__):
@@ -41,20 +50,31 @@ class AutoDispatchMixin:
             if not callable(method):
                 continue
             action_name = getattr(method, "_xcore_action", None)
-            schema_meta = getattr(method, "_xcore_schema", None)
-            if action_name and schema_meta:
-                schema_registry.register(
-                    ActionSchema(
-                        plugin=plugin_name,
-                        action=action_name,
-                        version=schema_meta["version"],
-                        input=schema_meta["input"],
-                        output=schema_meta["output"],
-                        deprecated_fields=schema_meta["deprecated_fields"],
-                        breaking_since=schema_meta["breaking_since"],
-                        description=schema_meta["description"],
+            if not action_name:
+                continue
+
+            schema_meta = getattr(method, "_xcore_schema", None) or {}
+            schema_registry.register(
+                ActionSchema(
+                    plugin=plugin_name,
+                    action=action_name,
+                    version=schema_meta.get("version", ""),
+                    input=schema_meta.get("input", {}),
+                    output=schema_meta.get("output", {}),
+                    deprecated_fields=schema_meta.get("deprecated_fields", {}),
+                    breaking_since=schema_meta.get("breaking_since"),
+                    description=schema_meta.get("description", ""),
+                    input_json_schema=schema_meta.get("input_json_schema", {}),
+                    output_json_schema=schema_meta.get("output_json_schema", {}),
+                    permissions=getattr(method, "_xcore_action_permissions", None)
+                    or [],
+                    permission_groups=getattr(
+                        method, "_xcore_action_permission_groups", None
                     )
+                    or [],
+                    side_effect=getattr(method, "_xcore_action_side_effect", None),
                 )
+            )
 
     async def handle(self, action_name: str, payload: dict) -> dict:
         from xcore.kernel.api.contract import error
