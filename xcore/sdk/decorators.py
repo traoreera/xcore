@@ -118,14 +118,33 @@ def schema(
     return decorator
 
 
-def action(name: str, permissions: list[str] | None = None):
+def action(
+    name: str,
+    permissions: list[str] | None = None,
+    permission_groups: list[list[str]] | None = None,
+):
     """
     Marque une méthode comme handler d'action.
     Génère automatiquement un dispatch dans handle() si utilisé avec AutoDispatchMixin.
 
-    `permissions` déclare les rôles/permissions RBAC requis pour l'appeler —
-    stocké sur fn._xcore_action_permissions. Purement déclaratif pour l'instant :
-    rien dans le kernel ne l'applique encore (voir doc/sdk/api/auth.md).
+    `permissions` déclare les rôles/permissions RBAC requis pour l'appeler — TOUS
+    sont exigés (ET), stocké sur fn._xcore_action_permissions. Appliqué par
+    ActionPermissionMiddleware (voir doc/sdk/api/auth.md).
+
+    `permission_groups` déclare des groupes alternatifs — satisfait si le principal
+    possède TOUS les éléments d'AU MOINS UN groupe (OU de ET), stocké sur
+    fn._xcore_action_permission_groups. Pour une hiérarchie de rôles où plusieurs
+    permissions distinctes donnent chacune un accès suffisant (ex : le responsable
+    d'un tenant OU l'administrateur de la plateforme), `permissions` seul ne peut
+    pas l'exprimer (il exigerait les DEUX). Les deux paramètres sont indépendants
+    et cumulables : si les deux sont fournis, `permissions` doit être entièrement
+    satisfait ET au moins un groupe de `permission_groups` doit l'être aussi.
+
+        @action("team_report", permission_groups=[["tenants:write"], ["admin:*"]])
+        async def team_report(self, payload: dict) -> dict:
+            # autorisé pour le owner du tenant (tenants:write) OU un admin
+            # plateforme (admin:*) — jamais les deux à la fois exigés.
+            ...
 
     Pour un schéma versionné, empilez @schema séparément (voir sa docstring) :
         @action("create_user", permissions=["admin"])
@@ -137,6 +156,7 @@ def action(name: str, permissions: list[str] | None = None):
     def decorator(fn: Callable) -> Callable:
         fn._xcore_action = name
         fn._xcore_action_permissions = permissions or []
+        fn._xcore_action_permission_groups = permission_groups or []
         return fn
 
     return decorator

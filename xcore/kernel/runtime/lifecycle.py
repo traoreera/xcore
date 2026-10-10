@@ -467,6 +467,24 @@ class LifecycleManager:
         method = getattr(instance, "_action_map", {}).get(action)
         return list(getattr(method, "_xcore_action_permissions", None) or [])
 
+    def get_action_permission_groups(self, action: str) -> list[list[str]]:
+        """
+        Groupes de permissions alternatifs pour une action, déclarés via
+        @action(name, permission_groups=[[...], [...]]) — satisfait si le
+        principal couvre entièrement AU MOINS UN groupe. Même prudence que
+        get_action_permissions : liste vide si indisponible, jamais d'exception.
+        """
+        instance = self._instance
+        if instance is None:
+            return []
+        if not getattr(instance, "_action_map_built", False):
+            build = getattr(instance, "_build_action_map", None)
+            if build is None:
+                return []
+            build()
+        method = getattr(instance, "_action_map", {}).get(action)
+        return list(getattr(method, "_xcore_action_permission_groups", None) or [])
+
     # ── Reload ────────────────────────────────────────────────
 
     async def reload(self) -> None:
