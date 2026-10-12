@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Présentation
 
-**xcore v2.8.1** — framework d'orchestration plugin-first construit sur FastAPI.
+**xcore v2.9.0** — framework d'orchestration plugin-first construit sur FastAPI.
 Charge, isole et gère des plugins modulaires dans un environnement sandboxé.
 
 - **Language** : Python 3.12+
@@ -67,9 +67,14 @@ xcore/
 ```
 HTTP → TenantMiddleware → Router → supervisor.call()
      → IPCAuthMiddleware → TracingMiddleware → RateLimitMiddleware
+     → AuthResolverMiddleware → ActionPermissionMiddleware
      → PermissionMiddleware → RetryMiddleware → _dispatch()
      → ContextVar tenant_id mis à jour → handler.call() → Plugin.handle()
 ```
+`AuthResolverMiddleware` résout le `principal` courant (voir `kernel/api/auth.py`,
+`get_current_principal()`) via l'`AuthBackend` enregistré. `ActionPermissionMiddleware`
+applique `@action(permissions=[...], permission_groups=[[...], ...])` contre ce
+principal — système séparé de `PermissionEngine`/`PolicySet` (ACL plugin-à-plugin).
 
 ---
 
