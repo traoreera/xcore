@@ -59,10 +59,12 @@ Resolves the calling user (`principal`) via the registered `AuthBackend` — see
 - Best-effort only: never raises, never blocks a call. `principal` is simply `None` when no backend/token is available.
 
 #### 5. Action Permissions (`ActionPermissionMiddleware`)
-Enforces `@action(name, permissions=[...])` against the `principal` resolved above — see [Auth: Enforcing action permissions](../sdk/api/auth.md#enforcing-action-permissions).
-- No `permissions` declared on the action → no-op, fully backward compatible.
-- `permissions` declared → `principal`'s `roles`/`permissions` must cover all of them, or the call is denied (`action_permission_denied`). No `principal` with a declared requirement is a denial (fail-closed).
-- Reads the requirement via `handler.get_action_permissions(action)` — virtual/legacy handlers that don't expose it (e.g. the `xcore` kernel handler) are simply treated as declaring none.
+Enforces `@action(name, permissions=[...], permission_groups=[[...], ...])` against the `principal` resolved above — see [Auth: Enforcing action permissions](../sdk/api/auth.md#enforcing-action-permissions).
+- Neither declared on the action → no-op, fully backward compatible.
+- `permissions` (AND) → `principal`'s `roles`/`permissions` must cover all of them.
+- `permission_groups` (OR of AND) → `principal` must fully cover at least one of the declared groups — for alternative roles that each grant sufficient access on their own.
+- Both declared → both conditions apply. Either one unmet denies the call (`action_permission_denied`). No `principal` with a declared requirement is a denial (fail-closed).
+- Reads the requirements via `handler.get_action_permissions(action)` / `handler.get_action_permission_groups(action)` — virtual/legacy handlers that don't expose them (e.g. the `xcore` kernel handler) are simply treated as declaring none.
 
 #### 6. Permissions (`PermissionMiddleware`)
 Evaluates the `resource` and `action` against the plugin's `PolicySet`.

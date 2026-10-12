@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-10-12
+
+### Added
+- **`@action(permission_groups=[[...], [...]])`** — alternative permission groups (OR of AND): satisfied if the principal fully covers at least one declared group, for role hierarchies where several distinct permissions each grant sufficient access on their own (e.g. a tenant owner *or* a platform admin) — `permissions` alone would require both at once. Independent and combinable with `permissions`. Enforced by `ActionPermissionMiddleware` the same way as `permissions` (fail-closed). New `LifecycleManager.get_action_permission_groups()`.
+- **`@action(side_effect="read"|"write"|"outbound")`** — orthogonal to `permissions`: declares how consequential an action is once a call is authorized, rather than who's authorized to make it. Purely informational — the kernel enforces nothing on it; it's for an external consumer (e.g. a bridge exposing actions as LLM tools) to decide whether an action can be a direct tool or needs approval first. Raises `ValueError` at decoration time for any value outside the three.
+- **`ActionSchema.input_json_schema` / `.output_json_schema`** — the real JSON Schema (nested fields, defaults, constraints) from the pydantic `Model` that `@schema` now builds once and reuses for both validation and this export, instead of `@schema` and `@validate_payload` each building their own `Model` from the same `input` dict. The existing flat `{field: type_name}` `input`/`output` dicts are unchanged — still what `BreakingChangeDetector` compares.
+- **`ActionSchema.permissions` / `.permission_groups` / `.side_effect`** — mirrored from the function attributes so external tooling can read schema *and* authorization/risk metadata for every action from `schema_registry` alone, without instantiating each plugin's `LifecycleManager`.
+
+### Changed
+- **`AutoDispatchMixin._register_schemas()` now registers an `ActionSchema` entry for every `@action`**, not only those with `@schema` also stacked underneath. Before this, an action declaring only `permissions`/`permission_groups` (no `@schema`) never reached `schema_registry` at all — silently invisible to anything reading that registry instead of going through each plugin's `LifecycleManager`.
+
 ## [2.8.1] - 2026-10-07
 
 ### Added
