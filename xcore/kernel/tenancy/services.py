@@ -201,8 +201,9 @@ class TenantAwareDB:
           paramètre lié à `set_config(..., true)` : aucune interpolation SQL.
         - Portée transaction (équivalent `SET LOCAL`) : rien ne fuit vers la
           requête suivante du pool, même si le reset du pool est désactivé.
-          Un listener `after_begin` le ré-applique si le plugin fait un
-          `commit()` intermédiaire sur la même session.
+          Un listener `after_begin` le pose au début de CHAQUE transaction
+          de la session (autobegin, `begin()` du plugin, après `commit()`), sans
+          exécuter de SQL à l'entrée (sinon `session.begin()` échouerait).
         - PostgreSQL uniquement. Les autres dialectes (SQLite, MySQL) et les
           adapters non SQL (MongoDB) sont ignorés. Une erreur sur PostgreSQL
           est propagée : une isolation qui échoue ne doit jamais être silencieuse.
@@ -216,24 +217,40 @@ class TenantAwareDB:
         from sqlalchemy import event, text
 
         params = {"sp": f'"{tenant}", public'}
-        await _maybe_await(sess.execute(text(_SET_SEARCH_PATH_SQL), params))
-        # Preuve que la valeur tient : en AUTOCOMMIT (ou derrière un pooler
-        # transactionnel) chaque instruction est sa propre transaction et le
-        # set_config local est perdu sans erreur. On refuse plutôt que de lire
-        # silencieusement le schéma public.
-        check = await _maybe_await(sess.execute(text(_CURRENT_SEARCH_PATH_SQL)))
-        if check.scalar() != params["sp"]:
-            raise RuntimeError(
-                "isolation tenant impossible : le search_path n'a pas persisté "
-                "dans la transaction (isolation_level AUTOCOMMIT ou pooler en "
-                "mode statement ?). Désactivez AUTOCOMMIT pour les bases "
-                "utilisées avec tenancy.isolate_db, ou isolate_db."
-            )
 
-        def _reapply(_session: Any, _transaction: Any, connection: Any) -> None:
+        # Aucune requête ici : exécuter du SQL à l'entrée déclencherait
+        # l'autobegin et casserait `async with session.begin():` côté plugin
+        # ("A transaction is already begun"). Le search_path est posé par un
+        # listener `after_begin`, au tout début de CHAQUE transaction de la
+        # session (autobegin, `begin()`, après commit/rollback), donc dans la
+        # même transaction que les requêtes du plugin.
+        def _apply_conn(connection: Any) -> None:
             connection.execute(text(_SET_SEARCH_PATH_SQL), params)
+            # Preuve que la valeur tient : en AUTOCOMMIT (ou derrière un pooler
+            # transactionnel) chaque instruction est sa propre transaction et le
+            # set_config local est perdu sans erreur. On refuse plutôt que de
+            # lire silencieusement le schéma public.
+            current = connection.execute(text(_CURRENT_SEARCH_PATH_SQL)).scalar()
+            if current != params["sp"]:
+                raise RuntimeError(
+                    "isolation tenant impossible : le search_path n'a pas "
+                    "persisté dans la transaction (isolation_level AUTOCOMMIT "
+                    "ou pooler en mode statement ?). Désactivez AUTOCOMMIT pour "
+                    "les bases utilisées avec tenancy.isolate_db, ou isolate_db."
+                )
 
-        event.listen(getattr(sess, "sync_session", sess), "after_begin", _reapply)
+        def _on_begin(_session: Any, _transaction: Any, connection: Any) -> None:
+            _apply_conn(connection)
+
+        sync_sess = getattr(sess, "sync_session", sess)
+        event.listen(sync_sess, "after_begin", _on_begin)
+        # Transaction déjà ouverte par l'adapter (ex. `execution_options`
+        # appliquées via `sess.connection()`) : `after_begin` est passé, on pose
+        # le search_path tout de suite (le plugin ne pourrait de toute façon
+        # plus appeler `begin()` sur cette session).
+        if sync_sess.in_transaction():
+            conn = await _maybe_await(sess.connection())
+            await _maybe_await(conn.run_sync(_apply_conn))
 
     @contextlib.asynccontextmanager
     async def session(self):

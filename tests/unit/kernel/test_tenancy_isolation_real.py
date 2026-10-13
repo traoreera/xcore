@@ -345,3 +345,94 @@ async def test_scheduler_callable_objet_async_garde_le_tenant():
     assert inspect.isawaitable(result)
     await result
     assert seen == ["acme"]
+
+
+# ── idiomes plugin : transaction ouverte par le plugin lui-même ─────────────
+
+
+@needs_pg
+async def test_pg_session_begin_du_plugin_ne_leve_pas(pg_adapter):
+    """Régression : `async with sess.begin():` après l'entrée de session()."""
+    from sqlalchemy import text
+
+    async with TenantAwareDB(pg_adapter, "acme").session() as sess:
+        async with sess.begin():
+            rows = (await sess.execute(text("SELECT owner FROM invoices"))).fetchall()
+            assert [r[0] for r in rows] == ["acme-row"]
+            await sess.execute(text("INSERT INTO invoices VALUES ('acme-2')"))
+    assert await _owners(TenantAwareDB(pg_adapter, "acme")) == ["acme-2", "acme-row"]
+    assert await _owners(TenantAwareDB(pg_adapter, "beta")) == ["beta-row"]
+
+
+@needs_pg
+async def test_pg_add_commit_et_begin_apres_select(pg_adapter):
+    from sqlalchemy import text
+
+    async with TenantAwareDB(pg_adapter, "beta").session() as sess:
+        await sess.execute(text("SELECT 1"))  # autobegin
+        await sess.execute(text("INSERT INTO invoices VALUES ('b2')"))
+        await sess.commit()
+        async with sess.begin():  # nouvelle transaction explicite après commit
+            rows = (await sess.execute(text("SELECT owner FROM invoices"))).fetchall()
+            assert sorted(r[0] for r in rows) == ["b2", "beta-row"]
+        await sess.execute(text("INSERT INTO invoices VALUES ('b3')"))
+        await sess.rollback()
+        rows = (await sess.execute(text("SELECT owner FROM invoices"))).fetchall()
+        assert sorted(r[0] for r in rows) == ["b2", "beta-row"]
+
+
+@needs_pg
+async def test_pg_50_sessions_concurrentes_pool_de_5_sans_fuite(pg_adapter):
+    import asyncio
+
+    from sqlalchemy import text
+
+    adapter = AsyncSQLAdapter(
+        "pg-pool", DatabaseConfig(url=PG_URL, pool_size=5, max_overflow=0)
+    )
+    await adapter.connect()
+
+    async def work(i: int) -> tuple[str, list[str]]:
+        tenant = ("acme", "beta")[i % 2]
+        tdb = TenantAwareDB(adapter, tenant)
+        if i % 3 == 0:
+            async with tdb.session() as sess:
+                async with sess.begin():
+                    res = await sess.execute(text("SELECT owner FROM invoices"))
+                    rows = [r[0] for r in res.fetchall()]
+                    await asyncio.sleep(0)
+        elif i % 3 == 1:
+            async with tdb.session() as sess:
+                await sess.commit()
+                res = await sess.execute(text("SELECT owner FROM invoices"))
+                rows = [r[0] for r in res.fetchall()]
+                await sess.rollback()
+        else:
+            rows = await _owners(tdb)
+        return tenant, rows
+
+    try:
+        results = await asyncio.gather(*(work(i) for i in range(50)))
+        assert all(rows == [f"{t}-row"] for t, rows in results)
+        async with adapter.session() as raw:
+            res = await raw.execute(text("SELECT owner FROM invoices"))
+            assert [r[0] for r in res.fetchall()] == ["public-row"]
+    finally:
+        await adapter.disconnect()
+
+
+@needs_pg
+async def test_pg_autocommit_refuse_aussi_avec_begin_plugin(pg_adapter):
+    from sqlalchemy import text
+
+    adapter = AsyncSQLAdapter(
+        "pg-ac2", DatabaseConfig(url=PG_URL, isolation_level="AUTOCOMMIT")
+    )
+    await adapter.connect()
+    try:
+        async with TenantAwareDB(adapter, "acme").session() as sess:
+            with pytest.raises(RuntimeError, match="isolation"):
+                async with sess.begin():
+                    await sess.execute(text("SELECT owner FROM invoices"))
+    finally:
+        await adapter.disconnect()
