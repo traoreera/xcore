@@ -140,6 +140,7 @@ class _SimpleManifest:
         self.framework_version = raw.get("framework_version", ">=2.0")
         self.entry_point = raw.get("entry_point", "src/main.py")
         self.allowed_imports = raw.get("allowed_imports", [])
+        self.allowed_callers = raw.get("allowed_callers", [])
         self.env = env
         # Convertit les dépendances en PluginDependency si ce sont des strings
         self.requires = [

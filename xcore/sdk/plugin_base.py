@@ -211,6 +211,9 @@ class PluginManifest:
     requires: list[PluginDependency] = field(default_factory=list)
     allowed_imports: list[str] = field(default_factory=list)
     permissions: list[dict] = field(default_factory=list)
+    # Plugins autorisés à appeler celui-ci via IPC (voir IPCAuthMiddleware) :
+    # [] = deny-by-default, ["*"] = tous.
+    allowed_callers: list[str] = field(default_factory=list)
 
     # Environnement
     env: dict[str, str] = field(default_factory=dict)
@@ -250,6 +253,7 @@ class PluginManifest:
             "requires",
             "allowed_imports",
             "permissions",
+            "allowed_callers",
             "env",
             "envconfiguration",
             "resources",
@@ -270,6 +274,7 @@ class PluginManifest:
             requires=requires,
             allowed_imports=raw.get("allowed_imports", []),
             permissions=raw.get("permissions", []),
+            allowed_callers=raw.get("allowed_callers", []),
             env=resolved_env,
             resources=ResourceConfig(
                 timeout_seconds=res_raw.get("timeout_seconds", 10),
