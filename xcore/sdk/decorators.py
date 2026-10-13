@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+import warnings
 from typing import Any, Callable, Literal, Type
 
 from pydantic import BaseModel, ValidationError, create_model
@@ -364,9 +365,26 @@ class RoutedPlugin:
                 return {"status": "running"}
     """
 
-    # xcore/sdk/decorators.py — méthode RouterIn de RoutedPlugin
-
     def get_router(self):
+        """Construit l'APIRouter à partir des méthodes @route (None si aucune)."""
+        return RoutedPlugin._build_router(self)
+
+    def RouterIn(self):  # noqa: N802
+        """
+        Alias déprécié de get_router(), conservé pour les plugins existants.
+
+        Délègue à l'implémentation de RoutedPlugin (et non à self.get_router())
+        pour éviter une récursion infinie quand le plugin surcharge get_router()
+        en appelant self.RouterIn().
+        """
+        warnings.warn(
+            "RoutedPlugin.RouterIn() est déprécié, utilisez get_router().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return RoutedPlugin._build_router(self)
+
+    def _build_router(self):
         from fastapi import APIRouter, Depends
 
         from xcore.kernel.api.rbac import RBACChecker
