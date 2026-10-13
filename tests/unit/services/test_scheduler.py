@@ -50,7 +50,7 @@ class TestDispatchJob:
         original = svc_mod._REDIS_LOCK_CLIENT
         redis_mock = AsyncMock()
         redis_mock.set = AsyncMock(return_value=True)  # lock acquired
-        redis_mock.delete = AsyncMock()
+        redis_mock.eval = AsyncMock(return_value=1)
         svc_mod._REDIS_LOCK_CLIENT = redis_mock
 
         called = []
@@ -61,7 +61,7 @@ class TestDispatchJob:
         try:
             await svc_mod._dispatch_job("locked_job")
             assert called == [True]
-            redis_mock.delete.assert_called_once()
+            redis_mock.eval.assert_called_once()
         finally:
             svc_mod._REDIS_LOCK_CLIENT = original
             svc_mod._JOB_REGISTRY.pop("locked_job", None)
