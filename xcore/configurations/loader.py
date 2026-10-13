@@ -134,15 +134,20 @@ class ConfigLoader:
 
     @classmethod
     def _parse(cls, raw: dict[str, Any]) -> XcoreConfig:
+        tenancy = cls._parse_tenancy(raw.get("tenancy", {}))
+        plugins = cls._parse_plugins(raw.get("plugins", {}))
+        # Le superviseur ne reçoit que `plugins` : la section racine `tenancy:`
+        # doit y être visible (enforce_ipc, isolation, propagation du tenant).
+        plugins.tenancy = tenancy
         return XcoreConfig(
             app=cls._parse_app(raw.get("app", {})),
-            plugins=cls._parse_plugins(raw.get("plugins", {})),
+            plugins=plugins,
             services=cls._parse_services(raw.get("services", {})),
             observability=cls._parse_observability(raw.get("observability", {})),
             security=cls._parse_security(raw.get("security", {})),
             marketplace=cls._parse_marketplace(raw.get("marketplace", {})),
             middleware=cls._parse_middleware(raw.get("middleware", {})),
-            tenancy=cls._parse_tenancy(raw.get("tenancy", {})),
+            tenancy=tenancy,
             cors=cls._parse_cors(raw.get("cors", {})),
             raw=raw,
         )
