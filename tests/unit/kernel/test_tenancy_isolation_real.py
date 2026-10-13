@@ -177,3 +177,171 @@ async def test_scheduler_job_sans_id_est_prefixe_et_tenant_propage():
     for jid in sorted(backend.jobs):
         await backend.jobs[jid]()  # exécution hors requête : ContextVar à "default"
     assert seen == ["acme", "beta"]
+
+
+# ── AUTOCOMMIT : set_config(..., true) serait perdu => fail-closed ──────────
+
+
+@needs_pg
+@pytest.mark.parametrize(
+    "cfg_kwargs",
+    [
+        {"isolation_level": "AUTOCOMMIT"},
+        {"execution_options": {"isolation_level": "AUTOCOMMIT"}},
+    ],
+)
+async def test_pg_autocommit_refuse_au_lieu_de_lire_public(pg_adapter, cfg_kwargs):
+    adapter = AsyncSQLAdapter("pg-ac", DatabaseConfig(url=PG_URL, **cfg_kwargs))
+    await adapter.connect()
+    try:
+        with pytest.raises(RuntimeError, match="isolation"):
+            await TenantAwareDB(adapter, "acme").execute("SELECT owner FROM invoices")
+    finally:
+        await adapter.disconnect()
+
+
+@needs_pg
+async def test_pg_isolation_serializable_reste_isolee(pg_adapter):
+    adapter = AsyncSQLAdapter(
+        "pg-ser", DatabaseConfig(url=PG_URL, isolation_level="SERIALIZABLE")
+    )
+    await adapter.connect()
+    try:
+        assert await _owners(TenantAwareDB(adapter, "acme")) == ["acme-row"]
+    finally:
+        await adapter.disconnect()
+
+
+# ── tenants réservés PostgreSQL ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "reserved",
+    [
+        "public",
+        "PUBLIC",
+        "pg_catalog",
+        "pg_temp",
+        "pg_toast",
+        "PG_x",
+        "information_schema",
+    ],
+)
+async def test_tenants_systeme_refuses_partout(reserved):
+    with pytest.raises(ValueError):
+        await TenantAwareDB(object(), reserved)._set_tenant_schema(object())
+    with pytest.raises(ValueError):
+        await TenantAwareCache(MemoryBackend(), reserved).get("k")
+    with pytest.raises(ValueError):
+        TenantAwareScheduler(object(), reserved).get_jobs()
+
+
+async def test_tenants_proches_des_reserves_restent_valides():
+    await TenantAwareCache(MemoryBackend(), "public_acme").get("k")
+    await TenantAwareCache(MemoryBackend(), "pgacme").get("k")
+
+
+# ── entrée HTTP ─────────────────────────────────────────────────────────────
+
+
+def _client(**cfg):
+    from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+
+    from xcore.configurations.sections import TenancyConfig
+    from xcore.kernel.tenancy.middleware import TenantMiddleware
+
+    async def t(request):
+        return JSONResponse({"tenant": request.state.tenant_id})
+
+    app = Starlette(
+        routes=[Route("/t", t)],
+        middleware=[Middleware(TenantMiddleware, config=TenancyConfig(**cfg))],
+    )
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("bad", ["a b", "*", "public", "pg_catalog", "x" * 64, "a:b"])
+def test_middleware_400_si_tenant_invalide(bad):
+    resp = _client(enabled=True).get("/t", headers={"X-Tenant-ID": bad})
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "invalid_tenant"
+
+
+def test_middleware_valide_absent_et_desactive():
+    assert _client(enabled=True).get("/t", headers={"X-Tenant-ID": "acme"}).json() == {
+        "tenant": "acme"
+    }
+    assert _client(enabled=True).get("/t").json() == {"tenant": "default"}
+    # tenancy désactivée : aucun contrôle, comportement inchangé
+    assert _client(enabled=False).get("/t", headers={"X-Tenant-ID": "a b"}).json() == {
+        "tenant": "default"
+    }
+
+
+# ── pool_reset_on_return normalisé ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("ROLLBACK", "rollback"),
+        (" Commit ", "commit"),
+        ("None", "none"),
+        ("none", "none"),
+        (None, "none"),
+        (True, "rollback"),
+    ],
+)
+def test_pool_reset_on_return_normalise(raw, expected):
+    from xcore.services.database.adapters._utils import normalize_pool_reset
+
+    assert normalize_pool_reset(raw) == expected
+
+
+def test_pool_reset_on_return_invalide():
+    from xcore.services.database.adapters._utils import normalize_pool_reset
+
+    with pytest.raises(ValueError):
+        normalize_pool_reset("rollbak")
+
+
+@needs_pg
+async def test_pg_pool_reset_none_yaml_null():
+    from sqlalchemy.pool.base import reset_none
+
+    adapter = AsyncSQLAdapter("pg-n", DatabaseConfig(url=PG_URL))
+    adapter._pool_reset_on_return = None
+    await adapter.connect()
+    try:
+        assert adapter.engine.sync_engine.pool._reset_on_return is reset_none
+    finally:
+        await adapter.disconnect()
+
+
+# ── scheduler : callable objet à __call__ async ─────────────────────────────
+
+
+async def test_scheduler_callable_objet_async_garde_le_tenant():
+    seen: list[str] = []
+
+    class Job:
+        async def __call__(self):
+            seen.append(_current_tenant_id.get())
+
+    jobs = {}
+
+    class Backend:
+        def add_job(self, func, job_id=None, **kw):
+            jobs[job_id] = func
+
+    TenantAwareScheduler(Backend(), "acme").add_job(Job(), job_id="j")
+    result = jobs["acme:j"]()
+    import inspect
+
+    assert inspect.isawaitable(result)
+    await result
+    assert seen == ["acme"]

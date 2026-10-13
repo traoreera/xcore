@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
+
+from .services import _validate_tenant
 
 if TYPE_CHECKING:
     from ...configurations.sections import TenancyConfig
@@ -42,11 +44,23 @@ class TenantMiddleware(BaseHTTPMiddleware):
             request.state.tenant_id = self._cfg.default_tenant
             return await call_next(request)
 
-        tenant_id = (
-            request.headers.get(self._cfg.header)
-            or (self._from_subdomain(request) if self._cfg.subdomain else None)
-            or self._cfg.default_tenant
+        requested = request.headers.get(self._cfg.header) or (
+            self._from_subdomain(request) if self._cfg.subdomain else None
         )
+        if requested:
+            # Valeur fournie par le client (non authentifiée) : rejet immédiat
+            # plutôt qu'une ValueError tardive dans DB/cache/scheduler.
+            try:
+                _validate_tenant(requested)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "invalid_tenant",
+                        "detail": "Identifiant de tenant invalide ou réservé.",
+                    },
+                )
+        tenant_id = requested or self._cfg.default_tenant
         request.state.tenant_id = tenant_id
         return await call_next(request)
 

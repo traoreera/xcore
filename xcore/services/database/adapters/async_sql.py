@@ -11,6 +11,7 @@ from ....kernel.observability import get_logger
 from ._utils import (
     detect_driver,
     is_pre_ping_safe,
+    normalize_pool_reset,
     sanitize_connect_args,
     sanitize_isolation_level,
 )
@@ -80,7 +81,9 @@ class AsyncSQLAdapter:
             # Option native du pool : SQLAlchemy convertit "rollback"/"commit"/
             # "none" en ResetStyle. Affecter la chaîne à pool._reset_on_return
             # n'est comparé à aucune des valeurs attendues => plus aucun reset.
-            engine_kwargs["pool_reset_on_return"] = self._pool_reset_on_return
+            engine_kwargs["pool_reset_on_return"] = normalize_pool_reset(
+                self._pool_reset_on_return
+            )
 
         self._engine = create_async_engine(self.url, **engine_kwargs)
 

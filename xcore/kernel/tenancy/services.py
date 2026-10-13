@@ -43,6 +43,11 @@ _VALID_TENANT = re.compile(r"[a-zA-Z0-9_-]{1,63}")
 # un tenant "*" servirait de glob dans `cache.keys()/clear()` et viderait les
 # clés de tous les tenants.
 _SET_SEARCH_PATH_SQL = "SELECT set_config('search_path', :sp, true)"
+_CURRENT_SEARCH_PATH_SQL = "SELECT current_setting('search_path')"
+
+# Schémas système PostgreSQL : jamais un tenant (pg_* est réservé, `public` est
+# le schéma partagé que l'isolation est censée masquer).
+_RESERVED_TENANTS = frozenset({"public", "information_schema"})
 
 
 def _validate_tenant(tenant_id: str) -> str:
@@ -50,6 +55,12 @@ def _validate_tenant(tenant_id: str) -> str:
         raise ValueError(
             f"tenant_id invalide : {tenant_id!r} "
             "(caractères autorisés : a-z A-Z 0-9 _ -, 1 à 63 caractères)"
+        )
+    lowered = tenant_id.lower()
+    if lowered in _RESERVED_TENANTS or lowered.startswith("pg_"):
+        raise ValueError(
+            f"tenant_id réservé : {tenant_id!r} "
+            "(public, information_schema et pg_* sont des schémas système)"
         )
     return tenant_id
 
@@ -137,6 +148,10 @@ class TenantAwareCache:
         return getattr(self._cache, name)
 
 
+async def _maybe_await(value: Any) -> Any:
+    return await value if inspect.isawaitable(value) else value
+
+
 def _as_statement(query: Any) -> Any:
     """SQLAlchemy 2.x refuse le SQL brut : une chaîne devient `text()`."""
     if isinstance(query, str):
@@ -194,9 +209,19 @@ class TenantAwareDB:
         from sqlalchemy import event, text
 
         params = {"sp": f'"{tenant}", public'}
-        result = sess.execute(text(_SET_SEARCH_PATH_SQL), params)
-        if inspect.isawaitable(result):
-            await result
+        await _maybe_await(sess.execute(text(_SET_SEARCH_PATH_SQL), params))
+        # Preuve que la valeur tient : en AUTOCOMMIT (ou derrière un pooler
+        # transactionnel) chaque instruction est sa propre transaction et le
+        # set_config local est perdu sans erreur. On refuse plutôt que de lire
+        # silencieusement le schéma public.
+        check = await _maybe_await(sess.execute(text(_CURRENT_SEARCH_PATH_SQL)))
+        if check.scalar() != params["sp"]:
+            raise RuntimeError(
+                "isolation tenant impossible : le search_path n'a pas persisté "
+                "dans la transaction (isolation_level AUTOCOMMIT ou pooler en "
+                "mode statement ?). Désactivez AUTOCOMMIT pour les bases "
+                "utilisées avec tenancy.isolate_db, ou isolate_db."
+            )
 
         def _reapply(_session: Any, _transaction: Any, connection: Any) -> None:
             connection.execute(text(_SET_SEARCH_PATH_SQL), params)
@@ -258,7 +283,11 @@ class TenantAwareDB:
 
 def _bind_tenant(func: Any, tenant: str) -> Any:
     """Enveloppe `func` pour poser le ContextVar tenant pendant son exécution."""
-    if inspect.iscoroutinefunction(func):
+    # Un objet dont `__call__` est async n'est pas une coroutine function : sans
+    # cette détection le ContextVar serait remis à zéro avant l'await.
+    if inspect.iscoroutinefunction(func) or inspect.iscoroutinefunction(
+        getattr(func, "__call__", None)
+    ):
 
         @functools.wraps(func)
         async def _async_wrapper(*a: Any, **k: Any) -> Any:

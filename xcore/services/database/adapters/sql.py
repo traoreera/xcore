@@ -8,7 +8,11 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Generator
 
 from ....kernel.observability import get_logger
-from ._utils import sanitize_connect_args, sanitize_isolation_level
+from ._utils import (
+    normalize_pool_reset,
+    sanitize_connect_args,
+    sanitize_isolation_level,
+)
 
 if TYPE_CHECKING:
     from ....configurations.sections import DatabaseConfig
@@ -61,7 +65,7 @@ class SQLAdapter:
             "echo": self._echo,
             "pool_pre_ping": self._pool_pre_ping,
             "pool_recycle": self._pool_recycle,
-            "pool_reset_on_return": self._pool_reset_on_return,
+            "pool_reset_on_return": normalize_pool_reset(self._pool_reset_on_return),
         }
 
         is_sqlite = self.url.startswith("sqlite")
