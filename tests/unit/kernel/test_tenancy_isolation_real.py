@@ -95,6 +95,13 @@ async def test_pg_search_path_survit_a_un_commit_intermediaire(pg_adapter):
 
 
 @needs_pg
+async def test_pg_pool_reset_on_return_reconnu(pg_adapter):
+    from sqlalchemy.pool.base import reset_rollback
+
+    assert pg_adapter.engine.sync_engine.pool._reset_on_return is reset_rollback
+
+
+@needs_pg
 async def test_pg_echec_du_set_search_path_n_est_pas_avale(pg_adapter, monkeypatch):
     tdb = TenantAwareDB(pg_adapter, "acme")
     monkeypatch.setattr(

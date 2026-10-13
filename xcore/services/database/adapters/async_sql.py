@@ -76,6 +76,11 @@ class AsyncSQLAdapter:
             engine_kwargs.pop("pool_timeout", None)
             engine_kwargs.pop("pool_recycle", None)
             engine_kwargs.pop("pool_pre_ping", None)
+        else:
+            # Option native du pool : SQLAlchemy convertit "rollback"/"commit"/
+            # "none" en ResetStyle. Affecter la chaîne à pool._reset_on_return
+            # n'est comparé à aucune des valeurs attendues => plus aucun reset.
+            engine_kwargs["pool_reset_on_return"] = self._pool_reset_on_return
 
         self._engine = create_async_engine(self.url, **engine_kwargs)
 
@@ -83,9 +88,6 @@ class AsyncSQLAdapter:
         # remplace le pre_ping natif qui est cassé
         if not safe_pre_ping:
             self._install_pessimistic_listener()
-
-        if not self.url.startswith("sqlite"):
-            self._engine.sync_engine.pool._reset_on_return = self._pool_reset_on_return
 
         self._AsyncSession = sessionmaker(
             bind=self._engine,
