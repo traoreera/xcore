@@ -108,6 +108,14 @@ jobs:
           production-deploy: true
           deploy-message: "Deploy ${{ github.ref }}"
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Le workflow n'a que contents:read + pull-requests:write. Le commentaire de
+          # commit (activé par défaut) exige contents:write : l'API GitHub répond
+          # 403 « Forbidden » dès le début du job, avant tout envoi vers Netlify.
+          # L'étape de preview le désactive déjà ; même réglage ici. Le « GitHub
+          # deployment » (deployments:write, aussi activé par défaut) est désactivé
+          # par précaution plutôt que d'élargir les permissions du workflow.
+          enable-github-deployment: false
+          enable-commit-comment: false
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
