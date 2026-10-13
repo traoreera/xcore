@@ -171,21 +171,34 @@ class TestRouterEndpoints:
         assert "plugins" in resp.json()
 
     def test_reload_plugin(self):
-        resp = self.client.post(
-            "/ipc/auth/reload",
-            json={"payload": {}},
-            headers=self.headers,
-        )
-        # Route may match call_plugin (dynamic) or reload (static) — either is valid
-        assert resp.status_code in (200, 422, 500)
+        resp = self.client.post("/ipc/auth/reload", headers=self.headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "msg": "Plugin 'auth' reloaded"}
+        self.supervisor.reload.assert_awaited_once_with("auth")
+        self.supervisor.call.assert_not_called()
 
     def test_load_plugin(self):
+        resp = self.client.post("/ipc/auth/load", headers=self.headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "msg": "Plugin 'auth' loaded"}
+        self.supervisor.load.assert_awaited_once_with("auth")
+        self.supervisor.call.assert_not_called()
+
+    def test_reload_load_ignore_body_sent_by_legacy_clients(self):
+        for verb in ("reload", "load"):
+            resp = self.client.post(
+                f"/ipc/auth/{verb}", json={"payload": {}}, headers=self.headers
+            )
+            assert resp.status_code == 200
+        self.supervisor.call.assert_not_called()
+
+    def test_catch_all_still_dispatches_other_actions(self):
         resp = self.client.post(
-            "/ipc/auth/load",
-            json={"payload": {}},
-            headers=self.headers,
+            "/ipc/auth/reloaded", json={"payload": {}}, headers=self.headers
         )
-        assert resp.status_code in (200, 422, 500)
+        assert resp.status_code == 200
+        assert resp.json()["action"] == "reloaded"
+        self.supervisor.call.assert_awaited_once()
 
     def test_unload_plugin(self):
         resp = self.client.delete("/ipc/auth/unload", headers=self.headers)

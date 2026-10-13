@@ -122,7 +122,7 @@ def build_router(
     # Routes
     # =========================
     #
-    # NB : ces routes spécifiques (registry/enable/disable) doivent être
+    # NB : ces routes spécifiques (registry/enable/disable/reload/load) doivent être
     # déclarées AVANT le catch-all POST /{plugin_name}/{action} ci-dessous —
     # Starlette matche dans l'ordre de déclaration, et un POST sur
     # "/{plugin_name}/enable" correspondrait sinon toujours à call_plugin()
@@ -149,6 +149,16 @@ def build_router(
         reason = body.reason if body else None
         await supervisor.disable(plugin_name, reason=reason)
         return {"status": "ok", "msg": f"Plugin '{plugin_name}' disabled"}
+
+    @router.post("/{plugin_name}/reload")
+    async def reload_plugin(plugin_name: str) -> dict[str, str]:
+        await supervisor.reload(plugin_name)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' reloaded"}
+
+    @router.post("/{plugin_name}/load")
+    async def load_plugin(plugin_name: str) -> dict[str, str]:
+        await supervisor.load(plugin_name)
+        return {"status": "ok", "msg": f"Plugin '{plugin_name}' loaded"}
 
     @router.post(
         "/{plugin_name}/{action}",
@@ -216,16 +226,6 @@ def build_router(
             "events": supervisor.events_activity(event, limit),
             "hooks": supervisor.hooks_activity(event, limit),
         }
-
-    @router.post("/{plugin_name}/reload")
-    async def reload_plugin(plugin_name: str) -> dict[str, str]:
-        await supervisor.reload(plugin_name)
-        return {"status": "ok", "msg": f"Plugin '{plugin_name}' reloaded"}
-
-    @router.post("/{plugin_name}/load")
-    async def load_plugin(plugin_name: str) -> dict[str, str]:
-        await supervisor.load(plugin_name)
-        return {"status": "ok", "msg": f"Plugin '{plugin_name}' loaded"}
 
     @router.delete("/{plugin_name}/unload")
     async def unload_plugin(plugin_name: str) -> dict[str, str]:
