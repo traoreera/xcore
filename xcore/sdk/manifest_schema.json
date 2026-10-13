@@ -27,6 +27,11 @@
       "items": { "type": "string" },
       "description": "Imports Python supplémentaires autorisés (whitelist AST)"
     },
+    "allowed_callers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Plugins autorisés à appeler celui-ci via IPC ([] = deny-by-default, [\"*\"] = tous)"
+    },
     "permissions": {
       "type": "array",
       "description": "Règles d'accès aux ressources (voir kernel/permissions/schema.json)",
