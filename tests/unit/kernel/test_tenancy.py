@@ -106,80 +106,61 @@ class TestTenantAwareCache:
 
 
 class TestTenantAwareDB:
-    def _make(self, tenant="acme"):
-        import contextlib
+    """Vrai SQLAlchemy/SQLite ; l'isolation PostgreSQL est dans
+    test_tenancy_isolation_real.py."""
 
+    @pytest.fixture
+    async def tdb(self, tmp_path):
+        from xcore.configurations.sections import DatabaseConfig
         from xcore.kernel.tenancy.services import TenantAwareDB
+        from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
 
-        sess = MagicMock()
-        sess.execute = AsyncMock(return_value="result")
-        sess.fetch_one = AsyncMock(return_value={"id": 1})
-        sess.fetch_all = AsyncMock(return_value=[{"id": 1}])
-
-        @contextlib.asynccontextmanager
-        async def fake_session():
-            yield sess
-
-        db = MagicMock()
-        db.session = fake_session
-        return TenantAwareDB(db, tenant), db, sess
+        adapter = AsyncSQLAdapter(
+            "lite", DatabaseConfig(url=f"sqlite+aiosqlite:///{tmp_path}/t.db")
+        )
+        await adapter.connect()
+        yield TenantAwareDB(adapter, "acme")
+        await adapter.disconnect()
 
     @pytest.mark.asyncio
-    async def test_execute_sets_search_path(self):
-        tdb, _, sess = self._make()
-        await tdb.execute("SELECT 1")
-        # first call = SET search_path, second = actual query
-        calls = [c.args[0] for c in sess.execute.call_args_list]
-        assert any('SET search_path TO "acme"' in str(c) for c in calls)
-        assert any("SELECT 1" in str(c) for c in calls)
+    async def test_execute_accepts_raw_string(self, tdb):
+        assert (await tdb.execute("SELECT 1")).scalar() == 1
 
     @pytest.mark.asyncio
-    async def test_session_context_manager(self):
-        tdb, _, sess = self._make()
-        async with tdb.session() as s:
-            assert s is sess
-        # SET search_path appelé pendant la session
-        sess.execute.assert_called()
+    async def test_session_context_manager(self, tdb):
+        from sqlalchemy import text
+
+        async with tdb.session() as sess:
+            assert (await sess.execute(text("SELECT 2"))).scalar() == 2
 
     @pytest.mark.asyncio
-    async def test_fetch_one_sets_search_path(self):
-        tdb, _, sess = self._make()
-        result = await tdb.fetch_one("SELECT * FROM users WHERE id=1")
-        calls = [c.args[0] for c in sess.execute.call_args_list]
-        assert any('SET search_path TO "acme"' in str(c) for c in calls)
-        assert result == {"id": 1}
-
-    @pytest.mark.asyncio
-    async def test_fetch_all_sets_search_path(self):
-        tdb, _, sess = self._make()
-        result = await tdb.fetch_all("SELECT * FROM users")
-        assert result == [{"id": 1}]
+    async def test_fetch_one_and_all(self, tdb):
+        assert await tdb.fetch_one("SELECT 1 AS id") == {"id": 1}
+        assert await tdb.fetch_all("SELECT 1 AS id") == [{"id": 1}]
 
     def test_unknown_attrs_delegated_to_db(self):
-        tdb, db, _ = self._make()
+        from xcore.kernel.tenancy.services import TenantAwareDB
+
+        db = MagicMock()
         db.engine = "pg-engine"
-        assert tdb.engine == "pg-engine"
+        assert TenantAwareDB(db, "acme").engine == "pg-engine"
 
     @pytest.mark.asyncio
-    async def test_non_postgres_silences_search_path_error(self):
-        import contextlib
+    async def test_non_sql_adapter_is_skipped(self):
+        from xcore.kernel.tenancy.services import TenantAwareDB
 
+        sess = object()  # pas de get_bind : adapter non SQL (MongoDB)
+        await TenantAwareDB(MagicMock(), "acme")._set_tenant_schema(sess)
+
+    @pytest.mark.asyncio
+    async def test_postgres_error_is_not_swallowed(self):
         from xcore.kernel.tenancy.services import TenantAwareDB
 
         sess = MagicMock()
-        # search_path raises (SQLite/MySQL) — must not propagate
-        sess.execute = AsyncMock(side_effect=[Exception("no search_path"), "result"])
-
-        @contextlib.asynccontextmanager
-        async def fake_session():
-            yield sess
-
-        db = MagicMock()
-        db.session = fake_session
-
-        tdb = TenantAwareDB(db, "acme")
-        # Should not raise
-        await tdb.execute("SELECT 1")
+        sess.get_bind.return_value.dialect.name = "postgresql"
+        sess.execute = AsyncMock(side_effect=RuntimeError("boom"))
+        with pytest.raises(RuntimeError):
+            await TenantAwareDB(MagicMock(), "acme")._set_tenant_schema(sess)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -200,14 +181,15 @@ class TestTenantAwareScheduler:
         backend.add_job.assert_called_once()
         assert backend.add_job.call_args.kwargs.get("job_id") == "acme:cleanup"
 
-    def test_add_job_without_id_passes_through(self):
+    def test_add_job_without_id_uses_prefixed_function_name(self):
         sched, backend = self._make()
 
         def fn():
             return None
 
         sched.add_job(fn)
-        backend.add_job.assert_called_once_with(fn)
+        backend.add_job.assert_called_once()
+        assert backend.add_job.call_args.kwargs["job_id"] == "acme:fn"
 
     def test_remove_job_prefixes_id(self):
         sched, backend = self._make()

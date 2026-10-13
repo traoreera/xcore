@@ -18,6 +18,8 @@ Le tenant_id courant est résolu depuis un ContextVar asyncio — chaque tâche
 from __future__ import annotations
 
 import contextlib
+import functools
+import inspect
 import re
 from contextvars import ContextVar
 from typing import Any
@@ -30,15 +32,24 @@ logger = get_logger("xcore.tenancy.services")
 # Initialisé à "default". Mis à jour par supervisor._dispatch à chaque requête.
 _current_tenant_id: ContextVar[str] = ContextVar("xcore_tenant_id", default="default")
 
-# Tenant ID valide : lettres, chiffres, tirets, underscores uniquement.
-_VALID_TENANT = re.compile(r"^[a-zA-Z0-9_-]+$")
+# Tenant ID valide : lettres, chiffres, tirets, underscores uniquement, 63 octets
+# max (limite des identifiants PostgreSQL, au-delà ils sont tronqués en silence
+# et deux tenants distincts pourraient partager un schéma). `fullmatch` : `$`
+# accepterait un retour à la ligne final.
+_VALID_TENANT = re.compile(r"[a-zA-Z0-9_-]{1,63}")
+
+# Le tenant vient d'un en-tête HTTP non authentifié : il est donc validé à
+# chaque usage (DB, cache, scheduler), jamais seulement à l'entrée. Sans cela,
+# un tenant "*" servirait de glob dans `cache.keys()/clear()` et viderait les
+# clés de tous les tenants.
+_SET_SEARCH_PATH_SQL = "SELECT set_config('search_path', :sp, true)"
 
 
 def _validate_tenant(tenant_id: str) -> str:
-    if not _VALID_TENANT.match(tenant_id):
+    if not isinstance(tenant_id, str) or not _VALID_TENANT.fullmatch(tenant_id):
         raise ValueError(
             f"tenant_id invalide : {tenant_id!r} "
-            "(caractères autorisés : a-z A-Z 0-9 _ -)"
+            "(caractères autorisés : a-z A-Z 0-9 _ -, 1 à 63 caractères)"
         )
     return tenant_id
 
@@ -58,7 +69,7 @@ class TenantAwareCache:
 
     @property
     def _tenant(self) -> str:
-        return (
+        return _validate_tenant(
             self._static_tenant
             if self._static_tenant is not None
             else _current_tenant_id.get()
@@ -126,6 +137,15 @@ class TenantAwareCache:
         return getattr(self._cache, name)
 
 
+def _as_statement(query: Any) -> Any:
+    """SQLAlchemy 2.x refuse le SQL brut : une chaîne devient `text()`."""
+    if isinstance(query, str):
+        from sqlalchemy import text
+
+        return text(query)
+    return query
+
+
 class TenantAwareDB:
     """
     Wrapper sur la DB qui isole par tenant via search_path PostgreSQL.
@@ -133,8 +153,10 @@ class TenantAwareDB:
     tenant_id optionnel :
       - fourni → tenant statique
       - absent  → tenant lu depuis _current_tenant_id (ContextVar)
-    SET search_path utilise un identifiant validé pour éviter toute injection SQL.
-    Pour MySQL ou SQLite, le SET search_path est ignoré silencieusement.
+    Le search_path est posé par transaction avec un identifiant validé et cité
+    (voir `_set_tenant_schema`). Pour MySQL, SQLite ou MongoDB il est ignoré.
+    Le schéma du tenant doit déjà exister ; sinon PostgreSQL retombe sur `public`.
+    Attention : `.engine` et `__getattr__` exposent la DB brute, non isolée.
     """
 
     def __init__(self, db: Any, tenant_id: str | None = None) -> None:
@@ -143,21 +165,43 @@ class TenantAwareDB:
 
     @property
     def _tenant(self) -> str:
-        return (
+        return _validate_tenant(
             self._static_tenant
             if self._static_tenant is not None
             else _current_tenant_id.get()
         )
 
-    async def _set_tenant_schema(self, conn: Any) -> None:
-        try:
-            tenant = _validate_tenant(self._tenant)
-            # Guillemets doubles pour identifier PostgreSQL (defense-in-depth)
-            await conn.execute(f'SET search_path TO "{tenant}", public')
-        except ValueError:
-            raise
-        except Exception as e:
-            logger.debug("tenant schema cleanup error", error=str(e))
+    async def _set_tenant_schema(self, sess: Any) -> None:
+        """
+        Positionne le search_path du tenant, limité à la transaction courante.
+
+        - Identifiant validé (regex stricte) puis cité ; la valeur est passée en
+          paramètre lié à `set_config(..., true)` : aucune interpolation SQL.
+        - Portée transaction (équivalent `SET LOCAL`) : rien ne fuit vers la
+          requête suivante du pool, même si le reset du pool est désactivé.
+          Un listener `after_begin` le ré-applique si le plugin fait un
+          `commit()` intermédiaire sur la même session.
+        - PostgreSQL uniquement. Les autres dialectes (SQLite, MySQL) et les
+          adapters non SQL (MongoDB) sont ignorés. Une erreur sur PostgreSQL
+          est propagée : une isolation qui échoue ne doit jamais être silencieuse.
+        """
+        tenant = _validate_tenant(self._tenant)
+        get_bind = getattr(sess, "get_bind", None)
+        if get_bind is None or get_bind().dialect.name != "postgresql":
+            logger.debug("tenant search_path skipped, not postgresql", tenant=tenant)
+            return
+
+        from sqlalchemy import event, text
+
+        params = {"sp": f'"{tenant}", public'}
+        result = sess.execute(text(_SET_SEARCH_PATH_SQL), params)
+        if inspect.isawaitable(result):
+            await result
+
+        def _reapply(_session: Any, _transaction: Any, connection: Any) -> None:
+            connection.execute(text(_SET_SEARCH_PATH_SQL), params)
+
+        event.listen(getattr(sess, "sync_session", sess), "after_begin", _reapply)
 
     @contextlib.asynccontextmanager
     async def session(self):
@@ -165,20 +209,26 @@ class TenantAwareDB:
             await self._set_tenant_schema(sess)
             yield sess
 
-    async def execute(self, query: str, *args, **kwargs) -> Any:
+    async def execute(self, query: Any, *args, **kwargs) -> Any:
         async with self._db.session() as sess:
             await self._set_tenant_schema(sess)
-            return await sess.execute(query, *args, **kwargs)
+            return await sess.execute(_as_statement(query), *args, **kwargs)
 
-    async def fetch_one(self, query: str, *args, **kwargs) -> Any:
+    async def fetch_one(self, query: Any, *args, **kwargs) -> Any:
         async with self._db.session() as sess:
             await self._set_tenant_schema(sess)
-            return await sess.fetch_one(query, *args, **kwargs)
+            if hasattr(sess, "fetch_one"):
+                return await sess.fetch_one(query, *args, **kwargs)
+            res = await sess.execute(_as_statement(query), *args, **kwargs)
+            return res.mappings().first()
 
-    async def fetch_all(self, query: str, *args, **kwargs) -> list:
+    async def fetch_all(self, query: Any, *args, **kwargs) -> list:
         async with self._db.session() as sess:
             await self._set_tenant_schema(sess)
-            return await sess.fetch_all(query, *args, **kwargs)
+            if hasattr(sess, "fetch_all"):
+                return await sess.fetch_all(query, *args, **kwargs)
+            res = await sess.execute(_as_statement(query), *args, **kwargs)
+            return list(res.mappings().all())
 
     async def connect(self) -> None:
         if hasattr(self._db, "connect"):
@@ -206,6 +256,31 @@ class TenantAwareDB:
         return getattr(self._db, name)
 
 
+def _bind_tenant(func: Any, tenant: str) -> Any:
+    """Enveloppe `func` pour poser le ContextVar tenant pendant son exécution."""
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def _async_wrapper(*a: Any, **k: Any) -> Any:
+            token = _current_tenant_id.set(tenant)
+            try:
+                return await func(*a, **k)
+            finally:
+                _current_tenant_id.reset(token)
+
+        return _async_wrapper
+
+    @functools.wraps(func)
+    def _wrapper(*a: Any, **k: Any) -> Any:
+        token = _current_tenant_id.set(tenant)
+        try:
+            return func(*a, **k)
+        finally:
+            _current_tenant_id.reset(token)
+
+    return _wrapper
+
+
 class TenantAwareScheduler:
     """
     Wrapper sur le scheduler qui préfixe les job_id avec le tenant courant.
@@ -224,7 +299,7 @@ class TenantAwareScheduler:
 
     @property
     def _tenant(self) -> str:
-        return (
+        return _validate_tenant(
             self._static_tenant
             if self._static_tenant is not None
             else _current_tenant_id.get()
@@ -241,10 +316,17 @@ class TenantAwareScheduler:
         job_id: str | None = None,
         **kwargs,
     ) -> Any:
-        raw_id = id or job_id
+        # Sans identifiant explicite, le scheduler retient le nom de la fonction :
+        # on le préfixe aussi, sinon deux tenants se remplacent mutuellement
+        # (replace_existing=True).
+        raw_id = id or job_id or getattr(func, "__name__", None)
         if raw_id is not None:
             kwargs["job_id"] = self._jid(raw_id)
-        return self._scheduler.add_job(func, *args, **kwargs)
+        # Le job s'exécute hors du contexte de la requête : on fige le tenant
+        # d'enregistrement pour que DB/cache du job visent le bon tenant.
+        return self._scheduler.add_job(
+            _bind_tenant(func, self._tenant), *args, **kwargs
+        )
 
     def remove_job(self, job_id: str) -> None:
         self._scheduler.remove_job(self._jid(job_id))
