@@ -46,8 +46,11 @@ Les autres workers voient le lock occupé et skippent silencieusement.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import inspect
 import time
+import uuid
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
@@ -71,6 +74,41 @@ _REDIS_LOCK_CLIENT: Any = None
 # TTL du lock en secondes — suffisant pour les jobs les plus longs.
 # Si un job dépasse cette durée, le lock expire et un autre worker peut prendre la main.
 _LOCK_TTL = 300
+
+
+_UNLOCK_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
+_RENEW_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('pexpire', KEYS[1], ARGV[2])
+end
+return 0
+"""
+
+
+async def _renew_lock(
+    client: Any, lock_key: str, token: str, ttl_ms: int, job_id: str
+) -> None:
+    """Prolonge le TTL tant que le job tourne (et que le verrou nous appartient)."""
+    while True:
+        await asyncio.sleep(ttl_ms / 3000)
+        try:
+            renewed = await client.eval(_RENEW_SCRIPT, 1, lock_key, token, ttl_ms)
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - un échec réseau ne doit pas tuer le job
+            logger.warning(
+                "scheduler lock renewal failed", job_id=job_id, error=str(exc)
+            )
+            continue
+        if not renewed:
+            logger.warning("scheduler lock lost during job run", job_id=job_id)
+            return
 
 
 # Seuil (ms) au-delà duquel un job qui tourne entre deux `await` est signalé
@@ -109,20 +147,29 @@ async def _dispatch_job(job_id: str) -> None:
         )
         return
 
-    if _REDIS_LOCK_CLIENT is not None:
-        lock_key = f"xcore:sched:lock:{job_id}"
-        acquired = await _REDIS_LOCK_CLIENT.set(lock_key, "1", nx=True, ex=_LOCK_TTL)
-        if not acquired:
-            logger.debug(
-                "job skipped, already running on another worker", job_id=job_id
-            )
-            return
-        try:
-            await _run_job(fn, job_id)
-        finally:
-            await _REDIS_LOCK_CLIENT.delete(lock_key)
-    else:
+    client = _REDIS_LOCK_CLIENT
+    if client is None:
         await _run_job(fn, job_id)
+        return
+
+    lock_key = f"xcore:sched:lock:{job_id}"
+    token = uuid.uuid4().hex  # propriétaire du verrou : seul lui peut le libérer
+    ttl_ms = max(1, int(_LOCK_TTL * 1000))
+    acquired = await client.set(lock_key, token, nx=True, px=ttl_ms)
+    if not acquired:
+        logger.debug("job skipped, already running on another worker", job_id=job_id)
+        return
+
+    renewer = asyncio.create_task(_renew_lock(client, lock_key, token, ttl_ms, job_id))
+    try:
+        await _run_job(fn, job_id)
+    finally:
+        renewer.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await renewer
+        # Compare-and-delete atomique : ne supprime pas le verrou d'un autre worker
+        # (cas d'une expiration TTL suivie d'une reprise par un autre worker).
+        await client.eval(_UNLOCK_SCRIPT, 1, lock_key, token)
 
 
 class SchedulerService(BaseService):
