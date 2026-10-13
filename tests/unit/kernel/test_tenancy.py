@@ -153,14 +153,24 @@ class TestTenantAwareDB:
         await TenantAwareDB(MagicMock(), "acme")._set_tenant_schema(sess)
 
     @pytest.mark.asyncio
-    async def test_postgres_error_is_not_swallowed(self):
+    async def test_postgres_error_is_not_swallowed(self, monkeypatch):
+        """Le SQL part dans le listener `after_begin` (pas à l'entrée de session)."""
+        from sqlalchemy import event
+
         from xcore.kernel.tenancy.services import TenantAwareDB
 
+        listeners = []
+        monkeypatch.setattr(event, "listen", lambda t, n, fn: listeners.append(fn))
         sess = MagicMock()
         sess.get_bind.return_value.dialect.name = "postgresql"
-        sess.execute = AsyncMock(side_effect=RuntimeError("boom"))
+        sess.sync_session.in_transaction.return_value = False
+        sess.execute = AsyncMock()
+        await TenantAwareDB(MagicMock(), "acme")._set_tenant_schema(sess)
+        sess.execute.assert_not_called()  # aucun autobegin à l'entrée
+        conn = MagicMock()
+        conn.execute.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
-            await TenantAwareDB(MagicMock(), "acme")._set_tenant_schema(sess)
+            listeners[0](None, None, conn)
 
 
 # ─────────────────────────────────────────────────────────────

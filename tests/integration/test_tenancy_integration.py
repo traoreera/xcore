@@ -148,7 +148,7 @@ class TestDBTenantIsolation:
     """
 
     @staticmethod
-    def _postgres_db(calls):
+    def _postgres_db(calls, listeners):
         import contextlib
 
         class _Dialect:
@@ -164,21 +164,37 @@ class TestDBTenantIsolation:
             def scalar(self):
                 return self._value
 
-        class FakeSess:
+        class _Conn:
             def __init__(self):
                 self._search_path = None
 
-            def get_bind(self):
-                return _Bind()
-
-            async def execute(self, query, params=None, *a, **kw):
+            def execute(self, query, params=None):
                 sql = str(query)
                 calls.append((sql, params))
                 if "set_config" in sql:
                     self._search_path = params["sp"]
                     return _Result(None)
-                if "current_setting" in sql:
-                    return _Result(self._search_path)
+                return _Result(self._search_path)
+
+        class _Sync:
+            def in_transaction(self):
+                return False
+
+        class FakeSess:
+            sync_session = _Sync()
+
+            def __init__(self):
+                self._conn = _Conn()
+
+            def get_bind(self):
+                return _Bind()
+
+            async def execute(self, query, params=None, *a, **kw):
+                # Simule l'autobegin : `after_begin` pose le search_path avant
+                # la première requête du plugin.
+                if not self._conn._search_path:
+                    for fn in listeners:
+                        fn(self, None, self._conn)
                 return _Result("ok")
 
         @contextlib.asynccontextmanager
@@ -195,9 +211,10 @@ class TestDBTenantIsolation:
 
         from xcore.kernel.tenancy.services import TenantAwareDB
 
-        monkeypatch.setattr(event, "listen", lambda *a, **k: None)
+        listeners = []
+        monkeypatch.setattr(event, "listen", lambda t, n, fn: listeners.append(fn))
         calls = []
-        tdb = TenantAwareDB(self._postgres_db(calls), "acme")
+        tdb = TenantAwareDB(self._postgres_db(calls, listeners), "acme")
         await tdb.execute("SELECT 1")
 
         set_calls = [(sql, p) for sql, p in calls if "set_config" in sql]
@@ -212,11 +229,13 @@ class TestDBTenantIsolation:
 
         from xcore.kernel.tenancy.services import TenantAwareDB
 
-        monkeypatch.setattr(event, "listen", lambda *a, **k: None)
+        listeners = []
+        monkeypatch.setattr(event, "listen", lambda t, n, fn: listeners.append(fn))
         calls = []
-        db = self._postgres_db(calls)
+        db = self._postgres_db(calls, listeners)
 
         await TenantAwareDB(db, "acme").execute("SELECT 1")
+        listeners.clear()  # un listener par session SQLAlchemy
         await TenantAwareDB(db, "beta").execute("SELECT 1")
 
         values = [p["sp"] for sql, p in calls if "set_config" in sql]
