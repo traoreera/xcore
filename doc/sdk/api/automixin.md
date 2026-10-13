@@ -87,6 +87,9 @@ app.include_router(router, prefix=f"/plugins/{plugin.ctx.name}")
 
 `AutoMixin` pre-implements this as `return self.RouterIn()` so you don't need to override it.
 
+!!! warning "`RouterIn()` is deprecated"
+    In xcore's own SDK (`xcore/sdk/decorators.py`), `RoutedPlugin` exposes `get_router()`; `RouterIn()` is kept only as a deprecated alias that emits a `DeprecationWarning`. New code should call `get_router()` (or `super().get_router()` from an override).
+
 ---
 
 ## handle()
