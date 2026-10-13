@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Root `tenancy:` section now reaches the plugin supervisor** (`XcoreConfig.__post_init__` shares it with `plugins.tenancy`). Before, `tenancy.enabled`/`enforce_ipc` were always read as defaults there. **Behavior change**: with `tenancy.enabled: true` and `enforce_ipc: true`, `allowed_callers` is now really enforced (deny-by-default): a plugin without `allowed_callers` (or with an empty list) refuses every incoming plugin-to-plugin call (`ipc_denied`); a boot warning lists these plugins. Also now effective at runtime: tenant ContextVar propagation in dispatch and the tenant-aware service wrappers (`isolate_cache`/`isolate_db`/`isolate_scheduler`).
+- **`TenantAwareScheduler`**: `@scheduler.cron` / `@scheduler.interval` are now prefixed and tenant-bound like `add_job`, so a plugin's cron jobs are released on unload/reload when `isolate_scheduler: true`.
+- **`TenantAwareCache.get_or_set`** no longer leaks values between tenants (key was not prefixed).
 - **`RoutedPlugin.RouterIn()`**: restored as a deprecated alias of `get_router()` (`DeprecationWarning`); the rename in 2.5.x broke plugins still calling `self.RouterIn()`.
 - **`TrustedBase.call_plugin()`**: propagates the current request tenant (`_current_tenant_id` ContextVar) instead of the frozen `ctx.tenant_id`, so nested plugin calls keep their tenant when `tenancy.enabled=true`. Falls back to `ctx.tenant_id` when no tenant is set.
 

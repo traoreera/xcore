@@ -133,10 +133,11 @@ class PluginSupervisor:
         )
         # IPC auth en premier : bloque avant tout le reste
         tenancy = getattr(self._config, "tenancy", None)
+        enforce_ipc = bool(tenancy and tenancy.enabled and tenancy.enforce_ipc)
         self._pipeline.add_middleware(
             IPCAuthMiddleware(
                 self._loader,
-                enforce=tenancy.enforce_ipc if tenancy and tenancy.enabled else False,
+                enforce=enforce_ipc,
             ),
             first=True,
         )
@@ -156,6 +157,8 @@ class PluginSupervisor:
         # Les handlers réactifs existent toujours pour les load/reload individuels,
         # mais ici on garantit que tout est prêt avant la fin du boot.
         loaded_names = report.get("loaded", [])
+        if enforce_ipc:
+            self._warn_plugins_without_allowed_callers(loaded_names)
         if loaded_names:
             self._load_permissions(loaded_names)
             self._register_rate_limits(loaded_names)
@@ -189,6 +192,20 @@ class PluginSupervisor:
             await self._events.emit("xcore.plugins.booted", {"report": report})
 
         return self
+
+    def _warn_plugins_without_allowed_callers(self, plugin_names: list[str]) -> None:
+        """enforce_ipc est deny-by-default : signale les plugins injoignables en IPC."""
+        closed = [
+            n
+            for n in plugin_names
+            if not getattr(self._loader.get_manifest(n), "allowed_callers", None)
+        ]
+        if closed:
+            logger.warning(
+                "enforce_ipc actif : ces plugins n'ont pas d'allowed_callers, "
+                "tout appel IPC entrant sera refusé (ipc_denied)",
+                plugins=sorted(closed),
+            )
 
     def _register_rate_limits(self, plugin_names: list[str]) -> None:
         """Enregistre les rate limits de chaque plugin dans le RateLimiterRegistry."""
