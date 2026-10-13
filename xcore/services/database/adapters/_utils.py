@@ -4,6 +4,8 @@ _utils.py — Normalisation des connect_args et isolation_level selon le driver 
 
 from __future__ import annotations
 
+from typing import Any
+
 from ....kernel.observability import get_logger
 
 logger = get_logger("xcore.services.database")
@@ -187,3 +189,23 @@ def sanitize_isolation_level(url: str, isolation_level: str | None) -> str | Non
         return None
 
     return level_upper
+
+
+def normalize_pool_reset(value: Any) -> str:
+    """
+    Normalise `pool_reset_on_return` (YAML) vers "rollback" | "commit" | "none".
+
+    `null`/`~` et `false` => "none" ; `true` => "rollback" ; casse et espaces
+    ignorés. Toute autre valeur lève ValueError au démarrage.
+    """
+    if value is None or value is False:
+        return "none"
+    if value is True:
+        return "rollback"
+    normalized = str(value).strip().lower()
+    if normalized not in ("rollback", "commit", "none"):
+        raise ValueError(
+            f"pool_reset_on_return invalide : {value!r} "
+            "(attendu : rollback | commit | none)"
+        )
+    return normalized

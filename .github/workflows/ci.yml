@@ -75,6 +75,25 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
 
+    # PostgreSQL réel pour tests/unit/kernel/test_tenancy_isolation_real.py
+    # (set_config / after_begin / AUTOCOMMIT) ; ignoré si XCORE_TEST_PG_URL absent.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Service éphémère de CI, joignable uniquement depuis le job : pas de mot de passe.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      XCORE_TEST_PG_URL: postgresql+asyncpg://postgres@127.0.0.1:5432/postgres
+
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +121,9 @@ jobs:
 
       - name: Install dependencies
         run: poetry install --with dev
+
+      - name: Install asyncpg (tests PostgreSQL d'isolation tenant)
+        run: poetry run pip install "asyncpg>=0.29"
 
       - name: Run tests with coverage
         # Sur main/master : strict (exit code propagé)

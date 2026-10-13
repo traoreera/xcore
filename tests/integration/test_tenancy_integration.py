@@ -138,26 +138,48 @@ class TestCacheTenantIsolation:
 
 
 class TestDBTenantIsolation:
-    @pytest.mark.asyncio
-    async def test_each_session_sets_search_path(self):
+    """Chaque session posée par TenantAwareDB fixe le search_path du tenant.
+
+    Le search_path n'est posé que sur PostgreSQL, via `set_config(..., true)` et
+    un paramètre lié (jamais d'interpolation SQL). Le faux backend ci-dessous se
+    déclare PostgreSQL et relit la valeur posée, comme le fait le contrôle
+    d'isolation. Le comportement sur un vrai PostgreSQL est couvert par
+    tests/unit/kernel/test_tenancy_isolation_real.py (XCORE_TEST_PG_URL).
+    """
+
+    @staticmethod
+    def _postgres_db(calls):
         import contextlib
 
-        from xcore.kernel.tenancy.services import TenantAwareDB
+        class _Dialect:
+            name = "postgresql"
 
-        executed = []
+        class _Bind:
+            dialect = _Dialect()
+
+        class _Result:
+            def __init__(self, value):
+                self._value = value
+
+            def scalar(self):
+                return self._value
 
         class FakeSess:
-            async def execute(self, query, *a, **kw):
-                executed.append(query)
-                return "ok"
+            def __init__(self):
+                self._search_path = None
 
-            async def fetch_one(self, q, *a, **kw):
-                executed.append(q)
-                return {}
+            def get_bind(self):
+                return _Bind()
 
-            async def fetch_all(self, q, *a, **kw):
-                executed.append(q)
-                return []
+            async def execute(self, query, params=None, *a, **kw):
+                sql = str(query)
+                calls.append((sql, params))
+                if "set_config" in sql:
+                    self._search_path = params["sp"]
+                    return _Result(None)
+                if "current_setting" in sql:
+                    return _Result(self._search_path)
+                return _Result("ok")
 
         @contextlib.asynccontextmanager
         async def fake_session():
@@ -165,46 +187,40 @@ class TestDBTenantIsolation:
 
         db = MagicMock()
         db.session = fake_session
+        return db
 
-        tdb = TenantAwareDB(db, "acme")
+    @pytest.mark.asyncio
+    async def test_each_session_sets_search_path(self, monkeypatch):
+        from sqlalchemy import event
+
+        from xcore.kernel.tenancy.services import TenantAwareDB
+
+        monkeypatch.setattr(event, "listen", lambda *a, **k: None)
+        calls = []
+        tdb = TenantAwareDB(self._postgres_db(calls), "acme")
         await tdb.execute("SELECT 1")
 
-        assert any('SET search_path TO "acme"' in q for q in executed)
+        set_calls = [(sql, p) for sql, p in calls if "set_config" in sql]
+        assert set_calls, "le search_path du tenant n'a pas été posé"
+        assert set_calls[0][1] == {"sp": '"acme", public'}
+        # le tenant n'est jamais interpolé dans le SQL : valeur liée uniquement
+        assert "acme" not in set_calls[0][0]
 
     @pytest.mark.asyncio
-    async def test_two_tenants_set_different_search_paths(self):
-        import contextlib
+    async def test_two_tenants_set_different_search_paths(self, monkeypatch):
+        from sqlalchemy import event
 
         from xcore.kernel.tenancy.services import TenantAwareDB
 
-        paths = []
+        monkeypatch.setattr(event, "listen", lambda *a, **k: None)
+        calls = []
+        db = self._postgres_db(calls)
 
-        class FakeSess:
-            async def execute(self, query, *a, **kw):
-                paths.append(query)
-                return "ok"
+        await TenantAwareDB(db, "acme").execute("SELECT 1")
+        await TenantAwareDB(db, "beta").execute("SELECT 1")
 
-            async def fetch_all(self, q, *a, **kw):
-                paths.append(q)
-                return []
-
-        @contextlib.asynccontextmanager
-        async def fake_session():
-            yield FakeSess()
-
-        db = MagicMock()
-        db.session = fake_session
-
-        tdb_acme = TenantAwareDB(db, "acme")
-        tdb_beta = TenantAwareDB(db, "beta")
-
-        await tdb_acme.execute("SELECT 1")
-        await tdb_beta.execute("SELECT 1")
-
-        acme_paths = [p for p in paths if "acme" in p]
-        beta_paths = [p for p in paths if "beta" in p]
-        assert acme_paths
-        assert beta_paths
+        values = [p["sp"] for sql, p in calls if "set_config" in sql]
+        assert values == ['"acme", public', '"beta", public']
 
 
 # ─────────────────────────────────────────────────────────────
