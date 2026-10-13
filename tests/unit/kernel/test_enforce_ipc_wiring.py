@@ -111,3 +111,11 @@ def test_warning_liste_les_plugins_sans_allowed_callers(monkeypatch):
     log.calls.clear()
     sup._warn_plugins_without_allowed_callers(["open"])
     assert log.calls == []
+
+
+def test_xcoreconfig_construite_a_la_main_partage_la_tenancy_racine():
+    from xcore.configurations.sections import TenancyConfig, XcoreConfig
+
+    cfg = XcoreConfig(tenancy=TenancyConfig(enabled=True, enforce_ipc=True))
+    assert cfg.plugins.tenancy is cfg.tenancy
+    assert cfg.plugins.tenancy.enabled is True

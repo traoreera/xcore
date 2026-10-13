@@ -405,3 +405,8 @@ class XcoreConfig:
     raw: dict[str, Any] = field(default_factory=dict)
     middleware: list[MiddlewareConfig] = field(default_factory=list)
     cors: CORSConfig = field(default_factory=CORSConfig)
+
+    def __post_init__(self) -> None:
+        # Source de vérité unique : la section racine `tenancy:` est celle lue
+        # par le superviseur via `plugins.tenancy` (même objet partagé).
+        self.plugins.tenancy = self.tenancy
