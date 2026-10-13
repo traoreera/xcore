@@ -68,7 +68,9 @@ def schema(
 ):
     """
     Déclare le schéma versionné d'une action, l'enregistre dans le SchemaRegistry,
-    et applique automatiquement la validation du payload (validate=True par défaut).
+    et applique la validation du payload UNIQUEMENT si `type_response` vaut
+    "dict" ou "model". Avec la valeur par défaut "_", `@schema` ne fait que
+    stocker les métadonnées (aucune validation, même si validate=True).
 
     Utilisable seul (sur n'importe quelle méthode) ou empilé avec @action — dans
     ce dernier cas l'ordre n'importe pas, les deux décorateurs posent des
