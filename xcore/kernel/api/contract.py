@@ -158,14 +158,21 @@ class TrustedBase(ABC):
                 f"[{self.ctx.name}] call_plugin() non disponible "
                 "(plugin sandboxed ou test sans caller)."
             )
+        from ..tenancy.services import _current_tenant_id
         from .auth import get_current_principal
+
+        # Source de vérité : tenant de la requête en cours (ContextVar posée par
+        # le supervisor). ctx.tenant_id est figé au chargement ("default") et
+        # ferait perdre le tenant aux appels imbriqués. Fallback sur ctx.tenant_id
+        # quand aucun tenant n'est posé (tenancy désactivée, hors requête).
+        tenant_id = _current_tenant_id.get(None) or self.ctx.tenant_id
 
         return await self.ctx.caller(
             plugin_name,
             action,
             payload or {},
             caller=self.ctx.name,
-            tenant_id=self.ctx.tenant_id,
+            tenant_id=tenant_id,
             # Propage le principal déjà résolu de l'appel parent — pas de
             # nouveau contact avec l'AuthBackend pour un appel IPC imbriqué.
             principal=get_current_principal(),

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **`RoutedPlugin.RouterIn()`**: restored as a deprecated alias of `get_router()` (`DeprecationWarning`); the rename in 2.5.x broke plugins still calling `self.RouterIn()`.
+- **`TrustedBase.call_plugin()`**: propagates the current request tenant (`_current_tenant_id` ContextVar) instead of the frozen `ctx.tenant_id`, so nested plugin calls keep their tenant when `tenancy.enabled=true`. Falls back to `ctx.tenant_id` when no tenant is set.
 
 ## [2.9.0] - 2026-10-12
 
