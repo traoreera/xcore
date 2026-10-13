@@ -116,6 +116,13 @@ class TenantAwareCache:
             await self._cache.delete(k)
         return len(matched)
 
+    async def get_or_set(self, key: str, factory: Any, ttl: int | None = None) -> Any:
+        value = await self.get(key)
+        if value is None:
+            value = await factory() if callable(factory) else factory
+            await self.set(key, value, ttl=ttl)
+        return value
+
     async def mget(self, keys: list[str]) -> dict[str, Any]:
         prefixed = [self._k(k) for k in keys]
         raw = await self._cache.mget(prefixed) if hasattr(self._cache, "mget") else {}
@@ -356,6 +363,26 @@ class TenantAwareScheduler:
         return self._scheduler.add_job(
             _bind_tenant(func, self._tenant), *args, **kwargs
         )
+
+    def cron(self, expression: str, job_id: str | None = None):
+        """@scheduler.cron : même préfixage tenant que add_job (sinon le job
+        n'est pas retrouvable par remove_job / le ramasse-miette du plugin)."""
+
+        def decorator(fn: Any) -> Any:
+            raw_id = job_id or getattr(fn, "__name__", None)
+            self._scheduler.cron(expression, job_id=self._jid(raw_id))(
+                _bind_tenant(fn, self._tenant)
+            )
+            return fn
+
+        return decorator
+
+    def interval(self, **kwargs) -> Any:
+        def decorator(fn: Any) -> Any:
+            self.add_job(fn, "interval", **kwargs)
+            return fn
+
+        return decorator
 
     def remove_job(self, job_id: str) -> None:
         self._scheduler.remove_job(self._jid(job_id))

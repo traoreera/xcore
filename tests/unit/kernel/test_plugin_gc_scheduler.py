@@ -213,3 +213,51 @@ class TestCoreServicesKeepTheirPerPluginWrapping:
 
         assert isinstance(lm._instance.db, TenantAwareDB)
         assert lm._instance.db is not raw_db
+
+
+class TestSchedulerReleasedWithIsolateScheduler:
+    """isolate_scheduler=true : les jobs (add_job ET @cron/@interval) sont retirés."""
+
+    BODY = """
+        sch = self.get_service("scheduler")
+        sch.add_job(self.tick, "interval", job_id="viaadd", seconds=3600)
+
+        @sch.cron("0 * * * *")
+        async def viacron():
+            return 1
+
+        @sch.interval(seconds=3600)
+        async def viainterval():
+            return 1
+"""
+
+    def _tenancy(self):
+        return SimpleNamespace(
+            enabled=True,
+            isolate_db=False,
+            isolate_cache=False,
+            isolate_scheduler=True,
+        )
+
+    def _ids(self, scheduler):
+        return sorted(j["id"] for j in scheduler.jobs() if "p" in j["id"])
+
+    async def test_unload_removes_every_job(self, scheduler, tmp_path):
+        ctx, container, registry = _kernel(scheduler, tenancy=self._tenancy())
+        lm = LifecycleManager(_manifest(tmp_path, "p", self.BODY), ctx)
+        await lm.load()
+        assert len(self._ids(scheduler)) == 3
+
+        await lm.unload()
+        assert self._ids(scheduler) == []
+        assert not [j for j in scheduler_module._JOB_REGISTRY if "p" in j]
+
+    async def test_reload_does_not_accumulate(self, scheduler, tmp_path):
+        ctx, container, registry = _kernel(scheduler, tenancy=self._tenancy())
+        lm = LifecycleManager(_manifest(tmp_path, "p", self.BODY), ctx)
+        await lm.load()
+        for _ in range(2):
+            await lm.reload()
+        assert len(self._ids(scheduler)) == 3
+        await lm.unload()
+        assert self._ids(scheduler) == []

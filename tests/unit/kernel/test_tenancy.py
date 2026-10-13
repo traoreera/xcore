@@ -644,3 +644,25 @@ class TestTenancyConfigParsing:
         assert cfg.enabled is True
         assert cfg.header == "X-Tenant-ID"
         assert cfg.isolate_cache is True
+
+
+async def test_tenant_cache_get_or_set_isole_les_tenants():
+    from xcore.kernel.tenancy.services import TenantAwareCache
+    from xcore.services.cache.backends.memory import MemoryBackend
+    from xcore.services.cache.service import CacheService
+
+    raw = CacheService.__new__(CacheService)
+    raw._backend = MemoryBackend()
+    a = TenantAwareCache(raw, tenant_id="a")
+    b = TenantAwareCache(raw, tenant_id="b")
+
+    async def va():
+        return "valeur-a"
+
+    async def vb():
+        return "valeur-b"
+
+    assert await a.get_or_set("k", va) == "valeur-a"
+    assert await b.get_or_set("k", vb) == "valeur-b"
+    assert await a.get("k") == "valeur-a"
+    assert await b.get("k") == "valeur-b"
