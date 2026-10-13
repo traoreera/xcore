@@ -20,9 +20,8 @@ def _resolve(value: Any) -> Any:
             resolved = os.environ.get(var)
             if resolved is None:
                 logger.warning(
-                    "Environement Variable not defined; using empty string:",
-                    var,
-                    extra={"var": var},
+                    "variable d'environnement non définie, chaîne vide utilisée",
+                    var=var,
                 )
                 return ""
             return resolved
