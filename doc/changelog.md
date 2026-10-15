@@ -7,12 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-10-15
+
 ### Fixed
 - **Root `tenancy:` section now reaches the plugin supervisor** (`XcoreConfig.__post_init__` shares it with `plugins.tenancy`). Before, `tenancy.enabled`/`enforce_ipc` were always read as defaults there. **Behavior change**: with `tenancy.enabled: true` and `enforce_ipc: true`, `allowed_callers` is now really enforced (deny-by-default): a plugin without `allowed_callers` (or with an empty list) refuses every incoming plugin-to-plugin call (`ipc_denied`); a boot warning lists these plugins. Also now effective at runtime: tenant ContextVar propagation in dispatch and the tenant-aware service wrappers (`isolate_cache`/`isolate_db`/`isolate_scheduler`).
+- **PostgreSQL `search_path` isolation actually works now**: `TenantAwareDB` sent `SET search_path` as a raw string, which raised `ArgumentError` under SQLAlchemy 2.x — silently swallowed in debug, so `isolate_db` isolated nothing with no alert. The search_path is now set via `set_config(..., true)` with a bound parameter on a validated identifier (fullmatch, 1–63 chars), transaction-scoped (no leak to the pool's next request), and re-applied after an intermediate commit (`after_begin`). Errors propagate on PostgreSQL; SQLite, MySQL and MongoDB are explicitly skipped (dialect detection). A re-read within the same transaction verifies the value persisted; if not (e.g. AUTOCOMMIT), a `RuntimeError` is raised (fail-closed).
+- **Reserved tenants are rejected** for DB, cache and scheduler: `public`, `information_schema`, `pg_*` (case-insensitive). `TenantMiddleware` returns 400 JSON (`invalid_tenant`) as soon as the header or subdomain is invalid; a missing header keeps the default tenant, and nothing changes when tenancy is disabled.
 - **`TenantAwareScheduler`**: `@scheduler.cron` / `@scheduler.interval` are now prefixed and tenant-bound like `add_job`, so a plugin's cron jobs are released on unload/reload when `isolate_scheduler: true`.
 - **`TenantAwareCache.get_or_set`** no longer leaks values between tenants (key was not prefixed).
+- **Distributed scheduler lock now has an owner token**: the lock was set with `"1"` and deleted without checking, so after TTL expiry one worker could delete another's lock. Uses `SET NX PX` with a unique token, a compare-and-delete Lua script at release, and periodic TTL renewal while the job runs.
+- **`POST /ipc/{plugin}/reload` and `/load` routes are reachable again**: they were shadowed by the catch-all `call_plugin` route declared before them.
+- **`pool_reset_on_return` is passed to `create_async_engine`**: assigning the chain directly to `pool._reset_on_return` matched no `ResetStyle`, so the pool performed no reset on connection return (neither rollback nor commit). The native option is now passed to the engine, which converts it and rejects invalid values at startup (sync and async adapters; case/`none`/`null`/`false`/`true` normalized).
+- **`allowed_callers` restored in `PluginManifest`**: a previous commit removed the field when moving the manifest, so `IPCAuthMiddleware` read `manifest.allowed_callers` as absent — the `plugin.yaml` value ended up in `manifest.extra` and, with `enforce_ipc=true`, every inter-plugin IPC call was refused even with `allowed_callers: ['*']`.
+- **Missing `${VAR}` environment variables log a readable warning again**: `_resolve` passed the variable as a positional argument to a message with no format marker, producing a `Logging error` (TypeError swallowed by logging) instead of the intended warning. The variable is now a structured field; resolution behavior unchanged (absent → empty string).
 - **`RoutedPlugin.RouterIn()`**: restored as a deprecated alias of `get_router()` (`DeprecationWarning`); the rename in 2.5.x broke plugins still calling `self.RouterIn()`.
 - **`TrustedBase.call_plugin()`**: propagates the current request tenant (`_current_tenant_id` ContextVar) instead of the frozen `ctx.tenant_id`, so nested plugin calls keep their tenant when `tenancy.enabled=true`. Falls back to `ctx.tenant_id` when no tenant is set.
+
+### CI
+- **Tenant isolation tests run against a real PostgreSQL** (service `postgres:16` + `XCORE_TEST_PG_URL` in the test job; `asyncpg` installed on demand). Integration tests updated to assert `set_config` with a bound value instead of the old raw `SET search_path` SQL.
 
 ## [2.9.0] - 2026-10-12
 
