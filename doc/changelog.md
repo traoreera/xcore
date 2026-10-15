@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Leaner core install**: the unconditional dependency set of `pip install XCoreRuntime` is down to six packages (`fastapi`, `uvicorn[standard]`, `pydantic`, `pyyaml`, `apscheduler`, `opentelemetry-sdk`). `fastapi[standard]` was replaced by plain `fastapi` + an explicit `uvicorn[standard]`, dropping the `fastapi-cli`/`fastapi-cloud-cli` cluster (`sentry-sdk`, `typer`, `rich-toolkit`, `rignore`, `fastar`, `agent-detector`, `detect-installer`) plus `jinja2`, `python-multipart`, `email-validator`, `pydantic-settings`, `pydantic-extra-types` and `dnspython` — none of which `xcore` imports. The explicit `opentelemetry-api` was dropped too (it is pulled transitively by `opentelemetry-sdk`, pinned `==1.45.1`). `poetry.lock` shrinks from 146 to 133 packages; `import xcore` and the zero-config boot still work with none of the optional packages installed (see `tests/unit/test_optional_dependencies.py`).
+
+### Fixed
+- **`xcorecli` (extra `[xcli]`) and `xcdk` (extra `[sdk]`) are optional again**: they were promoted to unconditional core dependencies in 2.8.0, so `pip install XCoreRuntime` dragged in the CLI and the full plugin-authoring SDK. Neither is imported by `xcore` (`xcdk` is only resolved inside a `try/except` in `xcore/sdk/__init__.py`). Both remain installable via their extras and are kept in the dev group so `poetry run xcli` and the CI "xcdk installed" path keep working.
+
 ## [2.9.1] - 2026-10-15
 
 ### Fixed
