@@ -20,27 +20,34 @@ requires-python = ">=3.12,<4.0"
 # ── Noyau ───────────────────────────────────────────────────────────────────────
 # Ce que `import xcore` et la config par défaut (zero-config) chargent
 # réellement, sans condition :
-#   - fastapi[standard] : le framework lui-même.
-#   - pydantic : modèles (router IPC, manifest…) — fastapi[standard] le tire
-#     déjà en transitif, mais il est importé directement par xcore.
-#   - pyyaml : chargement d'integration.yaml.
+#   - fastapi : le framework lui-même (routers, middlewares). L'extra
+#     `fastapi[standard]` n'est PAS requis : il tire fastapi-cli/fastapi-cloud-cli
+#     (donc sentry-sdk, typer, rich…), jinja2, python-multipart, email-validator
+#     et pydantic-settings, dont xcore n'utilise aucun.
+#   - uvicorn[standard] : serveur ASGI. Non importé par xcore lui-même, mais
+#     nécessaire pour servir l'app (`xcli worker start api`, `uvicorn.run`).
+#   - pydantic : modèles (router IPC, manifest…) — fastapi le tire déjà en
+#     transitif, mais il est importé directement par xcore.
+#   - pyyaml : chargement d'integration.yaml / des manifests plugin.yaml.
 #   - apscheduler : SchedulerConfig.enabled=True par défaut (backend memory) —
 #     le scheduler tourne dès le boot sans configuration explicite.
-#   - opentelemetry-api/sdk : importés au niveau module de
+#   - opentelemetry-sdk : importé au niveau module de
 #     kernel/observability/tracing.py, chargé inconditionnellement au boot
 #     (le tracer est noop par défaut, mais le SDK doit être présent).
+#     `opentelemetry-api` est tiré transitivement par le SDK (épinglé ==1.45.1).
 # Tout le reste n'est utilisé que si le service correspondant est configuré
 # (services.databases, cache/scheduler backend=redis, xworker.enabled…) —
-# voir [project.optional-dependencies] ci-dessous.
+# voir [project.optional-dependencies] ci-dessous. Le CLI (`xcorecli`, extra
+# [xcli]) et le SDK complet d'auteur de plugins (`xcdk`, extra [sdk]) sont eux
+# aussi optionnels : aucun des deux n'est importé par `xcore` (xcdk n'est
+# résolu que dans un try/except de xcore/sdk/__init__.py).
 dependencies = [
-    "fastapi[standard]>=0.141.1,<1.0.0",
+    "fastapi>=0.141.1,<1.0.0",
+    "uvicorn[standard]>=0.12.0",
     "pydantic>=2.13.5,<3.0.0",
     "pyyaml>=6.0.3,<7.0.0",
     "apscheduler>=3.11.3,<4.0.0",
-    "opentelemetry-api>=1.45.0,<2.0.0",
     "opentelemetry-sdk>=1.45.0,<2.0.0",
-    "xcorecli (>=2.3.0,<3.0.0)",
-    "xcdk (>=0.2.0,<0.3.0)",
 ]
 
 # ── Dépendances optionnelles ─────────────────────────────────────────────────────
@@ -128,6 +135,11 @@ redis         = { version = ">=7.0.0,<9.0.0", extras = ["hiredis"] }
 celery        = "^5.6.3"
 opentelemetry-exporter-otlp-proto-http = "^1.45.0"
 python-dotenv = "^1.2.3"
+# Extras runtime retirés du noyau (voir commentaire [project].dependencies) :
+# on les garde en dev pour que `poetry run xcli` fonctionne en local et que la
+# CI exerce le chemin « xcdk installé » de xcore.sdk.
+xcdk          = "^0.2.0"
+xcorecli      = "^2.3.0"
 # ── Docs dependencies ──────────────────────────────────────────────────────────
 [tool.poetry.group.docs.dependencies]
 mkdocs                = "^1.6.1"

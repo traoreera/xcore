@@ -1,8 +1,10 @@
 """
 Depuis la 2.7.0 les dépendances propres à un backend (SQLAlchemy, Redis, Celery,
 Alembic, drivers DB, prometheus-client) sont des extras optionnels : un simple
-`pip install XCoreRuntime` ne les installe pas. `import xcore` et le boot
-zero-config doivent donc fonctionner sans elles.
+`pip install XCoreRuntime` ne les installe pas. Le CLI `xcorecli` (module
+`xcli`) et le SDK d'auteur de plugins `xcdk` (module `sdk`) le sont aussi
+(extras [xcli] / [sdk]). `import xcore` et le boot zero-config doivent donc
+fonctionner sans aucun de ces paquets.
 
 Ces tests simulent cette installation dans un sous-processus en bloquant les
 paquets au niveau de l'import — l'environnement de dev, lui, les a tous.
@@ -23,6 +25,7 @@ BLOCKER = textwrap.dedent("""
     for _name in (
         "sqlalchemy", "redis", "celery", "alembic", "aiosqlite", "psycopg2",
         "prometheus_client", "motor", "pymongo",
+        "sdk", "xcli", "xcdk", "xcorecli",
     ):
         sys.modules[_name] = None
     """)
