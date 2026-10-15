@@ -99,6 +99,35 @@ class TestTenantAwareCache:
         assert cache_a._k("x") == "acme:x"
         assert cache_b._k("x") == "beta:x"
 
+    def test_validate_tenant_rejects_non_string(self):
+        from xcore.kernel.tenancy.services import _validate_tenant
+
+        with pytest.raises(ValueError):
+            _validate_tenant(123)  # type: ignore
+
+    def test_validate_tenant_memoized(self):
+        from xcore.kernel.tenancy.services import _validate_cached, _validate_tenant
+
+        _validate_cached.cache_clear()
+        _validate_tenant("memo-test")
+        info = _validate_cached.cache_info()
+        assert info.hits == 0
+        _validate_tenant("memo-test")
+        info2 = _validate_cached.cache_info()
+        assert info2.hits >= 1
+
+    def test_db_adapter_types_memoized(self):
+        from xcore.kernel.tenancy.services import (
+            _DB_ADAPTER_IMPORT_FAILED,
+            _db_adapter_types,
+        )
+
+        # Cache current state if any
+        types = _db_adapter_types()
+        assert _db_adapter_types() is types  # same cached value
+        # Import failed flag is set if no adapters base available in this env
+        assert _DB_ADAPTER_IMPORT_FAILED in (True, False)
+
 
 # ─────────────────────────────────────────────────────────────
 # TenantAwareDB

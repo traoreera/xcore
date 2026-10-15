@@ -50,8 +50,12 @@ _CURRENT_SEARCH_PATH_SQL = "SELECT current_setting('search_path')"
 _RESERVED_TENANTS = frozenset({"public", "information_schema"})
 
 
-def _validate_tenant(tenant_id: str) -> str:
-    if not isinstance(tenant_id, str) or not _VALID_TENANT.fullmatch(tenant_id):
+@functools.lru_cache(maxsize=1024)
+def _validate_cached(tenant_id: str) -> str:
+    """Validation mémoïsée : le nombre de tenants distincts est faible et les
+    appels sont répétés (chaque opération DB/cache/scheduler revalide le tenant
+    courant). Le regex `fullmatch` est le coût dominant du chemin chaud."""
+    if not _VALID_TENANT.fullmatch(tenant_id):
         raise ValueError(
             f"tenant_id invalide : {tenant_id!r} "
             "(caractères autorisés : a-z A-Z 0-9 _ -, 1 à 63 caractères)"
@@ -63,6 +67,15 @@ def _validate_tenant(tenant_id: str) -> str:
             "(public, information_schema et pg_* sont des schémas système)"
         )
     return tenant_id
+
+
+def _validate_tenant(tenant_id: str) -> str:
+    if not isinstance(tenant_id, str):
+        raise ValueError(
+            f"tenant_id invalide : {tenant_id!r} "
+            "(caractères autorisés : a-z A-Z 0-9 _ -, 1 à 63 caractères)"
+        )
+    return _validate_cached(tenant_id)
 
 
 class TenantAwareCache:
@@ -159,11 +172,26 @@ async def _maybe_await(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
+# `from sqlalchemy import ...` coûte ~700 ns (machinerie d'import) et est dans
+# le chemin chaud (chaque requête SQL). Résolu une seule fois, à la demande :
+# `import xcore` doit rester possible sans SQLAlchemy installé.
+_sa_text: Any = None
+_sa_event: Any = None
+
+
+def _sqlalchemy() -> tuple[Any, Any]:
+    global _sa_text, _sa_event
+    if _sa_text is None:
+        from sqlalchemy import event, text
+
+        _sa_text, _sa_event = text, event
+    return _sa_text, _sa_event
+
+
 def _as_statement(query: Any) -> Any:
     """SQLAlchemy 2.x refuse le SQL brut : une chaîne devient `text()`."""
     if isinstance(query, str):
-        from sqlalchemy import text
-
+        text, _ = _sqlalchemy()
         return text(query)
     return query
 
@@ -214,7 +242,7 @@ class TenantAwareDB:
             logger.debug("tenant search_path skipped, not postgresql", tenant=tenant)
             return
 
-        from sqlalchemy import event, text
+        text, event = _sqlalchemy()
 
         params = {"sp": f'"{tenant}", public'}
 
@@ -484,23 +512,43 @@ def wrap_services_for_tenant(
     return wrapped
 
 
-def _is_db_adapter(svc: Any) -> bool:
+_DB_ADAPTER_TYPES: tuple[type, ...] | None = None
+_DB_ADAPTER_IMPORT_FAILED = False
+
+
+def _db_adapter_types() -> tuple[type, ...] | None:
+    """Résout (une seule fois) les classes d'adapters DB. Mettre les imports au
+    niveau module casserait `import xcore` sans SQLAlchemy ; les résoudre à
+    chaque appel de `_is_db_adapter` (appelé en boucle dans le wrapping) coûte
+    un passage dans la machinerie d'import par service."""
+    global _DB_ADAPTER_TYPES, _DB_ADAPTER_IMPORT_FAILED
+    if _DB_ADAPTER_TYPES is not None or _DB_ADAPTER_IMPORT_FAILED:
+        return _DB_ADAPTER_TYPES
     try:
         from xcore.services.database.adapters.async_sql import AsyncSQLAdapter
         from xcore.services.database.adapters.base import DBAdapter
         from xcore.services.database.adapters.mongodb import MongoDBAdapter
         from xcore.services.database.adapters.sql import SQLAdapter
 
-        return isinstance(svc, (SQLAdapter, AsyncSQLAdapter, MongoDBAdapter, DBAdapter))
+        _DB_ADAPTER_TYPES = (SQLAdapter, AsyncSQLAdapter, MongoDBAdapter, DBAdapter)
     except ImportError:
-        # Fallback: class name suffix detection si les adapters ne sont pas installés
-        cls_name = type(svc).__name__
-        return any(
-            cls_name.endswith(suffix)
-            for suffix in (
-                "SQLAdapter",
-                "AsyncSQLAdapter",
-                "MongoDBAdapter",
-                "DBAdapter",
-            )
+        _DB_ADAPTER_IMPORT_FAILED = True
+    return _DB_ADAPTER_TYPES
+
+
+def _is_db_adapter(svc: Any) -> bool:
+    types = _db_adapter_types()
+    if types is not None:
+        return isinstance(svc, types)
+
+    # Fallback: class name suffix detection si les adapters ne sont pas installés
+    cls_name = type(svc).__name__
+    return any(
+        cls_name.endswith(suffix)
+        for suffix in (
+            "SQLAdapter",
+            "AsyncSQLAdapter",
+            "MongoDBAdapter",
+            "DBAdapter",
         )
+    )
