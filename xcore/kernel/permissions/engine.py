@@ -103,18 +103,18 @@ class PermissionEngine:
         cache_key = (plugin_name, resource, action)
         effect = self._cache.get(cache_key)
 
-        if effect is not None:
+        if effect is None:
+            # Évaluation directe sans passer par check() : évite de reconstruire
+            # la clé de cache, un second lookup et une exception de contrôle de
+            # flux sur le seul tour où le cache est froid.
+            effect = self._evaluate_and_cache(plugin_name, resource, action)
+            self._audit(plugin_name, resource, action, effect, emit_event=True)
+        else:
             # Audit even on cache hit for allows() to keep log complete
             self._audit(
                 plugin_name, resource, action, effect, emit_event=False, cache_hit=True
             )
-            return effect == PolicyEffect.ALLOW
-
-        try:
-            self.check(plugin_name, resource, action)
-            return True
-        except PermissionDenied:
-            return False
+        return effect == PolicyEffect.ALLOW
 
     def _evaluate_and_cache(
         self, plugin_name: str, resource: str, action: str
