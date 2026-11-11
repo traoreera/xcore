@@ -74,10 +74,10 @@ class ConfigLoader:
             suffix = candidate.suffix.lower()
             try:
                 if suffix in (".yaml", ".yml"):
-                    import yaml
+                    from ..kernel import yamlio
 
                     with open(candidate, encoding="utf-8") as f:
-                        data = yaml.safe_load(f) or {}
+                        data = yamlio.safe_load(f) or {}
                 else:
                     import json
 

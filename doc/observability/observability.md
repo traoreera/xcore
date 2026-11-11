@@ -152,6 +152,30 @@ with tracer.span("downstream_step", context=ctx) as span:
 
 Call `tracer.shutdown()` (done automatically by `Xcore.shutdown()`) before process exit — otherwise spans still sitting in the `BatchSpanProcessor` buffer are dropped, never exported.
 
+### What each layer costs per call
+
+Measured on a trivial trusted plugin (best of 7 rounds × 2000 calls, Python 3.14, 8 cores — see
+`scripts/profile_runtime.py`):
+
+| Layer | p50 | Delta |
+|---|---|---|
+| none | 38.5 µs | — |
+| logging at DEBUG | 40.0 µs | +1.5 µs |
+| metrics (Prometheus) | 43.4 µs | +5 µs |
+| tracing, OTel SDK with a no-op exporter | 95.5 µs | **+57 µs (×2.5)** |
+| tracing, OTel console exporter | 181 µs | +143 µs |
+
+Logging and metrics are cheap. **The OTel span is the only significant cost on the call path** — budget
+for it before enabling tracing on a hot service, and prefer sampling at the collector.
+
+> **The console exporter is for development only.** It uses a synchronous `SimpleSpanProcessor`, so
+> every span is written out on the call path (+143 µs per call measured above). In production, set an
+> `endpoint`: the OTLP exporter batches. Not measured here: OTLP + `BatchSpanProcessor` under load.
+
+The in-memory history behind `tracer.export()` is capped by `observability.tracing.max_local_spans`
+(default 1000, `0` to keep nothing). It is a debugging aid, not an export pipeline — it keeps the most
+recent spans and nothing older.
+
 ---
 
 ## 4. Health Checks

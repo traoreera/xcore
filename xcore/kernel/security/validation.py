@@ -156,10 +156,10 @@ class ManifestValidator:
     @staticmethod
     def _yaml(path: Path) -> dict:
         try:
-            import yaml  # type: ignore
+            from ..yamlio import safe_load  # type: ignore
 
             with open(path, encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
+                return safe_load(f) or {}
         except ImportError as e:
             raise ManifestError("pyyaml non installé") from e
 
@@ -445,8 +445,13 @@ class ASTScanner:
                 scanner._scan_imports_python(py_file, result, local_modules)
 
         # ── Vérification builtins/attributs (Python AST) ─────
+        # Le scanner C++ ne rapporte pas les erreurs de syntaxe : dans ce cas c'est cette phase,
+        # qui parse de toute façon, qui les dit (sans quoi un fichier illisible passait le scan).
+        used_cpp = scanner._cpp is not None
         for py_file in py_files:
-            _check_builtins_and_attrs(py_file, result, scanner._forbidden)
+            _check_builtins_and_attrs(
+                py_file, result, scanner._forbidden, report_unparsable=used_cpp
+            )
             result.scanned.append(str(py_file.relative_to(plugin_dir)))
 
         return result
@@ -548,14 +553,32 @@ def _collect_local_modules(src_dir: Path) -> set[str]:
 
 
 def _check_builtins_and_attrs(
-    path: Path, result: ScanResult, forbidden: set[str]
+    path: Path,
+    result: ScanResult,
+    forbidden: set[str],
+    *,
+    report_unparsable: bool = False,
 ) -> None:
-    """Vérifie les builtins dangereux et attributs interdits (nécessite l'AST)."""
+    """Vérifie les builtins dangereux et attributs interdits (nécessite l'AST).
+
+    `report_unparsable` : signaler ici un fichier qui ne se parse pas. Il le faut quand la phase
+    d'imports est passée par le scanner C++, qui ne rapporte PAS les erreurs de syntaxe — sinon un
+    fichier illisible traversait tout le scan sans un mot et le plugin était déclaré conforme, alors
+    qu'aucun de ses imports ni de ses builtins n'avait pu être examiné. Un scanner de sécurité doit
+    échouer FERMÉ : ne pas savoir lire un fichier n'est pas la même chose que l'avoir trouvé sain.
+    Avec le repli Python, `_scan_imports_python` l'a déjà dit : on ne le répète pas.
+    """
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
-    except Exception:
-        return  # déjà signalé par la phase import
+    except SyntaxError as e:
+        if report_unparsable:
+            result.add_error(f"{path}: erreur de syntaxe : {e}")
+        return
+    except Exception as e:
+        if report_unparsable:
+            result.add_error(f"{path}: lecture impossible : {e}")
+        return
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):

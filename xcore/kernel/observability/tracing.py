@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generator, Mapping, MutableMapping
@@ -38,6 +39,19 @@ logger = get_logger("xcore.observability.tracing")
 # Un seul TracerProvider global par process (recommandation OTel — les appels
 # répétés à set_tracer_provider() au-delà du premier sont ignorés par le SDK).
 _provider_configured = False
+
+
+DEFAULT_MAX_LOCAL_SPANS = 1000
+
+
+def _max_local_spans(config: "TracingConfig | None") -> int:
+    """La taille de l'historique local, prise dans la configuration et bornée à zéro : un réglage
+    négatif ou aberrant ne doit pas rendre `deque(maxlen=…)` illimité (`maxlen=None`).
+    """
+    value = getattr(config, "max_local_spans", DEFAULT_MAX_LOCAL_SPANS)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return DEFAULT_MAX_LOCAL_SPANS
+    return max(value, 0)
 
 
 @dataclass
@@ -134,7 +148,11 @@ class Tracer:
         config: "TracingConfig | None" = None,
     ) -> None:
         self.service_name = service_name
-        self._spans: list[Span] = []
+        # BORNÉ : `span()` est traversé par chaque appel de plugin (TracingMiddleware enveloppe
+        # tout, même tracing désactivé). Une liste sans limite gardait donc un Span par appel
+        # pour toujours — une fuite mesurée à ~562 octets par appel (#305). Un deque garde les
+        # N plus récents, ce qui est tout ce que `export()` sert à montrer.
+        self._spans: deque[Span] = deque(maxlen=_max_local_spans(config))
         self._otel_tracer = None
 
         if (
