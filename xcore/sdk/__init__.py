@@ -39,7 +39,6 @@ from ..kernel.events import Event, HookResult
 from ..kernel.observability import get_logger
 from ..kernel.permissions.engine import PermissionDenied
 from ..kernel.runtime.state_machine import PluginState
-from ..services.xworker import WorkerService, task, task_registry
 from .decorators import (
     RoutedPlugin,
     action,
@@ -116,52 +115,57 @@ __all__ = [
     "task_registry",
 ]
 
-# ── Adaptateurs SQL (extra `db`) ───────────────────────────────────────────
-# SQLAlchemy est une dépendance OPTIONNELLE depuis la 2.7.0 (XCoreRuntime[db],
-# [postgres], [sqlite]). Importer ces deux modules à l'import de `xcore.sdk`
-# faisait planter `import xcore` — et donc le boot — sur un simple
-# `pip install XCoreRuntime`. Ils sont donc résolus à la demande (PEP 562) :
-# `from xcore.sdk import BaseAsyncRepository` fonctionne comme avant quand
-# SQLAlchemy est installé, et lève une ImportError explicite sinon.
+# ── Ce qui ne s'importe qu'à la demande (PEP 562) ──────────────────────────
+#
+# Trois familles de noms que ce namespace expose SANS les importer à l'import :
+#
+# - les adaptateurs SQL : SQLAlchemy est optionnel depuis la 2.7.0
+#   (XCoreRuntime[db], [postgres], [sqlite]) et les importer faisait planter
+#   `import xcore` — donc le boot — sur un simple `pip install XCoreRuntime` ;
+# - le service de tâches (`WorkerService`, `task`, `task_registry`) : il tire
+#   CELERY, mesuré à ~52 ms d'import, payés par toute application qui fait
+#   `import xcore` et par CHAQUE worker sandbox à chaque recyclage, même sans
+#   service de tâches configuré (#305, #306) ;
+# - les fonctionnalités du package externe `xcoresdk`, qui tire SQLAlchemy par
+#   son module d'authentification : ~102 ms de plus, dans les mêmes conditions.
+#
+# Soit ~154 ms sur les ~594 ms d'`import xcore`, et autant par worker sandbox.
+# L'accès reste identique pour l'appelant (`from xcore.sdk import WorkerService`) :
+# c'est le PREMIER accès qui paie l'import, et lui seul.
 _SQL_ADAPTERS = {
     "BaseAsyncRepository": ".adapter.asyncsql",
     "BaseSyncRepository": ".adapter.syncsql",
 }
+_WORKER = dict.fromkeys(
+    ("WorkerService", "task", "task_registry"), "..services.xworker"
+)
+# Pas d'équivalent local : absentes plutôt que simulées (un faux `@cached` qui ne
+# cache rien silencieusement serait pire qu'une ImportError explicite).
+_XCORESDK = dict.fromkeys(
+    (
+        "AutoMixin",
+        "BaseMongoRepository",
+        "BaseRedisRepository",
+        "EventMixin",
+        "HookMixin",
+        "ObservabilityMixin",
+        "ScheduledMixin",
+        "cached",
+        "counted",
+        "cron",
+        "health_check",
+        "interval",
+        "invalidate",
+        "on_event",
+        "on_hook",
+        "timed",
+        "traced",
+    ),
+    "sdk",
+)
+_LAZY = {**_SQL_ADAPTERS, **_WORKER, **_XCORESDK}
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .adapter.asyncsql import BaseAsyncRepository
-    from .adapter.syncsql import BaseSyncRepository
-
-if importlib.util.find_spec("sqlalchemy") is not None:
-    # Absents de __all__ sans SQLAlchemy : `from xcore.sdk import *` ne doit pas
-    # lever pour une dépendance dont l'utilisateur n'a pas besoin.
-    __all__ += list(_SQL_ADAPTERS)
-
-
-def __getattr__(name: str):
-    module_name = _SQL_ADAPTERS.get(name)
-    if module_name is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    try:
-        module = importlib.import_module(module_name, __name__)
-    except ModuleNotFoundError as e:
-        if (e.name or "").split(".")[0] == "sqlalchemy":
-            raise ImportError(
-                f"xcore.sdk.{name} requires SQLAlchemy, an optional dependency "
-                "since XCoreRuntime 2.7.0 — install it with: "
-                "pip install 'XCoreRuntime[db]'"
-            ) from e
-        raise
-    value = getattr(module, name)
-    globals()[name] = value  # mis en cache : __getattr__ n'est appelé qu'une fois
-    return value
-
-
-# ── Fonctionnalités xcoresdk sans équivalent local ─────────────────────────
-# N'existent que si le package externe `xcoresdk` est installé en plus.
-# Absentes ici plutôt que simulées : un faux no-op serait pire qu'une
-# ImportError explicite (ex: un @cached qui ne cache rien silencieusement).
-try:
     from sdk import (  # type: ignore[import-not-found]
         AutoMixin,
         BaseMongoRepository,
@@ -182,28 +186,50 @@ try:
         traced,
     )
 
-    __all__ += [
-        "AutoMixin",
-        "BaseMongoRepository",
-        "BaseRedisRepository",
-        "EventMixin",
-        "HookMixin",
-        "ObservabilityMixin",
-        "ScheduledMixin",
-        "cached",
-        "counted",
-        "cron",
-        "health_check",
-        "interval",
-        "invalidate",
-        "on_event",
-        "on_hook",
-        "timed",
-        "traced",
-    ]
-except ImportError:
+    from ..services.xworker import WorkerService, task, task_registry
+    from .adapter.asyncsql import BaseAsyncRepository
+    from .adapter.syncsql import BaseSyncRepository
+
+# `find_spec` RÉSOUT sans exécuter (mesuré : 0,05 ms) : `from xcore.sdk import *` ne doit
+# pas lever pour une dépendance que l'utilisateur n'a pas, et ne doit pas non plus importer
+# celery ou SQLAlchemy juste pour savoir s'ils sont là.
+__all__ += list(_WORKER)
+if importlib.util.find_spec("sqlalchemy") is not None:
+    __all__ += list(_SQL_ADAPTERS)
+if importlib.util.find_spec("sdk") is not None:
+    __all__ += list(_XCORESDK)
+else:
     get_logger("xcore.sdk").debug(
         "package xcoresdk non installé — EventMixin/HookMixin/ObservabilityMixin/"
         "ScheduledMixin/cached/invalidate/cron/interval/health_check/AutoMixin/"
         "BaseMongoRepository/BaseRedisRepository indisponibles dans xcore.sdk"
     )
+
+#: Ce qu'il faut installer pour le nom manquant, quand l'import échoue.
+_MISSING = {
+    "sqlalchemy": "pip install 'XCoreRuntime[db]'",
+    "celery": "pip install 'XCoreRuntime[worker]'",
+    "sdk": "le package externe xcoresdk",
+}
+
+
+def __getattr__(name: str):
+    module_name = _LAZY.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        module = importlib.import_module(
+            module_name, __name__ if module_name[0] == "." else None
+        )
+    except ModuleNotFoundError as e:
+        missing = (e.name or "").split(".")[0]
+        if missing in _MISSING:
+            raise ImportError(
+                f"xcore.sdk.{name} demande {missing}, une dépendance optionnelle — {_MISSING[missing]}"
+            ) from e
+        raise
+    value = getattr(module, name)
+    globals()[
+        name
+    ] = value  # mis en cache : __getattr__ n'est appelé qu'une fois par nom
+    return value

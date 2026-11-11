@@ -315,6 +315,11 @@ class TracingConfig:
     backend: str = "noop"  # noop | opentelemetry | jaeger
     service_name: str = "xcore"
     endpoint: str | None = None
+    # Nombre de spans gardés EN MÉMOIRE pour l'introspection (`Tracer.export()`), les plus
+    # récents. Ce n'est pas le pipeline d'export OTel : c'est un historique de débogage, et
+    # il doit être borné — une liste sans limite faisait ~562 octets par appel, soit près de
+    # 5 Go par jour et par worker à 100 req/s (#305). 0 = ne rien garder.
+    max_local_spans: int = 1000
 
 
 @dataclass

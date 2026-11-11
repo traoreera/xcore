@@ -192,6 +192,7 @@ class SchedulerService(BaseService):
             return
 
         jobstores: dict = {"default": MemoryJobStore()}
+        degraded = False
 
         if self._config.backend == "redis":
             try:
@@ -215,9 +216,26 @@ class SchedulerService(BaseService):
                 )
                 logger.debug("distributed lock enabled", backend="redis")
             except ImportError:
-                logger.warning(
-                    "apscheduler[redis] not installed, falling back to memory"
+                # PAS un repli discret : l'opérateur a DEMANDÉ le verrou distribué, donc il croit
+                # ses jobs protégés. Retomber en silence sur « aucun verrou » est le pire des deux
+                # mondes — chaque worker exécutera chaque job, et rien ne l'aura dit (#310).
+                logger.error(
+                    "scheduler: verrou distribué DEMANDÉ mais indisponible — chaque processus "
+                    "exécutera chaque job",
+                    backend="redis",
+                    hint="pip install 'apscheduler[redis]' redis",
                 )
+                degraded = True
+        elif self._config.backend != "memory":
+            # « database » figure dans les valeurs documentées mais n'est pas implémenté : le dire,
+            # au lieu de donner un backend mémoire à qui a écrit autre chose.
+            logger.error(
+                "scheduler: backend inconnu, aucun verrou posé — chaque processus exécutera "
+                "chaque job",
+                backend=self._config.backend,
+                supported="memory | redis",
+            )
+            degraded = True
 
         self._scheduler = AsyncIOScheduler(
             jobstores=jobstores,
@@ -233,11 +251,37 @@ class SchedulerService(BaseService):
             self._add_job_from_config(job_cfg)
 
         self._scheduler.start()
-        self._status = ServiceStatus.READY
+        self._status = ServiceStatus.DEGRADED if degraded else ServiceStatus.READY
         logger.info(
             "scheduler started",
             timezone=self._config.timezone,
             backend=self._config.backend,
+            distributed_lock=_REDIS_LOCK_CLIENT is not None,
+        )
+        self._warn_if_unlocked()
+
+    def _warn_if_unlocked(self) -> None:
+        """Dire UNE fois, au démarrage, que les jobs ne sont pas protégés contre le multi-processus.
+
+        Sans verrou, chaque processus qui a enregistré un job l'exécute : deux workers uvicorn, deux
+        paies ; quatre workers, quatre amortissements. Le backend par défaut (`memory`) est dans ce
+        cas, donc la configuration la plus simple est aussi la seule qui double les écritures.
+
+        Une bibliothèque ne peut PAS savoir combien de processus tournent (uvicorn `--workers` est
+        décidé dehors, et chaque worker est un process qui se croit seul) : d'où un avertissement
+        nommant les jobs concernés, et non un refus — refuser en mono-processus empêcherait un
+        déploiement parfaitement correct de tourner.
+        """
+        if _REDIS_LOCK_CLIENT is not None:
+            return
+        jobs = [str(j.get("id") or j.get("func") or "?") for j in self._config.jobs]
+        if not jobs and not _JOB_REGISTRY:
+            return  # aucun job : rien à dire
+        logger.warning(
+            "scheduler sans verrou : en multi-processus, CHAQUE processus exécutera ces jobs",
+            backend=self._config.backend,
+            jobs=jobs or sorted(_JOB_REGISTRY),
+            hint="backend: redis (verrou distribué), ou un seul processus",
         )
 
     def _add_job_from_config(self, job_cfg: dict) -> None:

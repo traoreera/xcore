@@ -388,8 +388,13 @@ description: Test description
         assert "traversal" in str(exc_info.value)
 
     def test_yaml_import_error(self, validator, tmp_path):
-        """Test _yaml raises error when pyyaml not installed."""
-        with patch.dict("sys.modules", {"yaml": None}):
+        """Test _yaml raises error when pyyaml not installed.
+
+        `_yaml` passe par `xcore.kernel.yamlio` (loader C quand il est là, #305) : c'est donc
+        CE module qu'il faut rendre introuvable pour simuler l'absence de PyYAML — rendre
+        `yaml` seul inutilisable ne change rien quand `yamlio` est déjà importé.
+        """
+        with patch.dict("sys.modules", {"yaml": None, "xcore.kernel.yamlio": None}):
             (tmp_path / "test.yaml").touch()
             with pytest.raises(ManifestError) as exc_info:
                 ManifestValidator._yaml(tmp_path / "test.yaml")

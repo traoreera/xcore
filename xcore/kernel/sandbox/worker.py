@@ -801,10 +801,10 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
 
 def _parse_manifest_file(fname, manifest_path, manifest: _PluginManifest):
     if fname.endswith(".yaml"):
-        import yaml
+        from xcore.kernel import yamlio
 
         with open(manifest_path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f) or {}
+            raw = yamlio.safe_load(f) or {}
     else:
         import json as _json
 
