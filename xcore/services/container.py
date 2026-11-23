@@ -79,7 +79,7 @@ class SchedulerServiceProvider(BaseServiceProvider):
             return
         from .scheduler.service import SchedulerService
 
-        svc = SchedulerService(cfg)
+        svc = SchedulerService(cfg, databases=container._raw)
         await svc.init()
         container._services["scheduler_service"] = svc
         container._raw["scheduler"] = svc

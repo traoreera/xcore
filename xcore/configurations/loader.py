@@ -372,6 +372,8 @@ class ConfigLoader:
             enabled=s.get("enabled", True),
             backend=s.get("backend", "memory"),
             url=s.get("url", "redis://localhost:6379/0"),
+            database=s.get("database"),
+            lock_min_hold_seconds=s.get("lock_min_hold_seconds", 1.0),
             timezone=s.get("timezone", "UTC"),
             misfire_grace_time=s.get("misfire_grace_time", 60),
             jobs=s.get("jobs", []),

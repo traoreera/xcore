@@ -42,6 +42,11 @@ Chaque worker enregistre ses jobs au démarrage (via ScheduledMixin.on_load).
 Quand le backend est Redis, un lock distribué (`xcore:sched:lock:<job_id>`)
 garantit qu'un seul worker exécute le job même si tous reçoivent le déclenchement.
 Les autres workers voient le lock occupé et skippent silencieusement.
+
+Sans Redis, `backend: database` donne la même garantie avec un bail par job dans
+une table de la base (`xcore_scheduler_leases`, voir `lease.py`) : c'est la base,
+sur son horloge, qui tranche. Les jobs restent en mémoire dans chaque processus —
+seul le VERROU est en base.
 """
 
 from __future__ import annotations
@@ -70,6 +75,10 @@ _JOB_REGISTRY: dict[str, Callable] = {}
 # Client Redis asyncio partagé pour les locks distribués.
 # Initialisé uniquement quand backend=redis.
 _REDIS_LOCK_CLIENT: Any = None
+
+# Bail en base (`backend: database`) — voir lease.DatabaseLease. Exclusif du client
+# Redis : un seul des deux est posé.
+_DB_LEASE: Any = None
 
 # TTL du lock en secondes — suffisant pour les jobs les plus longs.
 # Si un job dépasse cette durée, le lock expire et un autre worker peut prendre la main.
@@ -149,6 +158,9 @@ async def _dispatch_job(job_id: str) -> None:
 
     client = _REDIS_LOCK_CLIENT
     if client is None:
+        if _DB_LEASE is not None:
+            await _run_with_lease(_DB_LEASE, fn, job_id)
+            return
         await _run_job(fn, job_id)
         return
 
@@ -172,13 +184,110 @@ async def _dispatch_job(job_id: str) -> None:
         await client.eval(_UNLOCK_SCRIPT, 1, lock_key, token)
 
 
+def _has_lock() -> bool:
+    return _REDIS_LOCK_CLIENT is not None or _DB_LEASE is not None
+
+
+async def _renew_lease(lease: Any, job_id: str, token: str) -> None:
+    """Prolonge le bail en base tant que le job tourne (pendant de `_renew_lock`)."""
+    while True:
+        await asyncio.sleep(lease.ttl / 3)
+        try:
+            renewed = await lease.renew(job_id, token)
+        except Exception as exc:  # noqa: BLE001 - une coupure réseau ne tue pas le job
+            logger.warning(
+                "scheduler lock renewal failed", job_id=job_id, error=str(exc)
+            )
+            continue
+        if not renewed:
+            logger.warning("scheduler lock lost during job run", job_id=job_id)
+            return
+
+
+async def _run_with_lease(lease: Any, fn: Callable, job_id: str) -> None:
+    token = uuid.uuid4().hex  # propriétaire du bail : seul lui peut le libérer
+    try:
+        acquired = await lease.acquire(job_id, token)
+    except Exception as exc:  # noqa: BLE001
+        # Base injoignable : on ne sait PAS si un autre processus tient le bail.
+        # Exécuter quand même, c'est rejouer la paie ; on saute ce déclenchement et
+        # on le dit — le suivant réessaiera.
+        logger.error(
+            "scheduler lock unavailable, job skipped",
+            job_id=job_id,
+            backend="database",
+            error=str(exc),
+        )
+        return
+    if not acquired:
+        logger.debug("job skipped, already running on another worker", job_id=job_id)
+        return
+
+    renewer = asyncio.create_task(_renew_lease(lease, job_id, token))
+    try:
+        await _run_job(fn, job_id)
+    finally:
+        renewer.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await renewer
+        try:
+            await lease.release(job_id, token)
+        except Exception as exc:  # noqa: BLE001 - le bail expirera de lui-même
+            logger.warning(
+                "scheduler lock release failed", job_id=job_id, error=str(exc)
+            )
+
+
 class SchedulerService(BaseService):
     name = "scheduler"
 
-    def __init__(self, config: "SchedulerConfig") -> None:
+    def __init__(
+        self, config: "SchedulerConfig", databases: dict[str, Any] | None = None
+    ) -> None:
         super().__init__()
         self._config = config
         self._scheduler = None
+        # Connexions de `services.databases` (nom → adaptateur), pour `backend: database`.
+        self._databases = databases or {}
+
+    async def _init_database_lease(self) -> bool:
+        """Pose le bail en base. `False` : impossible — dit, et le service est dégradé."""
+        global _DB_LEASE
+        from .lease import DatabaseLease
+
+        name = getattr(self._config, "database", None) or "db"
+        adapter = self._databases.get(name)
+        try:
+            if adapter is None:
+                raise LookupError(f"aucune connexion {name!r} dans services.databases")
+            lease = DatabaseLease(
+                adapter,
+                ttl=_LOCK_TTL,
+                min_hold=getattr(self._config, "lock_min_hold_seconds", 1.0),
+            )
+            await lease.setup()
+        except Exception as exc:  # noqa: BLE001
+            # Même règle que pour Redis (#310) : l'opérateur a DEMANDÉ un verrou, il
+            # croit ses jobs protégés. Pas de repli discret sur « aucun verrou ».
+            logger.error(
+                "scheduler: verrou en base DEMANDÉ mais indisponible — chaque processus "
+                "exécutera chaque job",
+                backend="database",
+                database=name,
+                error=str(exc),
+                hint="déclarer une base SQL dans services.databases, ou "
+                "services.scheduler.database: <nom>",
+            )
+            return False
+        _DB_LEASE = lease
+        logger.debug(
+            "distributed lock enabled",
+            backend="database",
+            database=name,
+            dialect=lease.dialect,
+            table=lease.table,
+        )
+        return True
 
     async def init(self) -> None:
         global _REDIS_LOCK_CLIENT
@@ -226,14 +335,15 @@ class SchedulerService(BaseService):
                     hint="pip install 'apscheduler[redis]' redis",
                 )
                 degraded = True
+        elif self._config.backend == "database":
+            degraded = not await self._init_database_lease()
         elif self._config.backend != "memory":
-            # « database » figure dans les valeurs documentées mais n'est pas implémenté : le dire,
-            # au lieu de donner un backend mémoire à qui a écrit autre chose.
+            # Le dire, au lieu de donner un backend mémoire à qui a écrit autre chose.
             logger.error(
                 "scheduler: backend inconnu, aucun verrou posé — chaque processus exécutera "
                 "chaque job",
                 backend=self._config.backend,
-                supported="memory | redis",
+                supported="memory | redis | database",
             )
             degraded = True
 
@@ -256,7 +366,7 @@ class SchedulerService(BaseService):
             "scheduler started",
             timezone=self._config.timezone,
             backend=self._config.backend,
-            distributed_lock=_REDIS_LOCK_CLIENT is not None,
+            distributed_lock=_has_lock(),
         )
         self._warn_if_unlocked()
 
@@ -272,7 +382,7 @@ class SchedulerService(BaseService):
         nommant les jobs concernés, et non un refus — refuser en mono-processus empêcherait un
         déploiement parfaitement correct de tourner.
         """
-        if _REDIS_LOCK_CLIENT is not None:
+        if _has_lock():
             return
         jobs = [str(j.get("id") or j.get("func") or "?") for j in self._config.jobs]
         if not jobs and not _JOB_REGISTRY:
@@ -281,7 +391,7 @@ class SchedulerService(BaseService):
             "scheduler sans verrou : en multi-processus, CHAQUE processus exécutera ces jobs",
             backend=self._config.backend,
             jobs=jobs or sorted(_JOB_REGISTRY),
-            hint="backend: redis (verrou distribué), ou un seul processus",
+            hint="backend: redis ou database (verrou distribué), ou un seul processus",
         )
 
     def _add_job_from_config(self, job_cfg: dict) -> None:
@@ -394,12 +504,14 @@ class SchedulerService(BaseService):
     # ── Cycle de vie ──────────────────────────────────────────
 
     async def shutdown(self) -> None:
-        global _REDIS_LOCK_CLIENT
+        global _REDIS_LOCK_CLIENT, _DB_LEASE
         if self._scheduler and self._scheduler.running:
             self._scheduler.shutdown(wait=False)
         if _REDIS_LOCK_CLIENT is not None:
             await _REDIS_LOCK_CLIENT.aclose()
             _REDIS_LOCK_CLIENT = None
+        # Le moteur appartient au service `database`, arrêté après le scheduler.
+        _DB_LEASE = None
         self._status = ServiceStatus.STOPPED
 
     async def health_check(self) -> tuple[bool, str]:
@@ -414,5 +526,5 @@ class SchedulerService(BaseService):
             "running": self._scheduler.running if self._scheduler else False,
             "jobs": len(self.jobs()),
             "timezone": self._config.timezone,
-            "distributed_lock": _REDIS_LOCK_CLIENT is not None,
+            "distributed_lock": _has_lock(),
         }

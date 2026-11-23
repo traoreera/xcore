@@ -188,6 +188,13 @@ class SchedulerConfig:
     enabled: bool = True
     backend: str = "memory"  # memory | redis | database
     url: str = "redis://localhost:6379/0"
+    # backend "database" : connexion de `services.databases` qui porte la table des
+    # baux (`xcore_scheduler_leases`). None = la connexion par défaut (`db`).
+    database: str | None = None
+    # backend "database" : durée minimale (s) pendant laquelle un bail reste tenu
+    # après son acquisition, même si le job finit avant — le temps que tous les
+    # processus aient vu le même déclenchement. 0 = libéré dès la fin du job.
+    lock_min_hold_seconds: float = 1.0
     timezone: str = "UTC"
     misfire_grace_time: float = 60
     jobs: list[dict[str, Any]] = field(default_factory=list)
