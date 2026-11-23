@@ -398,16 +398,21 @@ async def cmd_reload(args: argparse.Namespace) -> None:
                 pauses.append((time.perf_counter() - t0) * 1000)
             return min(pauses), statistics.median(pauses)
 
+        # Xcore.boot() gèle le tas du framework AVANT de charger les plugins
+        # (plugins.gc_freeze_baseline, #315) : la collecte forcée après un reload ne
+        # parcourt que ce que les plugins ont alloué. On mesure les deux états.
         low, med = full_gc()
         print(
-            f"full gc.collect() pause (min/median): {low:.1f}/{med:.1f}ms, "
-            f"{len(gc.get_objects())} tracked objects"
+            f"full gc.collect() pause, baseline frozen (min/median): "
+            f"{low:.2f}/{med:.2f}ms, {len(gc.get_objects())} tracked objects, "
+            f"{gc.get_freeze_count()} frozen"
         )
-        # Diagnostic only: freezing AFTER plugins are loaded would hide their
-        # reference cycles from the collector and defeat the release watcher.
-        gc.freeze()
+        gc.unfreeze()
         low, med = full_gc()
-        print(f"after gc.freeze() (min/median): {low:.1f}/{med:.1f}ms")
+        print(
+            f"same, without the freeze (gc_freeze_baseline: false): "
+            f"{low:.1f}/{med:.1f}ms, {len(gc.get_objects())} tracked objects"
+        )
 
         if not args.no_cprofile:
             profiler = cProfile.Profile()

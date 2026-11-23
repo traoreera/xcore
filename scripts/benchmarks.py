@@ -313,7 +313,7 @@ def _make_xcore_config(plugins_dir: Path) -> str:
 
             observability:
               logging:
-                enabled: false
+                enabled: false   # champ réel depuis #315 (était ignoré en silence)
               metrics:
                 enabled: false
               tracing:
@@ -576,39 +576,42 @@ class PluginCallBench:
                     ]
                 )
 
+                # Chaque appel est chronométré individuellement : la latence d'un appel SOUS
+                # concurrence (attente du loop comprise), pas un p95/p99 dérivé de la moyenne.
+                # Mieux vaut pas de chiffre qu'un chiffre inventé (#315).
+                samples: list[float] = []
                 errors = 0
-                t0 = time.perf_counter()
-                tasks = [
-                    app.plugins.call("bench_concurrent", "ping", {})
-                    for _ in range(concurrency)
-                ]
-                raw = await asyncio.gather(*tasks, return_exceptions=True)
-                total_ms = (time.perf_counter() - t0) * 1000
 
-                for r in raw:
-                    if isinstance(r, Exception) or (
-                        isinstance(r, dict) and r.get("status") != "ok"
-                    ):
+                async def _timed() -> None:
+                    nonlocal errors
+                    started = time.perf_counter()
+                    try:
+                        r = await app.plugins.call("bench_concurrent", "ping", {})
+                    except Exception:
+                        errors += 1
+                        return
+                    samples.append((time.perf_counter() - started) * 1000)
+                    if isinstance(r, dict) and r.get("status") != "ok":
                         errors += 1
 
-                results.append(
-                    BenchResult(
-                        name=f"concurrent_{concurrency}_calls",
-                        category=self.CATEGORY,
-                        iterations=concurrency,
-                        total_ms=total_ms,
-                        mean_ms=total_ms / concurrency,
-                        median_ms=total_ms / concurrency,
-                        p95_ms=total_ms / concurrency * 1.3,
-                        p99_ms=total_ms / concurrency * 1.5,
-                        min_ms=0,
-                        max_ms=total_ms,
-                        std_ms=0,
-                        throughput_ops_sec=concurrency / (total_ms / 1000),
-                        errors=errors,
-                        notes=f"asyncio.gather({concurrency})",
-                    )
+                t0 = time.perf_counter()
+                await asyncio.gather(*[_timed() for _ in range(concurrency)])
+                total_ms = (time.perf_counter() - t0) * 1000
+
+                result = _measure(
+                    samples,
+                    concurrency,
+                    errors,
+                    f"concurrent_{concurrency}_calls",
+                    self.CATEGORY,
+                    notes=f"asyncio.gather({concurrency}), latence par appel",
                 )
+                # Durée et débit du LOT (mur), pas la somme des latences qui se chevauchent.
+                result.total_ms = total_ms
+                result.throughput_ops_sec = (
+                    concurrency / (total_ms / 1000) if total_ms > 0 else 0.0
+                )
+                results.append(result)
 
                 await app.shutdown()
             except Exception as e:

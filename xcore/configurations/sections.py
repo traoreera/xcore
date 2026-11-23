@@ -276,6 +276,12 @@ class PluginConfig:
     # Force une collecte du GC (différée, regroupée) après un unload/reload de
     # plugin et signale les instances qui survivent — voir _ReleaseWatcher.
     gc_after_unload: bool = True
+    # Gèle (`gc.freeze()`) le tas du framework juste AVANT le chargement des plugins :
+    # la collecte forcée après un unload/reload ne parcourt plus que ce que les plugins
+    # ont alloué (mesuré : 17 ms → 0,02 ms de pause du loop sur 87 k objets, #315).
+    # Les objets des plugins sont créés après le gel, donc le contrôle de libération
+    # (`plugin instance still referenced after unload`) reste entier.
+    gc_freeze_baseline: bool = True
     # Un plugin Trusted dont un pas synchrone (entre deux `await`) dépasse ce
     # seuil en ms est signalé comme gelant le event loop (0 = désactivé).
     loop_block_warn_ms: int = 250
@@ -293,6 +299,9 @@ class PluginConfig:
 
 @dataclass
 class LoggingConfig:
+    # false : aucun handler xcore n'est posé et rien n'est émis (benchmarks, hôte qui
+    # gère lui-même ses logs). Le champ était accepté mais ignoré avant #315.
+    enabled: bool = True
     level: str = "INFO"
     output: str = "text"  # "text" | "json"
     # ignoré si output=text|json

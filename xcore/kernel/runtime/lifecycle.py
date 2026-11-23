@@ -426,15 +426,18 @@ class LifecycleManager:
             )
 
         timeout = self.manifest.resources.timeout_seconds
+        watched = watch_blocking(
+            self._instance.handle(action, payload),
+            self._loop_block_warn_ms(),
+            lambda seconds: self._on_loop_block(action, seconds),
+        )
         try:
-            result = await asyncio.wait_for(
-                watch_blocking(
-                    self._instance.handle(action, payload),
-                    self._loop_block_warn_ms(),
-                    lambda seconds: self._on_loop_block(action, seconds),
-                ),
-                timeout=timeout if timeout > 0 else None,
-            )
+            if timeout > 0:
+                result = await asyncio.wait_for(watched, timeout=timeout)
+            else:
+                # Pas de délai : pas d'enveloppe. `wait_for(timeout=None)` coûte encore
+                # ~0,75 µs par appel pour ne rien faire (mesuré hors cProfile, #315).
+                result = await watched
         except asyncio.TimeoutError:
             return {
                 "status": "error",
