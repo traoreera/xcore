@@ -19,6 +19,9 @@ Xcore loads configuration in the following order:
 3.  **Environment Overrides**: `XCORE__SECTION__KEY=value` (case-insensitive).
 4.  **Substitution**: `${ENV_VAR}` placeholders are resolved at runtime.
 
+#### Unknown keys
+A key that nothing reads is reported at load time (`configuration: clé sans effet`, with its full path) instead of being dropped silently — a typo such as `observability.logging.levle` no longer goes unnoticed.
+
 #### Secret Key Protection
 In `production` mode, Xcore will refuse to boot if any `secret_key` matches the default value `b"change-me-in-production"`.
 
@@ -49,6 +52,9 @@ Configuration for the plugin supervisor and loader.
 | `interval` | `int` | `2` | Polling interval (seconds) for hot-reload. |
 | `entry_point` | `str` | `"src/main.py"`| Default entry point filename. |
 | `ephemeral` | `dict` | *See below* | Default warm pool config for Ephemeral plugins. |
+| `gc_after_unload` | `bool` | `true` | Force one (debounced) GC pass after an unload/reload and report instances still referenced. |
+| `gc_freeze_baseline` | `bool` | `true` | `gc.freeze()` the framework heap just before plugins load, so that forced pass only walks what plugins allocated (17 ms → 0.02 ms pause on 87k objects). |
+| `check_dependencies` | `bool` | `true` | Warn (never block) when a loaded plugin imports packages it does not declare. |
 
 #### `plugins.ephemeral`
 Global defaults for [Ephemeral plugins](../plugins/ephemeral-plugins.md). Applied to every ephemeral plugin that does not declare its own `ephemeral:` block in `plugin.yaml`.
@@ -99,8 +105,15 @@ services:
 | Key | Type | Default | Description |
 |:--- | :--- | :--- | :--- |
 | `enabled` | `bool`| `true` | Enable/disable the task scheduler. |
-| `backend` | `str` | `"memory"` | `memory` or `redis`. |
+| `backend` | `str` | `"memory"` | `memory`, `redis` or `database` (lease in a SQL table). |
 | `timezone`| `str` | `"UTC"` | Default timezone for jobs. |
+| `url` | `str` | `redis://localhost:6379/0` | Redis URL (`backend: redis`). |
+| `database` | `str` | `null` | Connection of `services.databases` holding the leases (`backend: database`); `null` = `db`. |
+| `lock_min_hold_seconds` | `float` | `1.0` | Minimum lease duration (`backend: database`). |
+| `misfire_grace_time` | `float` | `60` | Seconds a late trigger is still run. |
+
+#### `keys` and `outbox`
+Both disabled by default — see [Keys](../services/keys.md) and [Outbox](../services/outbox.md).
 
 ---
 
@@ -124,8 +137,9 @@ Logging, metrics, and tracing settings.
 #### `logging`
 | Key | Type | Default | Description |
 |:--- | :--- | :--- | :--- |
+| `enabled` | `bool` | `true` | `false` silences every `xcore.*` logger. |
 | `level` | `str` | `"INFO"` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-| `format`| `str` | `"text"` | `text` or `json`. |
+| `output`| `str` | `"text"` | `text` or `json`. |
 | `file` | `str` | `null` | Path to log file (enables file rotation). |
 
 ---

@@ -24,6 +24,19 @@ version: 1.0.0                  # semver
 # ── Execution ─────────────────────────────────────────────────────────────────
 execution_mode: trusted         # trusted | sandboxed | legacy
 
+# ── Service contract (checked at LOAD time) ───────────────────────────────────
+requires_services:              # the plugin is refused if one is missing or too old
+  - doctype_registry
+  - name: doctype_writer
+    version: ">=2"
+provides_services:              # what this plugin exports, with its contract version
+  - name: billing_api
+    version: "1.2"
+
+# ── Python dependencies (checked by xcore-plugin-check) ───────────────────────
+dependencies:
+  - cryptography>=42
+
 # ── Environment variables ─────────────────────────────────────────────────────
 env:
   MY_SECRET: "${MY_SECRET}"                 # value injected at runtime, default = ""
@@ -45,6 +58,25 @@ runtime:
 ```
 
 ---
+
+## Service contract
+
+`get_service("doctype_writer")` fails at **call** time. Declaring the service in the manifest moves the failure to **load** time, in the deployment logs:
+
+- a consumer whose required service has no provider, or whose version constraint is not met, is refused before any of its code runs — the message names both plugins;
+- providers are loaded before their consumers, even without `requires`;
+- a plugin that declares `provides_services` but has not exported the service by the end of `on_load` is refused; so is a second plugin declaring an already provided service;
+- kernel services (`db`, `cache`, `scheduler`…) satisfy a requirement without a version constraint.
+
+## Python dependencies
+
+`xcore-plugin-check` compares what a plugin imports with what it declares (`pyproject.toml`, `requirements.txt`, or `dependencies:` above) and exits with status 1 when a package is missing — run it in the plugin's CI:
+
+```bash
+xcore-plugin-check plugins/erp_mail          # or: python -m xcore.kernel.security.dependencies
+```
+
+Ignored: the standard library, the plugin's own modules, `if TYPE_CHECKING:` blocks and imports guarded by `try/except ImportError`. xcore and its core dependencies (fastapi, pydantic, pyyaml…) are provided by the host; its extras (sqlalchemy, redis, celery…) must be declared. The same check runs at load time as a non-blocking warning (`plugins.check_dependencies`).
 
 ## Execution modes
 

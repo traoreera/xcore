@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Scheduler lock without Redis** (`services.scheduler.backend: database`, #317): a lease per job in `xcore_scheduler_leases`, decided by the database on its own clock — conditional acquisition, renewal while the job runs, owner-checked release, `lock_min_hold_seconds`. Connection chosen with `services.scheduler.database` (default `db`); without a usable SQL connection the service is `DEGRADED`, never a silent fallback. Tested on SQLite (including real concurrent processes); the PostgreSQL test runs when `XCORE_TEST_PG_URL` is set; MySQL/MariaDB is not exercised by the suite.
+- **Service contract in the manifest** (`requires_services` / `provides_services`, #311): a plugin whose required service is missing or does not satisfy the version constraint is refused at load time, with a message naming both plugins; providers load before their consumers.
+- **Plugin dependency check** (#313): `xcore-plugin-check` (and `check_plugin_dependencies()`) compares a plugin's imports with its declared dependencies (`pyproject.toml`, `requirements.txt`, new manifest key `dependencies:`); non-blocking warning at load time (`plugins.check_dependencies`).
+- **`keys` service** (#312): one encryption key per organisation and purpose, HKDF-derived from a master key, with versions (`v<n>:<ciphertext>`), on-demand rotation with plugin-registered reseal handlers, and master-key rotation. Disabled by default.
+- **`outbox` service** (#309): intentions deposited in the caller's transaction and executed after the commit, at least once, with idempotency keys, exponential backoff and a dead letter queue. Disabled by default.
+- `plugins.gc_freeze_baseline` (default `true`, #315): the framework heap is frozen just before plugins load, so the forced collection after an unload/reload pauses the loop 0.02 ms instead of 17 ms (87k objects). The release check is unaffected.
+- `observability.logging.enabled`; `xcore` now exports `ok` and `error` (the documentation already imported them from there).
+
+### Changed
+- **Unknown configuration keys are reported** at load time instead of being dropped silently (#315). `services.scheduler.url`, `services.scheduler.misfire_grace_time` and `observability.tracing.max_local_spans` existed in the dataclasses but were never read by the loader: they now are.
+- **Sandbox worker loads leaf modules only** (#316): starting the worker no longer imports fastapi, pydantic and OpenTelemetry — 295 ms / 43 MB → 45 ms / 20 MB at import; a sandboxed plugin in its documented form goes from 47 MB to 25 MB per worker and a restart from 330 ms to 78 ms. A plugin that imports `xcore` itself still pays the full import.
+- `scripts/benchmarks.py`: real p95/p99 for `concurrent_*_calls` (they were multiples of the mean). `scripts/profile_runtime.py workers` measures both plugin styles and the cost of a restart.
+
 ### Changed
 - **Leaner core install**: the unconditional dependency set of `pip install XCoreRuntime` is down to six packages (`fastapi`, `uvicorn[standard]`, `pydantic`, `pyyaml`, `apscheduler`, `opentelemetry-sdk`). `fastapi[standard]` was replaced by plain `fastapi` + an explicit `uvicorn[standard]`, dropping the `fastapi-cli`/`fastapi-cloud-cli` cluster (`sentry-sdk`, `typer`, `rich-toolkit`, `rignore`, `fastar`, `agent-detector`, `detect-installer`) plus `jinja2`, `python-multipart`, `email-validator`, `pydantic-settings`, `pydantic-extra-types` and `dnspython` — none of which `xcore` imports. The explicit `opentelemetry-api` was dropped too (it is pulled transitively by `opentelemetry-sdk`, pinned `==1.45.1`). `poetry.lock` shrinks from 146 to 133 packages; `import xcore` and the zero-config boot still work with none of the optional packages installed (see `tests/unit/test_optional_dependencies.py`).
 

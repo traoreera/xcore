@@ -33,9 +33,11 @@ To ensure dependencies are met (e.g., the Scheduler might need the Database), se
 **Initialization Order**:
 1.  **Database**: SQL (PostgreSQL, SQLite), NoSQL (MongoDB), Redis.
 2.  **Cache**: Memory or Redis backend.
-3.  **Scheduler**: APScheduler.
-4.  **XWorker**: Background task worker (Celery/Internal).
-5.  **Extensions**: Custom user-defined service providers.
+3.  **Keys**: per-organisation encryption keys (if `services.keys.enabled`).
+4.  **Outbox**: transactional outbox (if `services.outbox.enabled`).
+5.  **Scheduler**: APScheduler.
+6.  **XWorker**: Background task worker (Celery/Internal).
+7.  **Extensions**: Custom user-defined service providers.
 
 **Shutdown Order**:
 The exact reverse of initialization (Extensions first, Database last).

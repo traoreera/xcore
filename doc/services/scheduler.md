@@ -45,6 +45,20 @@ Worker 3  ──┘                             ├─ Worker 1 → OK  → exec
                                           └─ Worker 3 → nil → skip
 ```
 
+#### Distributed lock without Redis (`backend: database`)
+
+No Redis? `backend: database` gives the same guarantee with a **lease** per job in a table of your SQL database (`xcore_scheduler_leases`, created on first start). The database decides, on **its own clock**:
+
+- acquisition is one conditional write — the first worker wins, the others skip;
+- the lease is renewed while the job runs and released only by its owner;
+- it is kept at least `lock_min_hold_seconds` (default 1 s) so that a very short job is not replayed by a worker whose trigger fires a few milliseconds late;
+- if the database is unreachable, the run is **skipped** (and logged) rather than executed without knowing who holds the lease.
+
+Jobs stay in memory in each process — only the lock lives in the database. `database:` names a connection of `services.databases` (default: `db`). Without a usable SQL connection the service logs an error and reports `DEGRADED`; it never falls back silently. Supported: PostgreSQL, SQLite, MySQL/MariaDB.
+
+!!! warning "No lock = every process runs every job"
+    With `backend: memory` (the default) each process that registered a job executes it: two uvicorn workers, two payrolls. Use `redis` or `database` as soon as more than one process runs.
+
 ---
 
 ### Practical Guide
@@ -118,9 +132,11 @@ scheduler.add_job(
 services:
   scheduler:
     enabled: true           # bool — Enable/disable the service. Default: true
-    backend: "memory"       # str — "memory" | "redis". Default: "memory"
+    backend: "memory"       # str — "memory" | "redis" | "database". Default: "memory"
     timezone: "UTC"         # str — Standard IANA timezone. Default: "UTC"
     url: ~                  # str — Required when backend is "redis"
+    database: ~             # str — backend "database": connection name. Default: "db"
+    lock_min_hold_seconds: 1.0  # backend "database": minimum lease duration
     misfire_grace_time: float # execution grace time+++
     jobs:                   # (1)!
       - id: "global_sync"
