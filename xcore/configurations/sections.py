@@ -201,10 +201,37 @@ class SchedulerConfig:
 
 
 @dataclass
+class KeysConfig:
+    """
+    Service `keys` : une clé de chiffrement par organisation, dérivée d'une clé
+    maîtresse (HKDF), avec version et rotation — voir services/keys/service.py.
+
+        services:
+          keys:
+            enabled: true
+            master_key: ${XCORE_MASTER_KEY}     # ≥ 32 octets, jamais en clair dans le dépôt
+            store: database                     # memory | file | database
+    """
+
+    enabled: bool = False
+    # Clé maîtresse n°1. Pour faire tourner la clé maîtresse elle-même, ajouter la
+    # suivante dans `master_keys` ({2: ...}) SANS retirer celle-ci.
+    master_key: str | None = None
+    master_keys: dict[Any, str] = field(default_factory=dict)
+    # Où vivent les versions de clé de chaque organisation (non secret, mais durable).
+    store: str = "file"  # memory | file | database
+    path: str = ".xcore/key_versions.json"  # store: file
+    database: str | None = None  # store: database — None = connexion par défaut (db)
+    # store partagé : relecture périodique, pour voir la rotation d'un autre worker.
+    refresh_seconds: float = 60.0
+
+
+@dataclass
 class ServicesConfig:
     databases: dict[str, DatabaseConfig] = field(default_factory=dict)
     cache: CacheConfig = field(default_factory=CacheConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    keys: KeysConfig = field(default_factory=KeysConfig)
     extensions: dict[str, dict[str, Any]] = field(default_factory=dict)
     xworker: WorkerConfig = field(default_factory=WorkerConfig)
     celery: WorkerConfig | None = None

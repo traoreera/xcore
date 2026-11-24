@@ -126,7 +126,15 @@ class LifecycleManager:
     Manages the complete lifecycle of a Trusted plugin in memory.
     """
 
-    PROTECTED_SERVICES = {"db", "cache", "scheduler", "events", "hooks", "database"}
+    PROTECTED_SERVICES = {
+        "db",
+        "cache",
+        "scheduler",
+        "events",
+        "hooks",
+        "database",
+        "keys",
+    }
 
     # Délai accordé aux tâches annulées au unload pour exécuter leurs `finally`
     # avant que le module du plugin soit retiré de sys.modules.
@@ -771,7 +779,7 @@ class LifecycleManager:
         else:
             # Fallback de sécurité si le registre est absent (pour les tests ou configs minimales)
             # On définit une liste minimale de services à protéger
-            protected = {"db", "cache", "scheduler", "events", "hooks", "database"}
+            protected = self.PROTECTED_SERVICES
             if collisions := {
                 k
                 for k, v in instance_services.items()

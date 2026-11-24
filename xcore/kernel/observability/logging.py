@@ -103,6 +103,7 @@ class XcoreLogger:
         "apikey",
         "access_key",
         "private_key",
+        "master_key",
         "authorization",
         "auth",
         "cookie",

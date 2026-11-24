@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from ..configurations.sections import ServicesConfig
     from .cache.service import CacheService
     from .database.adapters.async_sql import AsyncSQLAdapter
+    from .keys.service import KeyService
     from .scheduler.service import SchedulerService
     from .xworker.xworker import WorkerService
 
@@ -70,6 +71,44 @@ class CacheServiceProvider(BaseServiceProvider):
         container._services["cache_service"] = svc
         container._raw["cache"] = svc
         logger.info("cache initialized", backend=cfg.backend)
+
+
+class KeyServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = getattr(container._config, "keys", None)
+        if not cfg or not cfg.enabled:
+            return
+        from .keys.service import KeyService, KeyServiceError
+        from .keys.store import (
+            DatabaseVersionStore,
+            FileVersionStore,
+            MemoryVersionStore,
+        )
+
+        if cfg.store == "database":
+            name = cfg.database or "db"
+            adapter = container._raw.get(name)
+            if adapter is None:
+                raise KeyServiceError(
+                    f"services.keys.store: database — aucune connexion {name!r} dans "
+                    "services.databases"
+                )
+            store = DatabaseVersionStore(adapter)
+        elif cfg.store == "file":
+            store = FileVersionStore(cfg.path)
+        elif cfg.store == "memory":
+            store = MemoryVersionStore()
+        else:
+            raise KeyServiceError(
+                f"services.keys.store inconnu : {cfg.store!r} (memory | file | database)"
+            )
+        # Une configuration de clés invalide ARRÊTE le démarrage : mieux vaut ne pas
+        # démarrer que sceller des secrets avec une clé faible ou sans durabilité.
+        svc = KeyService(cfg, store=store)
+        await svc.init()
+        container._services["key_service"] = svc
+        container._raw["keys"] = svc
+        logger.info("keys initialized", store=cfg.store)
 
 
 class SchedulerServiceProvider(BaseServiceProvider):
@@ -139,6 +178,7 @@ class ServiceContainer:
     DEFAULT_PROVIDERS = [
         DatabaseServiceProvider,
         CacheServiceProvider,
+        KeyServiceProvider,
         SchedulerServiceProvider,
         XWorkerServiceProvider,
         ExtensionServiceProvider,
@@ -162,6 +202,7 @@ class ServiceContainer:
             [
                 DatabaseServiceProvider(),
                 CacheServiceProvider(),
+                KeyServiceProvider(),
                 SchedulerServiceProvider(),
                 XWorkerServiceProvider(),
                 ExtensionServiceProvider(),
@@ -212,6 +253,9 @@ class ServiceContainer:
 
     @overload
     def get(self, name: "Literal['worker']") -> "WorkerService": ...  # noqa: F811
+
+    @overload
+    def get(self, name: "Literal['keys']") -> "KeyService": ...  # noqa: F811
 
     @overload
     def get(self, name: str) -> Any: ...  # noqa: F811

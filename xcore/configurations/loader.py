@@ -22,6 +22,7 @@ from .sections import (
     CORSConfig,
     DatabaseConfig,
     EphemeralConfig,
+    KeysConfig,
     LoggingConfig,
     MarketplaceConfig,
     MetricsConfig,
@@ -379,6 +380,16 @@ class ConfigLoader:
             misfire_grace_time=s.get("misfire_grace_time", 60),
             jobs=s.get("jobs", []),
         )
+        k = d.get("keys") or {}
+        keys = KeysConfig(
+            enabled=k.get("enabled", False),
+            master_key=k.get("master_key"),
+            master_keys=k.get("master_keys") or {},
+            store=k.get("store", "file"),
+            path=k.get("path", ".xcore/key_versions.json"),
+            database=k.get("database"),
+            refresh_seconds=k.get("refresh_seconds", 60.0),
+        )
         xworker_raw = d.get("xworker")
         celery_raw = d.get("celery")
 
@@ -391,6 +402,7 @@ class ConfigLoader:
             databases=dbs,
             cache=cache,
             scheduler=scheduler,
+            keys=keys,
             extensions=d.get("extensions", {}),
             xworker=xworker,
             celery=celery,

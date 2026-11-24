@@ -36,11 +36,11 @@ tous les processus aient vu le même déclenchement.
 
 from __future__ import annotations
 
-import asyncio
 import re
 from typing import Any
 
 from ...kernel.observability import get_logger
+from ..database.sqlexec import dialect_of, engine_of, run_statement
 
 logger = get_logger("xcore.services.scheduler.lease")
 
@@ -88,8 +88,8 @@ class DatabaseLease:
         min_hold: float = 1.0,
         table: str = TABLE,
     ) -> None:
-        engine = getattr(adapter, "_engine", None) or getattr(adapter, "engine", None)
-        dialect = getattr(getattr(engine, "dialect", None), "name", None)
+        engine = engine_of(adapter)
+        dialect = dialect_of(engine)
         if engine is None or dialect is None:
             raise LeaseUnavailable(
                 "la connexion choisie n'est pas une base SQL initialisée"
@@ -103,8 +103,6 @@ class DatabaseLease:
             raise LeaseUnavailable(f"nom de table invalide : {table!r}")
 
         self._engine = engine
-        # Un AsyncEngine expose son moteur synchrone ; un Engine synchrone, non.
-        self._is_async = hasattr(engine, "sync_engine")
         self.dialect = dialect
         self.ttl = float(ttl)
         self.min_hold = max(0.0, float(min_hold))
@@ -168,19 +166,7 @@ class DatabaseLease:
 
     async def _run(self, statement: str, params: dict | None = None) -> Any:
         """Exécute UNE instruction dans sa propre transaction et rend le résultat."""
-        from sqlalchemy import text
-
-        clause = text(statement)
-        if self._is_async:
-            async with self._engine.begin() as conn:
-                return await conn.execute(clause, params or {})
-
-        def _sync() -> Any:
-            with self._engine.begin() as conn:
-                return conn.execute(clause, params or {})
-
-        # Moteur synchrone : hors du loop, sinon chaque bail gèlerait l'application.
-        return await asyncio.to_thread(_sync)
+        return await run_statement(self._engine, statement, params)
 
     # ── API ───────────────────────────────────────────────────
 
