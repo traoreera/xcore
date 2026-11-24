@@ -227,11 +227,45 @@ class KeysConfig:
 
 
 @dataclass
+class OutboxConfig:
+    """
+    Service `outbox` : une intention déposée DANS la transaction de l'appelant, exécutée
+    après le commit, au moins une fois — voir services/outbox/service.py.
+
+        services:
+          outbox:
+            enabled: true        # demande une base SQL dans services.databases
+    """
+
+    enabled: bool = False
+    # Connexion de `services.databases` qui porte la table (None = `db`). Ce doit être
+    # la base où les plugins écrivent : l'intention est validée avec LEUR transaction.
+    database: str | None = None
+    table: str = "xcore_outbox"
+    schema: str | None = None  # PostgreSQL : None = schéma courant de la connexion
+    # false : ce processus dépose mais ne répartit pas (un autre s'en charge).
+    dispatch: bool = True
+    poll_seconds: float = 1.0
+    batch_size: int = 20
+    # Essais avant la file morte, et recul entre deux essais (base × 2^n, plafonné).
+    max_attempts: int = 8
+    backoff_seconds: float = 5.0
+    max_backoff_seconds: float = 3600.0
+    # Durée du bail d'un répartiteur sur une intention : au-delà, un autre la reprend.
+    # À garder au-dessus du timeout de la tâche la plus lente.
+    lease_seconds: float = 300.0
+    # Les intentions envoyées sont purgées après ce délai (0 = jamais) ; leur clé
+    # d'idempotence redevient alors disponible.
+    retention_seconds: float = 604800.0
+
+
+@dataclass
 class ServicesConfig:
     databases: dict[str, DatabaseConfig] = field(default_factory=dict)
     cache: CacheConfig = field(default_factory=CacheConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     keys: KeysConfig = field(default_factory=KeysConfig)
+    outbox: OutboxConfig = field(default_factory=OutboxConfig)
     extensions: dict[str, dict[str, Any]] = field(default_factory=dict)
     xworker: WorkerConfig = field(default_factory=WorkerConfig)
     celery: WorkerConfig | None = None

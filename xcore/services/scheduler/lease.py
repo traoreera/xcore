@@ -40,29 +40,23 @@ import re
 from typing import Any
 
 from ...kernel.observability import get_logger
-from ..database.sqlexec import dialect_of, engine_of, run_statement
+from ..database.sqlexec import (
+    FLOAT_TYPE,
+    NOW_EPOCH,
+    ON_CONFLICT,
+    dialect_of,
+    engine_of,
+    run_statement,
+)
 
 logger = get_logger("xcore.services.scheduler.lease")
 
 TABLE = "xcore_scheduler_leases"
 
-# Horloge de la base, en secondes epoch (flottant), par dialecte.
-#   - postgresql : clock_timestamp() et non now(), figé au début de la transaction.
-#   - sqlite     : julianday('now') — précision milliseconde, toutes versions.
-_NOW = {
-    "postgresql": "EXTRACT(EPOCH FROM clock_timestamp())",
-    "mysql": "UNIX_TIMESTAMP(NOW(6))",
-    "mariadb": "UNIX_TIMESTAMP(NOW(6))",
-    "sqlite": "((julianday('now') - 2440587.5) * 86400.0)",
-}
-_FLOAT = {
-    "postgresql": "DOUBLE PRECISION",
-    "mysql": "DOUBLE",
-    "mariadb": "DOUBLE",
-    "sqlite": "REAL",
-}
+_NOW = NOW_EPOCH
+_FLOAT = FLOAT_TYPE
 # Dialectes où l'acquisition tient en UNE instruction (upsert conditionnel).
-_UPSERT = {"postgresql", "sqlite"}
+_UPSERT = ON_CONFLICT
 
 _TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

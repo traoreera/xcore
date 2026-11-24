@@ -28,6 +28,7 @@ from .sections import (
     MetricsConfig,
     MiddlewareConfig,
     ObservabilityConfig,
+    OutboxConfig,
     PluginConfig,
     SchedulerConfig,
     SecurityConfig,
@@ -390,6 +391,14 @@ class ConfigLoader:
             database=k.get("database"),
             refresh_seconds=k.get("refresh_seconds", 60.0),
         )
+        o = d.get("outbox") or {}
+        outbox = OutboxConfig(
+            **{
+                name: o[name]
+                for name in OutboxConfig.__dataclass_fields__  # type: ignore[attr-defined]
+                if name in o
+            }
+        )
         xworker_raw = d.get("xworker")
         celery_raw = d.get("celery")
 
@@ -403,6 +412,7 @@ class ConfigLoader:
             cache=cache,
             scheduler=scheduler,
             keys=keys,
+            outbox=outbox,
             extensions=d.get("extensions", {}),
             xworker=xworker,
             celery=celery,

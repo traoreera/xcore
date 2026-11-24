@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .cache.service import CacheService
     from .database.adapters.async_sql import AsyncSQLAdapter
     from .keys.service import KeyService
+    from .outbox.service import OutboxService
     from .scheduler.service import SchedulerService
     from .xworker.xworker import WorkerService
 
@@ -111,6 +112,28 @@ class KeyServiceProvider(BaseServiceProvider):
         logger.info("keys initialized", store=cfg.store)
 
 
+class OutboxServiceProvider(BaseServiceProvider):
+    async def init(self, container: ServiceContainer) -> None:
+        cfg = getattr(container._config, "outbox", None)
+        if not cfg or not cfg.enabled:
+            return
+        from .outbox.service import OutboxError, OutboxService
+
+        name = cfg.database or "db"
+        adapter = container._raw.get(name)
+        if adapter is None:
+            # Pas de repli : sans base il n'y a pas de transaction à partager, et une
+            # outbox en mémoire promettrait exactement ce qu'elle ne peut pas tenir.
+            raise OutboxError(
+                f"services.outbox — aucune connexion {name!r} dans services.databases"
+            )
+        svc = OutboxService(cfg, adapter)
+        await svc.init()
+        container._services["outbox_service"] = svc
+        container._raw["outbox"] = svc
+        logger.info("outbox initialized", database=name)
+
+
 class SchedulerServiceProvider(BaseServiceProvider):
     async def init(self, container: ServiceContainer) -> None:
         cfg = container._config.scheduler
@@ -179,6 +202,7 @@ class ServiceContainer:
         DatabaseServiceProvider,
         CacheServiceProvider,
         KeyServiceProvider,
+        OutboxServiceProvider,
         SchedulerServiceProvider,
         XWorkerServiceProvider,
         ExtensionServiceProvider,
@@ -203,6 +227,7 @@ class ServiceContainer:
                 DatabaseServiceProvider(),
                 CacheServiceProvider(),
                 KeyServiceProvider(),
+                OutboxServiceProvider(),
                 SchedulerServiceProvider(),
                 XWorkerServiceProvider(),
                 ExtensionServiceProvider(),
@@ -256,6 +281,9 @@ class ServiceContainer:
 
     @overload
     def get(self, name: "Literal['keys']") -> "KeyService": ...  # noqa: F811
+
+    @overload
+    def get(self, name: "Literal['outbox']") -> "OutboxService": ...  # noqa: F811
 
     @overload
     def get(self, name: str) -> Any: ...  # noqa: F811

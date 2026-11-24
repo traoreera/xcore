@@ -134,6 +134,7 @@ class LifecycleManager:
         "hooks",
         "database",
         "keys",
+        "outbox",
     }
 
     # Délai accordé aux tâches annulées au unload pour exécuter leurs `finally`

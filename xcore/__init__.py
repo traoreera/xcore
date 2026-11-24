@@ -248,6 +248,7 @@ class Xcore:
         self._freeze_gc_baseline()
         await self.plugins.boot()
         self.plugins_lists = self.plugins.list_plugins()
+        self._start_outbox()
 
         # Remonte les routes FastAPI après tout reload programmatique
         async def _on_plugin_reloaded(event):
@@ -281,6 +282,11 @@ class Xcore:
         if not self._booted:
             return
         self._logger.info("xcore shutting down")
+        # Le répartiteur de l'outbox appelle des plugins : il s'arrête avant eux, sinon
+        # chaque intention en cours compterait un échec contre un plugin déjà déchargé.
+        outbox = self.services.get_or_none("outbox") if self.services else None
+        if outbox is not None:
+            await outbox.stop()
         if self.plugins:
             await self.plugins.shutdown()
         if self.services:
@@ -294,6 +300,19 @@ class Xcore:
             self._gc_frozen = False
         self._booted = False
         self._logger.info("xcore stopped")
+
+    def _start_outbox(self) -> None:
+        """Branche l'outbox sur le superviseur et démarre son répartiteur (#309)."""
+        outbox = self.services.get_or_none("outbox") if self.services else None
+        if outbox is None:
+            return
+        plugins = self.plugins
+
+        async def _call(plugin: str, action: str, payload: dict, tenant_id: str):
+            return await plugins.call(plugin, action, payload, tenant_id=tenant_id)
+
+        outbox.bind(_call)
+        outbox.start()
 
     def _freeze_gc_baseline(self) -> None:
         """

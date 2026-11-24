@@ -11,6 +11,26 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+# Horloge de la BASE, en secondes epoch (flottant), par dialecte. Les services qui
+# comparent des échéances le font dans l'instruction SQL, jamais avec l'horloge du
+# process : deux machines désynchronisées ne se marchent pas dessus.
+#   - postgresql : clock_timestamp() et non now(), figé au début de la transaction.
+#   - sqlite     : julianday('now') — précision milliseconde, toutes versions.
+NOW_EPOCH = {
+    "postgresql": "EXTRACT(EPOCH FROM clock_timestamp())",
+    "mysql": "UNIX_TIMESTAMP(NOW(6))",
+    "mariadb": "UNIX_TIMESTAMP(NOW(6))",
+    "sqlite": "((julianday('now') - 2440587.5) * 86400.0)",
+}
+FLOAT_TYPE = {
+    "postgresql": "DOUBLE PRECISION",
+    "mysql": "DOUBLE",
+    "mariadb": "DOUBLE",
+    "sqlite": "REAL",
+}
+# Dialectes qui savent `INSERT … ON CONFLICT` (les autres : `INSERT IGNORE`).
+ON_CONFLICT = frozenset({"postgresql", "sqlite"})
+
 
 def engine_of(adapter: Any) -> Any | None:
     """Moteur SQLAlchemy d'un adaptateur (`AsyncSQLAdapter` / `SQLAdapter`), ou None."""
