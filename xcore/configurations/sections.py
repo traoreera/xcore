@@ -292,6 +292,10 @@ class PluginConfig:
     # Un plugin Trusted dont un pas synchrone (entre deux `await`) dépasse ce
     # seuil en ms est signalé comme gelant le event loop (0 = désactivé).
     loop_block_warn_ms: int = 250
+    # Au chargement, compare les imports de chaque plugin à ses dépendances déclarées
+    # (pyproject.toml, requirements.txt, `dependencies:` du manifeste) et AVERTIT des
+    # manquantes — sans bloquer. Le contrôle bloquant est `xcore-plugin-check`, en CI.
+    check_dependencies: bool = True
     snapshot: dict[str, Any] = field(
         default_factory=lambda: {
             "extensions": [".log", ".pyc", ".html"],

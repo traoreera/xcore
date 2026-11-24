@@ -290,6 +290,9 @@ class PluginManifest:
     # Contrat de services, vérifié au chargement (voir runtime/service_contracts.py).
     requires_services: list[ServiceRequirement] = field(default_factory=list)
     provides_services: list[ServiceProvision] = field(default_factory=list)
+    # Paquets Python dont le plugin a besoin (`cryptography>=42`…), comparés à ses
+    # imports par `xcore-plugin-check` et au chargement (#313).
+    dependencies: list[str] = field(default_factory=list)
     allowed_imports: list[str] = field(default_factory=list)
     permissions: list[dict] = field(default_factory=list)
     # Plugins autorisés à appeler celui-ci via IPC (voir IPCAuthMiddleware) :
@@ -334,6 +337,7 @@ class PluginManifest:
             "requires",
             "requires_services",
             "provides_services",
+            "dependencies",
             "allowed_imports",
             "permissions",
             "allowed_callers",
@@ -361,6 +365,7 @@ class PluginManifest:
             provides_services=parse_service_contract(
                 raw, "provides_services", ServiceProvision
             ),
+            dependencies=[str(d) for d in raw.get("dependencies") or []],
             allowed_imports=raw.get("allowed_imports", []),
             permissions=raw.get("permissions", []),
             allowed_callers=raw.get("allowed_callers", []),

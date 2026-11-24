@@ -286,6 +286,7 @@ class ConfigLoader:
             entry_point=d.get("entry_point", "src/main.py"),
             gc_after_unload=d.get("gc_after_unload", True),
             gc_freeze_baseline=d.get("gc_freeze_baseline", True),
+            check_dependencies=d.get("check_dependencies", True),
             loop_block_warn_ms=d.get("loop_block_warn_ms", 250),
             snapshot=d.get(
                 "snapshot",

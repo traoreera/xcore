@@ -85,6 +85,11 @@ class PluginLoader:
 
         self._validator = ManifestValidator()
 
+        # Contrôle des dépendances Python (#313) : manifestes activés en attente de
+        # contrôle, et tâches de contrôle en cours (référencées pour ne pas être collectées).
+        self._pending_dependency_checks: list[Any] = []
+        self._dependency_check_tasks: set[asyncio.Task] = set()
+
         # Table de vérité persistante actif/inactif — survit aux redémarrages.
         # Défaut : <plugins_dir>/../.xcore/plugins_state.json, aucune config requise.
         plugins_dir = Path(self._config.directory)
@@ -270,6 +275,7 @@ class PluginLoader:
 
             remaining = [m for m in remaining if m.name not in processed]
 
+        self._start_dependency_checks()
         logger.info(
             "plugins load summary",
             loaded=len(loaded),
@@ -298,6 +304,7 @@ class PluginLoader:
 
         if not activator:
             raise ValueError(f"No activator found for mode {mode}")
+        self._queue_dependency_check(manifest)
         handler = await activator.activate(manifest, self)
         try:
             self._check_provisions(manifest)
@@ -306,6 +313,37 @@ class PluginLoader:
             raise
         self._handlers[manifest.name] = handler
         logger.info("plugin activated", plugin=manifest.name, mode=mode.value)
+
+    # ── Dépendances Python (#313) ─────────────────────────────
+
+    def _queue_dependency_check(self, manifest: Any) -> None:
+        if getattr(self._config, "check_dependencies", True) is not False:
+            self._pending_dependency_checks.append(manifest)
+
+    def _start_dependency_checks(self) -> None:
+        """
+        Lance, HORS du chemin de démarrage, le contrôle des plugins qui viennent d'être
+        activés : il dit quels paquets un plugin importe sans les déclarer.
+
+        Différé et dans un thread parce que la première lecture des métadonnées des
+        paquets installés coûte ~350 ms (mesuré) — on ne les ajoute pas au boot. Un
+        avertissement, pas un refus : le paquet est peut-être installé ici, c'est chez le
+        client suivant qu'il manquera. Le contrôle bloquant est celui de la CI de
+        l'auteur (`xcore-plugin-check`).
+        """
+        manifests, self._pending_dependency_checks = self._pending_dependency_checks, []
+        if not manifests:
+            return
+        task = asyncio.create_task(
+            asyncio.to_thread(_report_undeclared_dependencies, manifests)
+        )
+        self._dependency_check_tasks.add(task)
+        task.add_done_callback(self._dependency_check_tasks.discard)
+
+    async def wait_dependency_checks(self, timeout: float | None = None) -> None:
+        """Attend la fin des contrôles de dépendances en cours (tests, arrêt propre)."""
+        if tasks := set(self._dependency_check_tasks):
+            await asyncio.wait(tasks, timeout=timeout)
 
     # ── Contrat de services (#311) ────────────────────────────
 
@@ -417,6 +455,7 @@ class PluginLoader:
         await self._ensure_required_services(manifest)
         await self._activate(manifest)
         self._flush_services([plugin_name])
+        self._start_dependency_checks()
         logger.info("plugin loaded", plugin=plugin_name)
 
     async def reload(self, plugin_name: str) -> None:
@@ -440,6 +479,7 @@ class PluginLoader:
             # Réactivation quoi qu'il arrive (le handler précédent est déjà retiré)
             await self._activate(manifest)
         self._flush_services([plugin_name])
+        self._start_dependency_checks()
         self._warn_broken_consumers(plugin_name)
 
     async def unload(self, plugin_name: str) -> None:
@@ -505,6 +545,8 @@ class PluginLoader:
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
         self._handlers.clear()
+        self._pending_dependency_checks.clear()
+        await self.wait_dependency_checks(timeout=2.0)
         logger.info("all plugins unloaded")
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
@@ -539,6 +581,28 @@ class PluginLoader:
             for name, handler in self._handlers.items()
             if getattr(handler, "plugin_middlewares", None) is not None
         ]
+
+
+def _report_undeclared_dependencies(manifests: list[Any]) -> None:
+    """Exécuté dans un thread : un avertissement par plugin qui importe sans déclarer."""
+    from ..security.dependencies import check_plugin_dependencies
+
+    for manifest in manifests:
+        try:
+            report = check_plugin_dependencies(manifest.plugin_dir)
+        except Exception as e:  # noqa: BLE001 - un contrôle de confort ne bloque rien
+            logger.debug("dependency check skipped", plugin=manifest.name, error=str(e))
+            continue
+        if report.ok:
+            continue
+        logger.warning(
+            "plugin imports undeclared dependencies",
+            plugin=manifest.name,
+            missing=sorted(report.missing),
+            declared_in=report.sources or "nowhere",
+            hint="declare them in the plugin's pyproject.toml, requirements.txt or "
+            "`dependencies:` (plugin.yaml); check with xcore-plugin-check",
+        )
 
 
 # FIX #8 : fonction module-level (pas de méthode statique) — n'a pas besoin de l'instance

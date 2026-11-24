@@ -158,6 +158,7 @@ class _SimpleManifest:
         self.provides_services = parse_service_contract(
             raw, "provides_services", ServiceProvision
         )
+        self.dependencies = [str(d) for d in raw.get("dependencies") or []]
         self.plugin_dir = plugin_dir
         self.extra = {}
 
