@@ -140,11 +140,12 @@ class ManifestValidator:
             except ValueError as e:
                 raise ManifestError(f"Dépendance invalide: {e}") from e
 
-        return (
-            _build_manifest(raw, mode, resolved_env, requires, plugin_dir),
-            validate_version,
-            __version__,
-        )
+        try:
+            manifest = _build_manifest(raw, mode, resolved_env, requires, plugin_dir)
+        except ValueError as e:
+            # requires_services / provides_services mal formés (#311)
+            raise ManifestError(f"Contrat de services invalide: {e}") from e
+        return manifest, validate_version, __version__
 
     def _read_raw(self, plugin_dir: Path) -> dict:
         for fname, loader in [("plugin.yaml", self._yaml), ("plugin.json", self._json)]:

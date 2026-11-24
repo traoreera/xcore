@@ -1,6 +1,11 @@
 from dataclasses import dataclass, field
 
-from ...sdk.plugin_base import PluginDependency
+from ...sdk.plugin_base import (
+    PluginDependency,
+    ServiceProvision,
+    ServiceRequirement,
+    parse_service_contract,
+)
 
 FORBIDDEN_BUILTINS = {
     "eval",
@@ -147,6 +152,12 @@ class _SimpleManifest:
             dep if isinstance(dep, PluginDependency) else PluginDependency.from_raw(dep)
             for dep in requires
         ]
+        self.requires_services = parse_service_contract(
+            raw, "requires_services", ServiceRequirement
+        )
+        self.provides_services = parse_service_contract(
+            raw, "provides_services", ServiceProvision
+        )
         self.plugin_dir = plugin_dir
         self.extra = {}
 

@@ -36,7 +36,7 @@ from .kernel.api import (
     register_auth_backend,
     unregister_auth_backend,
 )
-from .kernel.api.contract import BasePlugin, TrustedBase
+from .kernel.api.contract import BasePlugin, TrustedBase, error, ok
 from .kernel.api.middleware import Middlewares
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
@@ -67,6 +67,8 @@ __all__ = [
     "HookManager",
     "BasePlugin",
     "TrustedBase",
+    "ok",
+    "error",
     "sign_plugin",
     "verify_plugin",
     "ServiceContainer",
