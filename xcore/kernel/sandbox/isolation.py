@@ -7,13 +7,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..observability import get_logger
+from .codes import RECYCLE_EXIT_CODE  # noqa: F401 - ré-exporté (chemin historique)
 
 logger = get_logger("xcore.sandbox.isolation")
-
-# Code de sortie d'un worker qui se recycle de lui-même parce que son plafond de
-# CPU cumulé est presque atteint (EX_TEMPFAIL) — ce n'est pas un plantage : le
-# SandboxProcessManager le relance sans le compter dans `max_restarts`.
-RECYCLE_EXIT_CODE = 75
 
 
 class DiskQuotaExceeded(Exception):

@@ -8,9 +8,11 @@ ConfigLoader v2 — load xcore.yaml with :
 
 from __future__ import annotations
 
+import dataclasses
 import os
+import types
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from ..kernel.observability import get_logger
 from .helper import _resolve
@@ -20,11 +22,13 @@ from .sections import (
     CORSConfig,
     DatabaseConfig,
     EphemeralConfig,
+    KeysConfig,
     LoggingConfig,
     MarketplaceConfig,
     MetricsConfig,
     MiddlewareConfig,
     ObservabilityConfig,
+    OutboxConfig,
     PluginConfig,
     SchedulerConfig,
     SecurityConfig,
@@ -36,6 +40,72 @@ from .sections import (
 )
 
 logger = get_logger("xcore.config")
+
+# Clés lues ailleurs que dans une dataclass de section — connues, donc pas signalées.
+_EXTRA_KEYS: dict[type, frozenset[str]] = {
+    AppConfig: frozenset({"dotenv"}),  # lu par ConfigLoader._load_dotenv
+}
+
+# Clés acceptées par la dataclass mais que rien ne lit : les signaler, avec le bon endroit.
+_IGNORED_KEYS: dict[tuple[type, str], str] = {
+    (PluginConfig, "tenancy"): "utiliser la section racine `tenancy:`",
+    (XcoreConfig, "raw"): "champ interne",
+}
+
+
+def _section_of(tp: Any) -> tuple[str, type] | None:
+    """Dit si un type de champ porte une section : ("one"|"map", dataclass), sinon None."""
+    if dataclasses.is_dataclass(tp) and isinstance(tp, type):
+        return "one", tp
+    origin = get_origin(tp)
+    if origin in (Union, types.UnionType):
+        for arg in get_args(tp):
+            if found := _section_of(arg):
+                return found
+    elif origin is dict:
+        args = get_args(tp)
+        if len(args) == 2 and dataclasses.is_dataclass(args[1]):
+            return "map", args[1]
+    return None
+
+
+def unknown_config_keys(
+    raw: Any, section: type = XcoreConfig, path: str = ""
+) -> list[tuple[str, str]]:
+    """
+    Liste les clés de configuration que rien ne lira : `[(chemin, raison), ...]`.
+
+    Une clé inconnue était jetée sans un mot : `observability.logging.enabled: false`
+    laissait les logs allumés, `services.scheduler.pickle_protocol` n'a jamais rien fait
+    (#315). Le contrôle se déduit des dataclasses de `sections.py` — un champ ajouté
+    là-bas est connu ici sans autre geste. Les dictionnaires libres (`extensions`,
+    `connect_args`, `snapshot`, `jobs`…) ne sont pas descendus.
+    """
+    if not isinstance(raw, dict):
+        return []
+    hints = get_type_hints(section)
+    extra = _EXTRA_KEYS.get(section, frozenset())
+    found: list[tuple[str, str]] = []
+    for key, value in raw.items():
+        where = f"{path}.{key}" if path else str(key)
+        if reason := _IGNORED_KEYS.get((section, key)):
+            found.append((where, f"ignorée — {reason}"))
+            continue
+        if key in extra:
+            continue
+        if key not in hints:
+            found.append((where, "clé inconnue"))
+            continue
+        nested = _section_of(hints[key])
+        if nested is None:
+            continue
+        kind, cls = nested
+        if kind == "one":
+            found.extend(unknown_config_keys(value, cls, where))
+        elif isinstance(value, dict):
+            for name, item in value.items():
+                found.extend(unknown_config_keys(item, cls, f"{where}.{name}"))
+    return found
 
 
 class ConfigLoader:
@@ -133,7 +203,26 @@ class ConfigLoader:
         return raw
 
     @classmethod
+    def _warn_unknown_keys(cls, raw: dict[str, Any]) -> None:
+        """Dire UNE fois, au chargement, quelles clés écrites ne seront lues par personne."""
+        try:
+            unknown = unknown_config_keys(raw)
+        except (
+            Exception
+        ) as e:  # noqa: BLE001 - un contrôle de confort ne bloque pas le boot
+            logger.debug("unknown-key check skipped", error=str(e))
+            return
+        for where, reason in unknown:
+            logger.warning(
+                "configuration: clé sans effet",
+                key=where,
+                reason=reason,
+                hint="faute de frappe, ou option qui n'existe pas dans cette version",
+            )
+
+    @classmethod
     def _parse(cls, raw: dict[str, Any]) -> XcoreConfig:
+        cls._warn_unknown_keys(raw)
         return XcoreConfig(
             app=cls._parse_app(raw.get("app", {})),
             plugins=cls._parse_plugins(raw.get("plugins", {})),
@@ -198,6 +287,8 @@ class ConfigLoader:
             interval=d.get("interval", 2),
             entry_point=d.get("entry_point", "src/main.py"),
             gc_after_unload=d.get("gc_after_unload", True),
+            gc_freeze_baseline=d.get("gc_freeze_baseline", True),
+            check_dependencies=d.get("check_dependencies", True),
             loop_block_warn_ms=d.get("loop_block_warn_ms", 250),
             snapshot=d.get(
                 "snapshot",
@@ -283,8 +374,30 @@ class ConfigLoader:
         scheduler = SchedulerConfig(
             enabled=s.get("enabled", True),
             backend=s.get("backend", "memory"),
+            url=s.get("url", "redis://localhost:6379/0"),
+            database=s.get("database"),
+            lock_min_hold_seconds=s.get("lock_min_hold_seconds", 1.0),
             timezone=s.get("timezone", "UTC"),
+            misfire_grace_time=s.get("misfire_grace_time", 60),
             jobs=s.get("jobs", []),
+        )
+        k = d.get("keys") or {}
+        keys = KeysConfig(
+            enabled=k.get("enabled", False),
+            master_key=k.get("master_key"),
+            master_keys=k.get("master_keys") or {},
+            store=k.get("store", "file"),
+            path=k.get("path", ".xcore/key_versions.json"),
+            database=k.get("database"),
+            refresh_seconds=k.get("refresh_seconds", 60.0),
+        )
+        o = d.get("outbox") or {}
+        outbox = OutboxConfig(
+            **{
+                name: o[name]
+                for name in OutboxConfig.__dataclass_fields__  # type: ignore[attr-defined]
+                if name in o
+            }
         )
         xworker_raw = d.get("xworker")
         celery_raw = d.get("celery")
@@ -298,6 +411,8 @@ class ConfigLoader:
             databases=dbs,
             cache=cache,
             scheduler=scheduler,
+            keys=keys,
+            outbox=outbox,
             extensions=d.get("extensions", {}),
             xworker=xworker,
             celery=celery,
@@ -310,6 +425,7 @@ class ConfigLoader:
         tr = d.get("tracing", {})
         return ObservabilityConfig(
             logging=LoggingConfig(
+                enabled=lg.get("enabled", True),
                 level=lg.get("level", "INFO"),
                 output=lg.get("output", "text"),
                 format=lg.get(
@@ -329,6 +445,7 @@ class ConfigLoader:
                 backend=tr.get("backend", "noop"),
                 service_name=tr.get("service_name", "xcore"),
                 endpoint=tr.get("endpoint"),
+                max_local_spans=tr.get("max_local_spans", 1000),
             ),
         )
 

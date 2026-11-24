@@ -188,9 +188,75 @@ class SchedulerConfig:
     enabled: bool = True
     backend: str = "memory"  # memory | redis | database
     url: str = "redis://localhost:6379/0"
+    # backend "database" : connexion de `services.databases` qui porte la table des
+    # baux (`xcore_scheduler_leases`). None = la connexion par défaut (`db`).
+    database: str | None = None
+    # backend "database" : durée minimale (s) pendant laquelle un bail reste tenu
+    # après son acquisition, même si le job finit avant — le temps que tous les
+    # processus aient vu le même déclenchement. 0 = libéré dès la fin du job.
+    lock_min_hold_seconds: float = 1.0
     timezone: str = "UTC"
     misfire_grace_time: float = 60
     jobs: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class KeysConfig:
+    """
+    Service `keys` : une clé de chiffrement par organisation, dérivée d'une clé
+    maîtresse (HKDF), avec version et rotation — voir services/keys/service.py.
+
+        services:
+          keys:
+            enabled: true
+            master_key: ${XCORE_MASTER_KEY}     # ≥ 32 octets, jamais en clair dans le dépôt
+            store: database                     # memory | file | database
+    """
+
+    enabled: bool = False
+    # Clé maîtresse n°1. Pour faire tourner la clé maîtresse elle-même, ajouter la
+    # suivante dans `master_keys` ({2: ...}) SANS retirer celle-ci.
+    master_key: str | None = None
+    master_keys: dict[Any, str] = field(default_factory=dict)
+    # Où vivent les versions de clé de chaque organisation (non secret, mais durable).
+    store: str = "file"  # memory | file | database
+    path: str = ".xcore/key_versions.json"  # store: file
+    database: str | None = None  # store: database — None = connexion par défaut (db)
+    # store partagé : relecture périodique, pour voir la rotation d'un autre worker.
+    refresh_seconds: float = 60.0
+
+
+@dataclass
+class OutboxConfig:
+    """
+    Service `outbox` : une intention déposée DANS la transaction de l'appelant, exécutée
+    après le commit, au moins une fois — voir services/outbox/service.py.
+
+        services:
+          outbox:
+            enabled: true        # demande une base SQL dans services.databases
+    """
+
+    enabled: bool = False
+    # Connexion de `services.databases` qui porte la table (None = `db`). Ce doit être
+    # la base où les plugins écrivent : l'intention est validée avec LEUR transaction.
+    database: str | None = None
+    table: str = "xcore_outbox"
+    schema: str | None = None  # PostgreSQL : None = schéma courant de la connexion
+    # false : ce processus dépose mais ne répartit pas (un autre s'en charge).
+    dispatch: bool = True
+    poll_seconds: float = 1.0
+    batch_size: int = 20
+    # Essais avant la file morte, et recul entre deux essais (base × 2^n, plafonné).
+    max_attempts: int = 8
+    backoff_seconds: float = 5.0
+    max_backoff_seconds: float = 3600.0
+    # Durée du bail d'un répartiteur sur une intention : au-delà, un autre la reprend.
+    # À garder au-dessus du timeout de la tâche la plus lente.
+    lease_seconds: float = 300.0
+    # Les intentions envoyées sont purgées après ce délai (0 = jamais) ; leur clé
+    # d'idempotence redevient alors disponible.
+    retention_seconds: float = 604800.0
 
 
 @dataclass
@@ -198,6 +264,8 @@ class ServicesConfig:
     databases: dict[str, DatabaseConfig] = field(default_factory=dict)
     cache: CacheConfig = field(default_factory=CacheConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    keys: KeysConfig = field(default_factory=KeysConfig)
+    outbox: OutboxConfig = field(default_factory=OutboxConfig)
     extensions: dict[str, dict[str, Any]] = field(default_factory=dict)
     xworker: WorkerConfig = field(default_factory=WorkerConfig)
     celery: WorkerConfig | None = None
@@ -276,9 +344,19 @@ class PluginConfig:
     # Force une collecte du GC (différée, regroupée) après un unload/reload de
     # plugin et signale les instances qui survivent — voir _ReleaseWatcher.
     gc_after_unload: bool = True
+    # Gèle (`gc.freeze()`) le tas du framework juste AVANT le chargement des plugins :
+    # la collecte forcée après un unload/reload ne parcourt plus que ce que les plugins
+    # ont alloué (mesuré : 17 ms → 0,02 ms de pause du loop sur 87 k objets, #315).
+    # Les objets des plugins sont créés après le gel, donc le contrôle de libération
+    # (`plugin instance still referenced after unload`) reste entier.
+    gc_freeze_baseline: bool = True
     # Un plugin Trusted dont un pas synchrone (entre deux `await`) dépasse ce
     # seuil en ms est signalé comme gelant le event loop (0 = désactivé).
     loop_block_warn_ms: int = 250
+    # Au chargement, compare les imports de chaque plugin à ses dépendances déclarées
+    # (pyproject.toml, requirements.txt, `dependencies:` du manifeste) et AVERTIT des
+    # manquantes — sans bloquer. Le contrôle bloquant est `xcore-plugin-check`, en CI.
+    check_dependencies: bool = True
     snapshot: dict[str, Any] = field(
         default_factory=lambda: {
             "extensions": [".log", ".pyc", ".html"],
@@ -293,6 +371,9 @@ class PluginConfig:
 
 @dataclass
 class LoggingConfig:
+    # false : aucun handler xcore n'est posé et rien n'est émis (benchmarks, hôte qui
+    # gère lui-même ses logs). Le champ était accepté mais ignoré avant #315.
+    enabled: bool = True
     level: str = "INFO"
     output: str = "text"  # "text" | "json"
     # ignoré si output=text|json

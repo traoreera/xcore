@@ -123,6 +123,70 @@ class PluginDependency:
         raise TypeError(f"Invalid dependency format: {raw}")
 
 
+@dataclass(frozen=True)
+class ServiceRequirement:
+    """
+    Service qu'un plugin ATTEND, vérifié au chargement (#311).
+
+        requires_services:
+          - doctype_registry                # n'importe quelle version
+          - name: doctype_writer
+            version: ">=2"
+    """
+
+    name: str
+    version_constraint: str = "*"
+
+    def accepts(self, version: str | None) -> bool:
+        """Vrai si `version` (celle que le fournisseur déclare) satisfait la contrainte."""
+        if self.version_constraint == "*":
+            return True
+        if version is None:  # fournisseur sans version : ne satisfait qu'un « * »
+            return False
+        return VersionConstraint(self.version_constraint).matches(version)
+
+    @classmethod
+    def from_raw(cls, raw: str | dict) -> "ServiceRequirement":
+        if isinstance(raw, str) and raw.strip():
+            return cls(name=raw.strip())
+        if isinstance(raw, dict) and raw.get("name"):
+            constraint = str(raw.get("version", "*")).strip() or "*"
+            if constraint != "*":
+                VersionConstraint(constraint)  # lève ValueError si illisible
+            return cls(name=str(raw["name"]), version_constraint=constraint)
+        raise ValueError(
+            f"service requis invalide : {raw!r} (attendu : nom, ou name/version)"
+        )
+
+
+@dataclass(frozen=True)
+class ServiceProvision:
+    """
+    Service qu'un plugin FOURNIT, avec la version de son contrat (#311).
+
+        provides_services:
+          - name: doctype_writer
+            version: "2.1"
+    """
+
+    name: str
+    version: str | None = None
+
+    @classmethod
+    def from_raw(cls, raw: str | dict) -> "ServiceProvision":
+        if isinstance(raw, str) and raw.strip():
+            return cls(name=raw.strip())
+        if isinstance(raw, dict) and raw.get("name"):
+            version = raw.get("version")
+            if version is not None:
+                version = str(version).strip()
+                VersionConstraint(version)  # même lecture que côté consommateur
+            return cls(name=str(raw["name"]), version=version or None)
+        raise ValueError(
+            f"service fourni invalide : {raw!r} (attendu : nom, ou name/version)"
+        )
+
+
 class VersionConstraint:
     """Parse et évalue une contrainte de version semver."""
 
@@ -151,6 +215,8 @@ class VersionConstraint:
         """Convertit '1.2.3' en (1, 2, 3)."""
         parts = version.lstrip("vV").split(".")
         nums = [int(p) for p in parts if p.isdigit()]
+        if not nums:
+            raise ValueError(f"version illisible : {version!r}")
         while len(nums) < 3:
             nums.append(0)
         return tuple(nums)
@@ -187,6 +253,18 @@ class VersionConstraint:
         return True
 
 
+def parse_service_contract(raw: dict[str, Any], key: str, kind: type) -> list:
+    """Lit `requires_services` / `provides_services` d'un manifeste brut."""
+    items = raw.get(key) or []
+    if not isinstance(items, list):
+        raise ValueError(f"'{key}' doit être une liste")
+    parsed = [kind.from_raw(item) for item in items]
+    names = [item.name for item in parsed]
+    if duplicates := sorted({n for n in names if names.count(n) > 1}):
+        raise ValueError(f"'{key}' : service déclaré deux fois : {duplicates}")
+    return parsed
+
+
 @dataclass
 class PluginManifest:
     """
@@ -209,6 +287,12 @@ class PluginManifest:
 
     # Dépendances et imports
     requires: list[PluginDependency] = field(default_factory=list)
+    # Contrat de services, vérifié au chargement (voir runtime/service_contracts.py).
+    requires_services: list[ServiceRequirement] = field(default_factory=list)
+    provides_services: list[ServiceProvision] = field(default_factory=list)
+    # Paquets Python dont le plugin a besoin (`cryptography>=42`…), comparés à ses
+    # imports par `xcore-plugin-check` et au chargement (#313).
+    dependencies: list[str] = field(default_factory=list)
     allowed_imports: list[str] = field(default_factory=list)
     permissions: list[dict] = field(default_factory=list)
     # Plugins autorisés à appeler celui-ci via IPC (voir IPCAuthMiddleware) :
@@ -251,6 +335,9 @@ class PluginManifest:
             "entry_point",
             "execution_mode",
             "requires",
+            "requires_services",
+            "provides_services",
+            "dependencies",
             "allowed_imports",
             "permissions",
             "allowed_callers",
@@ -272,6 +359,13 @@ class PluginManifest:
             entry_point=raw.get("entry_point", "src/main.py"),
             execution_mode=mode,
             requires=requires,
+            requires_services=parse_service_contract(
+                raw, "requires_services", ServiceRequirement
+            ),
+            provides_services=parse_service_contract(
+                raw, "provides_services", ServiceProvision
+            ),
+            dependencies=[str(d) for d in raw.get("dependencies") or []],
             allowed_imports=raw.get("allowed_imports", []),
             permissions=raw.get("permissions", []),
             allowed_callers=raw.get("allowed_callers", []),

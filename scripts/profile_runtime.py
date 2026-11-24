@@ -398,16 +398,21 @@ async def cmd_reload(args: argparse.Namespace) -> None:
                 pauses.append((time.perf_counter() - t0) * 1000)
             return min(pauses), statistics.median(pauses)
 
+        # Xcore.boot() gèle le tas du framework AVANT de charger les plugins
+        # (plugins.gc_freeze_baseline, #315) : la collecte forcée après un reload ne
+        # parcourt que ce que les plugins ont alloué. On mesure les deux états.
         low, med = full_gc()
         print(
-            f"full gc.collect() pause (min/median): {low:.1f}/{med:.1f}ms, "
-            f"{len(gc.get_objects())} tracked objects"
+            f"full gc.collect() pause, baseline frozen (min/median): "
+            f"{low:.2f}/{med:.2f}ms, {len(gc.get_objects())} tracked objects, "
+            f"{gc.get_freeze_count()} frozen"
         )
-        # Diagnostic only: freezing AFTER plugins are loaded would hide their
-        # reference cycles from the collector and defeat the release watcher.
-        gc.freeze()
+        gc.unfreeze()
         low, med = full_gc()
-        print(f"after gc.freeze() (min/median): {low:.1f}/{med:.1f}ms")
+        print(
+            f"same, without the freeze (gc_freeze_baseline: false): "
+            f"{low:.1f}/{med:.1f}ms, {len(gc.get_objects())} tracked objects"
+        )
 
         if not args.no_cprofile:
             profiler = cProfile.Profile()
@@ -439,6 +444,13 @@ def cold_import(statement: str, runs: int) -> tuple[int, int, int]:
     return times[0], times[len(times) // 2], rss
 
 
+WORKER_AS_SCRIPT = (
+    "import importlib.util as u;"
+    f"s=u.spec_from_file_location('w', {str(Path(__file__).parent.parent / 'xcore/kernel/sandbox/worker.py')!r});"
+    "m=u.module_from_spec(s);import sys;sys.modules['w']=m;s.loader.exec_module(m)"
+)
+
+
 async def cmd_imports(args: argparse.Namespace) -> None:
     statements = [
         "pass",
@@ -452,12 +464,19 @@ async def cmd_imports(args: argparse.Namespace) -> None:
         "import fastapi, celery.app, sqlalchemy.ext.asyncio",
         "import xcore",
         "import xcore.kernel.sandbox.worker",
+        # What a sandbox worker really pays: worker.py run by FILE, leaf modules only.
+        WORKER_AS_SCRIPT,
     ]
     print(f"cold import, {args.rounds} fresh interpreters each")
     print(f"{'statement':55} {'min ms':>7} {'median':>7} {'RSS MB':>7}")
     for statement in statements:
         low, med, rss = cold_import(statement, args.rounds)
-        print(f"{statement:55} {low:7d} {med:7d} {rss:7d}")
+        label = (
+            "sandbox worker.py (as launched)"
+            if statement is WORKER_AS_SCRIPT
+            else statement
+        )
+        print(f"{label:55} {low:7d} {med:7d} {rss:7d}")
     print(
         "\nTip: python -X importtime -c 'import xcore' 2> importtime.txt "
         "shows the full import tree."
@@ -472,25 +491,65 @@ def rss_mb(pid: int) -> int:
     return 0
 
 
-async def cmd_workers(args: argparse.Namespace) -> None:
-    args.mode = "sandboxed"
+# A sandboxed plugin in its documented form: a plain class, no xcore import.
+PLAIN_SANDBOXED_PLUGIN = """
+class Plugin:
+    async def handle(self, action: str, payload: dict) -> dict:
+        if action == "ping":
+            return {"status": "ok", "pong": True}
+        return {"status": "ok", "data": payload}
+"""
+
+
+def worker_tree(parent: int) -> list[int]:
+    return [
+        int(pid)
+        for pid in subprocess.run(
+            ["pgrep", "-P", str(parent)], capture_output=True, text=True
+        ).stdout.split()
+    ]
+
+
+async def measure_workers(args: argparse.Namespace, style: str) -> None:
     from xcore import Xcore
 
     with workspace() as tmp:
-        app = Xcore(config_path=make_plugins(tmp, args, args.plugins))
+        config = make_plugins(tmp, args, args.plugins)
+        if style == "plain":
+            for i in range(args.plugins):
+                (tmp / "plugins" / f"p{i}" / "src" / "main.py").write_text(
+                    PLAIN_SANDBOXED_PLUGIN
+                )
+        app = Xcore(config_path=config)
         t0 = time.perf_counter()
         await app.boot()
         boot_ms = (time.perf_counter() - t0) * 1000
-        pids = subprocess.run(
-            ["pgrep", "-P", str(os.getpid())], capture_output=True, text=True
-        ).stdout.split()
-        sizes = [rss_mb(int(pid)) for pid in pids]
+        pids = worker_tree(os.getpid())
+        sizes = [rss_mb(pid) for pid in pids]
+        # Cost of ONE restart (what a CPU-ceiling recycle pays): stop + spawn + ready.
+        t0 = time.perf_counter()
+        await app.plugins.reload("p0")
+        restart_ms = (time.perf_counter() - t0) * 1000
         print(
-            f"boot {args.plugins} sandboxed plugins: {boot_ms:.0f}ms; "
-            f"parent RSS={rss_mb(os.getpid())}MB; {len(pids)} workers "
-            f"RSS(MB)={sizes} total={sum(sizes)}MB"
+            f"[{style:5}] boot {args.plugins} sandboxed plugins: {boot_ms:.0f}ms; "
+            f"one restart: {restart_ms:.0f}ms; parent RSS={rss_mb(os.getpid())}MB; "
+            f"{len(pids)} workers RSS(MB)={sizes} total={sum(sizes)}MB"
         )
         await app.shutdown()
+
+
+async def cmd_workers(args: argparse.Namespace) -> None:
+    """RSS and start-up cost of live sandboxed workers, for both plugin styles.
+
+    ``plain`` is the documented form (a class with ``handle``, no xcore import):
+    the worker then loads leaf modules only (#316).  ``xcore`` is a plugin that
+    imports ``xcore.kernel.api.contract``: it pays the whole framework import,
+    whatever the worker itself does.
+    """
+    args.mode = "sandboxed"
+    styles = ["plain", "xcore"] if args.style == "both" else [args.style]
+    for style in styles:
+        await measure_workers(args, style)
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -542,6 +601,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     workers = sub.add_parser("workers", parents=[common], help="sandbox worker RSS")
     workers.add_argument("--plugins", type=int, default=4)
+    workers.add_argument(
+        "--style",
+        choices=["plain", "xcore", "both"],
+        default="both",
+        help="plain: documented sandboxed plugin; xcore: plugin importing xcore",
+    )
     workers.set_defaults(func=cmd_workers)
     return parser
 

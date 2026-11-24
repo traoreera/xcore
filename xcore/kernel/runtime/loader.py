@@ -27,6 +27,7 @@ from ...kernel.observability import get_logger
 from ...kernel.security.validation import ManifestValidator
 from ...registry import PluginStateStore
 from ..api.contract import PluginHandler
+from . import service_contracts as contracts
 from .activator import (
     ActivatorRegistry,
     EphemeralActivator,
@@ -83,6 +84,11 @@ class PluginLoader:
         self._activators.register(ExecutionMode.EPHEMERAL, EphemeralActivator())
 
         self._validator = ManifestValidator()
+
+        # Contrôle des dépendances Python (#313) : manifestes activés en attente de
+        # contrôle, et tâches de contrôle en cours (référencées pour ne pas être collectées).
+        self._pending_dependency_checks: list[Any] = []
+        self._dependency_check_tasks: set[asyncio.Task] = set()
 
         # Table de vérité persistante actif/inactif — survit aux redémarrages.
         # Défaut : <plugins_dir>/../.xcore/plugins_state.json, aucune config requise.
@@ -157,13 +163,40 @@ class PluginLoader:
                 "disabled": disabled,
             }
 
+        # Contrat de services (#311) : refuser AVANT toute activation le plugin dont un
+        # service requis manque ou n'a pas la bonne version. Les services déjà dans le
+        # container (noyau : db, cache, scheduler…) comptent comme présents.
+        providers, refused = contracts.refuse_unsatisfied(
+            manifests, available=self._services.keys()
+        )
+        for name, reason in refused.items():
+            logger.error(
+                "plugin refused, service contract not satisfied",
+                plugin=name,
+                reason=reason,
+            )
+            failed.append(name)
+        manifests = [m for m in manifests if m.name not in refused]
+        # Un fournisseur se charge avant ses consommateurs, même sans `requires`.
+        service_deps = {
+            m.name: contracts.service_dependencies(m, providers) for m in manifests
+        }
+
+        if not manifests:
+            return {
+                "loaded": [],
+                "failed": failed,
+                "skipped": skipped,
+                "disabled": disabled,
+            }
+
         try:
-            ordered = _topo_sort(manifests)
+            ordered = _topo_sort(manifests, service_deps)
         except ValueError as e:
             logger.error("dependency sort error", error=str(e))
             return {
                 "loaded": [],
-                "failed": [m.name for m in manifests],
+                "failed": failed + [m.name for m in manifests],
                 "skipped": skipped,
                 "disabled": disabled,
             }
@@ -194,7 +227,7 @@ class PluginLoader:
                         )
                         deps_ok = False
                         break
-                if deps_ok:
+                if deps_ok and service_deps[m.name] <= resolved:
                     wave.append(m)
 
             if not wave:
@@ -227,7 +260,10 @@ class PluginLoader:
                     if cascade := [
                         m.name
                         for m in remaining
-                        if any(dep.name == name for dep in m.requires)
+                        if (
+                            any(dep.name == name for dep in m.requires)
+                            or name in service_deps[m.name]
+                        )
                         and m.name not in processed
                     ]:
                         logger.error("cascade failure", plugin=name, dependants=cascade)
@@ -239,6 +275,7 @@ class PluginLoader:
 
             remaining = [m for m in remaining if m.name not in processed]
 
+        self._start_dependency_checks()
         logger.info(
             "plugins load summary",
             loaded=len(loaded),
@@ -267,9 +304,125 @@ class PluginLoader:
 
         if not activator:
             raise ValueError(f"No activator found for mode {mode}")
+        self._queue_dependency_check(manifest)
         handler = await activator.activate(manifest, self)
+        try:
+            self._check_provisions(manifest)
+        except contracts.ServiceContractError:
+            await handler.stop()
+            raise
         self._handlers[manifest.name] = handler
         logger.info("plugin activated", plugin=manifest.name, mode=mode.value)
+
+    # ── Dépendances Python (#313) ─────────────────────────────
+
+    def _queue_dependency_check(self, manifest: Any) -> None:
+        if getattr(self._config, "check_dependencies", True) is not False:
+            self._pending_dependency_checks.append(manifest)
+
+    def _start_dependency_checks(self) -> None:
+        """
+        Lance, HORS du chemin de démarrage, le contrôle des plugins qui viennent d'être
+        activés : il dit quels paquets un plugin importe sans les déclarer.
+
+        Différé et dans un thread parce que la première lecture des métadonnées des
+        paquets installés coûte ~350 ms (mesuré) — on ne les ajoute pas au boot. Un
+        avertissement, pas un refus : le paquet est peut-être installé ici, c'est chez le
+        client suivant qu'il manquera. Le contrôle bloquant est celui de la CI de
+        l'auteur (`xcore-plugin-check`).
+        """
+        manifests, self._pending_dependency_checks = self._pending_dependency_checks, []
+        if not manifests:
+            return
+        task = asyncio.create_task(
+            asyncio.to_thread(_report_undeclared_dependencies, manifests)
+        )
+        self._dependency_check_tasks.add(task)
+        task.add_done_callback(self._dependency_check_tasks.discard)
+
+    async def wait_dependency_checks(self, timeout: float | None = None) -> None:
+        """Attend la fin des contrôles de dépendances en cours (tests, arrêt propre)."""
+        if tasks := set(self._dependency_check_tasks):
+            await asyncio.wait(tasks, timeout=timeout)
+
+    # ── Contrat de services (#311) ────────────────────────────
+
+    def _check_provisions(self, manifest: Any) -> None:
+        """Un plugin doit avoir exporté, une fois chargé, ce que son manifeste promet."""
+        if missing := contracts.missing_provisions(manifest, self._services.keys()):
+            raise contracts.ServiceContractError(
+                f"le plugin '{manifest.name}' déclare fournir {missing} "
+                "(provides_services) mais ne l'a pas exporté à la fin de on_load"
+            )
+
+    def _loaded_providers(self) -> dict[str, contracts.Provider]:
+        """`service → fournisseur` pour les plugins actuellement chargés."""
+        manifests = [
+            m
+            for m in (getattr(h, "manifest", None) for h in self._handlers.values())
+            if m is not None
+        ]
+        return contracts.index_providers(manifests)[0]
+
+    def _find_provider_on_disk(self, service: str) -> str | None:
+        """Plugin installé (chargé ou non) dont le manifeste déclare fournir `service`."""
+        for name in self.discover_names():
+            if not self._state_store.is_enabled(name):
+                continue
+            try:
+                manifest, _, _ = self._validator.load_and_validate(
+                    Path(self._config.directory) / name
+                )
+            except (
+                Exception
+            ):  # noqa: BLE001 - un manifeste illisible n'est pas un fournisseur
+                continue
+            if any(p.name == service for p in manifest.provides_services):
+                return manifest.name
+        return None
+
+    async def _ensure_required_services(self, manifest: Any) -> None:
+        """
+        Chargement individuel : charge au besoin les fournisseurs, puis vérifie le contrat.
+        Lève ServiceContractError — le plugin n'est alors pas activé.
+        """
+        for req in getattr(manifest, "requires_services", None) or []:
+            if req.name in self._services or req.name in self._loaded_providers():
+                continue
+            provider = self._find_provider_on_disk(req.name)
+            if provider is not None and provider != manifest.name:
+                logger.info(
+                    "loading service provider",
+                    plugin=manifest.name,
+                    service=req.name,
+                    provider=provider,
+                )
+                await self.load(provider)
+        if reasons := contracts.unmet_requirements(
+            manifest, self._loaded_providers(), available=self._services.keys()
+        ):
+            raise contracts.ServiceContractError(
+                f"Plugin '{manifest.name}' refusé — " + " ; ".join(reasons)
+            )
+
+    def _warn_broken_consumers(self, provider_name: str) -> None:
+        """Après le reload d'un fournisseur : dire quels consommateurs chargés ne suivent plus."""
+        providers = self._loaded_providers()
+        for name, handler in self._handlers.items():
+            manifest = getattr(handler, "manifest", None)
+            if manifest is None or name == provider_name:
+                continue
+            if provider_name not in contracts.service_dependencies(manifest, providers):
+                continue
+            if reasons := contracts.unmet_requirements(
+                manifest, providers, available=self._services.keys()
+            ):
+                logger.error(
+                    "service contract broken by provider reload",
+                    plugin=name,
+                    provider=provider_name,
+                    reason=" ; ".join(reasons),
+                )
 
     # ── Chargement individuel ─────────────────────────────────
 
@@ -299,8 +452,10 @@ class PluginLoader:
                         f"'{dep_version}' does not satisfy constraint '{dep.version_constraint}'"
                     )
 
+        await self._ensure_required_services(manifest)
         await self._activate(manifest)
         self._flush_services([plugin_name])
+        self._start_dependency_checks()
         logger.info("plugin loaded", plugin=plugin_name)
 
     async def reload(self, plugin_name: str) -> None:
@@ -324,6 +479,8 @@ class PluginLoader:
             # Réactivation quoi qu'il arrive (le handler précédent est déjà retiré)
             await self._activate(manifest)
         self._flush_services([plugin_name])
+        self._start_dependency_checks()
+        self._warn_broken_consumers(plugin_name)
 
     async def unload(self, plugin_name: str) -> None:
         if plugin_name not in self._handlers:
@@ -388,6 +545,8 @@ class PluginLoader:
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
         self._handlers.clear()
+        self._pending_dependency_checks.clear()
+        await self.wait_dependency_checks(timeout=2.0)
         logger.info("all plugins unloaded")
 
     def collect_plugin_routers(self) -> list[tuple[str, Any]]:
@@ -424,15 +583,47 @@ class PluginLoader:
         ]
 
 
+def _report_undeclared_dependencies(manifests: list[Any]) -> None:
+    """Exécuté dans un thread : un avertissement par plugin qui importe sans déclarer."""
+    from ..security.dependencies import check_plugin_dependencies
+
+    for manifest in manifests:
+        try:
+            report = check_plugin_dependencies(manifest.plugin_dir)
+        except Exception as e:  # noqa: BLE001 - un contrôle de confort ne bloque rien
+            logger.debug("dependency check skipped", plugin=manifest.name, error=str(e))
+            continue
+        if report.ok:
+            continue
+        logger.warning(
+            "plugin imports undeclared dependencies",
+            plugin=manifest.name,
+            missing=sorted(report.missing),
+            declared_in=report.sources or "nowhere",
+            hint="declare them in the plugin's pyproject.toml, requirements.txt or "
+            "`dependencies:` (plugin.yaml); check with xcore-plugin-check",
+        )
+
+
 # FIX #8 : fonction module-level (pas de méthode statique) — n'a pas besoin de l'instance
-def _topo_sort(manifests: list[Any]) -> list[Any]:
-    """Tri topologique des manifestes selon leurs dépendances (algorithme de Kahn)."""
+def _topo_sort(
+    manifests: list[Any], extra_deps: dict[str, set[str]] | None = None
+) -> list[Any]:
+    """
+    Tri topologique des manifestes selon leurs dépendances (algorithme de Kahn).
+
+    `extra_deps` : dépendances implicites (plugin → fournisseurs de ses services
+    requis, #311), ajoutées à celles de `requires`.
+    """
     manifest_map = {m.name: m for m in manifests}
     resolver = DependencyResolver()
     for m in manifests:
         requires = [
             dep.name if hasattr(dep, "name") else str(dep) for dep in m.requires
         ]
+        for extra in sorted((extra_deps or {}).get(m.name, ())):
+            if extra not in requires:
+                requires.append(extra)
         resolver.add(m.name, requires)
     try:
         ordered_names = resolver.resolve()

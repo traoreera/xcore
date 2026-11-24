@@ -62,10 +62,6 @@ plugins:
     filenames: ["__pycache__", "__init__.py", ".env", ".DS_Store"]
     hidden: true
 
-  tenancy:
-    enabled: true
-    enforce_ipc: False
-
 # ── Services ──────────────────────────────────────────────────
 services:
   # ── Bases de données ────────────────────────────────────────
@@ -88,7 +84,6 @@ services:
     enabled: true
     backend: redis # redis = tâches persistantes, survivent au redémarrage
     timezone: Europe/Paris
-    pickle_protocol: 5
 
     # Jobs déclarés statiquement (optionnel — les plugins peuvent aussi en ajouter)
     #jobs:

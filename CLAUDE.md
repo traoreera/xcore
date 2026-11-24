@@ -56,7 +56,9 @@ xcore/
 │   ├── tenancy/       # middleware.py, services.py (TenantAwareDB/Cache/Scheduler)
 │   └── permissions/   # engine.py
 ├── services/
-│   ├── scheduler/     # service.py — APScheduler + lock Redis distribué
+│   ├── scheduler/     # service.py — APScheduler + lock distribué (Redis, ou lease.py en base)
+│   ├── keys/          # service.py — clé par organisation (HKDF), versions, rotation
+│   ├── outbox/        # service.py — intentions dans la transaction, exécutées après commit
 │   ├── cache/         # service.py + backends/
 │   └── database/      # manager.py + adapters/
 ├── configurations/    # loader.py, sections.py
@@ -251,4 +253,8 @@ Le cache `.venv` est clé sur `poetry.lock` — un changement de dépendances in
 - **Plugins Ephemeral** — chaque instance poolée est un `LifecycleManager(..., pooled=True)` : espace de noms `sys.modules` propre, pas de désinscription du registre à l'unload.
 - **Routes de plugin** — monter/retirer via `Xcore._mount_plugin_router` / `_unmount_plugin_router` (suivi des objets route) ; `app.routes` n'a pas de setter et les `_IncludedRouter` de FastAPI ≥ 0.14x n'ont pas de `.path`.
 - **Budget CPU du sandbox** — `RLIMIT_CPU` est cumulatif : limite souple réarmée par requête dans `worker.py` (`_arm_cpu_budget`), limite dure = plafond de vie du worker (`max_cpu_lifetime_seconds`), recyclage propre via `RECYCLE_EXIT_CODE`. Ne pas reposer une limite unique au démarrage.
+- **Worker sandbox = modules feuilles** — `worker.py` charge `observability/logging.py`, `sandbox/codes.py` et `yamlio.py` par leur FICHIER (`worker._leaf`) pour ne pas exécuter `xcore/__init__.py`. Ces trois modules ne doivent gagner aucun import xcore (gardé par `test_sandbox_worker_imports.py`).
+- **Verrou du scheduler** — `backend: redis` ou `backend: database` (bail en base, `scheduler/lease.py`) ; `memory` n'a AUCUN verrou. Toute échéance se compare sur l'horloge de la base (`sqlexec.NOW_EPOCH`), jamais celle du process.
+- **Clés de config** — un champ ajouté à une dataclass de `sections.py` doit aussi être lu dans `loader.py` ; une clé YAML inconnue est signalée (`unknown_config_keys`).
+- **Services en base du noyau** (baux, versions de clés, outbox) — passer par `services/database/sqlexec.py` (une instruction par transaction, moteur sync ou async), jamais par les sessions des plugins. Dans la transaction d'un APPELANT (outbox.defer), pas d'`IntegrityError` : `ON CONFLICT DO NOTHING` / `INSERT IGNORE`.
 - **Tests d'intégration du reload** — utiliser un vrai `PluginRegistry` + `ServiceContainer` (+ `register_core_service` pour simuler « après boot »), pas des `MagicMock` : les mocks avaient masqué ces bugs.

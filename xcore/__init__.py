@@ -20,6 +20,7 @@ Quickstart:
 from __future__ import annotations
 
 import contextlib
+import gc
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ from .kernel.api import (
     register_auth_backend,
     unregister_auth_backend,
 )
-from .kernel.api.contract import BasePlugin, TrustedBase
+from .kernel.api.contract import BasePlugin, TrustedBase, error, ok
 from .kernel.api.middleware import Middlewares
 from .kernel.events.bus import EventBus
 from .kernel.events.hooks import HookManager
@@ -66,6 +67,8 @@ __all__ = [
     "HookManager",
     "BasePlugin",
     "TrustedBase",
+    "ok",
+    "error",
     "sign_plugin",
     "verify_plugin",
     "ServiceContainer",
@@ -139,6 +142,7 @@ class Xcore:
         self._plugin_routes: dict[str, list[Any]] = {}
 
         self._logger = get_logger("xcore")
+        self._gc_frozen = False
 
     @property
     def server(self):
@@ -241,8 +245,10 @@ class Xcore:
         )
         self.plugins = PluginSupervisor(ctx)
 
+        self._freeze_gc_baseline()
         await self.plugins.boot()
         self.plugins_lists = self.plugins.list_plugins()
+        self._start_outbox()
 
         # Remonte les routes FastAPI après tout reload programmatique
         async def _on_plugin_reloaded(event):
@@ -276,14 +282,57 @@ class Xcore:
         if not self._booted:
             return
         self._logger.info("xcore shutting down")
+        # Le répartiteur de l'outbox appelle des plugins : il s'arrête avant eux, sinon
+        # chaque intention en cours compterait un échec contre un plugin déjà déchargé.
+        outbox = self.services.get_or_none("outbox") if self.services else None
+        if outbox is not None:
+            await outbox.stop()
         if self.plugins:
             await self.plugins.shutdown()
         if self.services:
             await self.services.shutdown()
         if self.tracer:
             self.tracer.shutdown()
+        if self._gc_frozen:
+            # Rend au collecteur ce qui a été gelé : un process qui re-boote (tests,
+            # rechargement à chaud de l'hôte) ne doit pas accumuler des tas gelés.
+            gc.unfreeze()
+            self._gc_frozen = False
         self._booted = False
         self._logger.info("xcore stopped")
+
+    def _start_outbox(self) -> None:
+        """Branche l'outbox sur le superviseur et démarre son répartiteur (#309)."""
+        outbox = self.services.get_or_none("outbox") if self.services else None
+        if outbox is None:
+            return
+        plugins = self.plugins
+
+        async def _call(plugin: str, action: str, payload: dict, tenant_id: str):
+            return await plugins.call(plugin, action, payload, tenant_id=tenant_id)
+
+        outbox.bind(_call)
+        outbox.start()
+
+    def _freeze_gc_baseline(self) -> None:
+        """
+        Gèle le tas du framework avant le chargement des plugins (#315).
+
+        Après un unload/reload, `_ReleaseWatcher` force un `gc.collect()` complet DANS le
+        loop : sa pause est proportionnelle au nombre d'objets suivis, dont l'écrasante
+        majorité (fastapi, pydantic, services…) existe avant le premier plugin et ne
+        mourra jamais. Les déplacer en génération permanente ramène la pause à ce que
+        les plugins ont alloué — mesuré : 17 ms → 0,02 ms sur 87 k objets.
+
+        Le gel se fait AVANT les plugins, jamais après : leurs cycles de références
+        restent visibles du collecteur, donc le contrôle de libération reste entier.
+        """
+        if not getattr(self._config.plugins, "gc_freeze_baseline", True):
+            return
+        gc.collect()
+        gc.freeze()
+        self._gc_frozen = True
+        self._logger.debug("gc baseline frozen", objects=gc.get_freeze_count())
 
     def _mount_plugin_router(
         self, app, plugin_name: str, plugin_router, prefix: str, tags: list[str]

@@ -94,6 +94,12 @@ all = [
     "xcdk>=0.1.0", "xcorecli>=1.1.0", "xcorescanner>=0.1.0",
 ]
 
+# ── Commandes ──────────────────────────────────────────────────────────────────
+# xcore-plugin-check : compare les imports d'un plugin à ses dépendances déclarées
+# (étape de CI chez l'auteur du plugin — code de sortie 1 si une dépendance manque).
+[project.scripts]
+xcore-plugin-check = "xcore.kernel.security.dependencies:main"
+
 # ── Build system ───────────────────────────────────────────────────────────────
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -22,9 +22,39 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from xcore.kernel.observability import get_logger
-from xcore.kernel.observability.logging import _TextFormatter
-from xcore.kernel.sandbox.isolation import RECYCLE_EXIT_CODE
+
+def _leaf(dotted: str):
+    """
+    Charge un module FEUILLE de xcore par son fichier, sans exécuter les `__init__`.
+
+    Importer `xcore.kernel.observability.logging` exécute d'abord `xcore/__init__.py`,
+    puis celui de chaque package traversé : le worker payait fastapi, pydantic et
+    OpenTelemetry (~295 ms et ~48 Mo de RSS par worker, à chaque démarrage ET à chaque
+    recyclage) pour un logger, un formateur et un code de sortie (#316). Les modules
+    dont il a besoin sont des feuilles — bibliothèque standard uniquement — et sont
+    donc chargés directement depuis leur fichier, sous un nom privé.
+
+    Quand xcore est déjà importé (tests, import du worker comme module), on prend
+    simplement le module normal : un seul objet module, des patchs qui portent.
+    """
+    if "xcore" in sys.modules:
+        return importlib.import_module(dotted)
+    name = "_xcore_leaf_" + dotted.replace(".", "_")
+    if name in sys.modules:
+        return sys.modules[name]
+    # worker.py vit dans xcore/kernel/sandbox/ : la racine du dépôt est 3 crans plus haut.
+    path = Path(__file__).resolve().parents[3].joinpath(*dotted.split("."))
+    spec = importlib.util.spec_from_file_location(name, path.with_suffix(".py"))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_logging_leaf = _leaf("xcore.kernel.observability.logging")
+get_logger = _logging_leaf.get_logger
+_TextFormatter = _logging_leaf._TextFormatter
+RECYCLE_EXIT_CODE = _leaf("xcore.kernel.sandbox.codes").RECYCLE_EXIT_CODE
 
 # ContextVar par tâche asyncio — évite les race conditions entre coroutines
 # qui partageraient le même FilesystemGuard (requis pour la sécurité sandbox).
@@ -801,7 +831,7 @@ def _load_manifest(plugin_dir: Path) -> _PluginManifest:
 
 def _parse_manifest_file(fname, manifest_path, manifest: _PluginManifest):
     if fname.endswith(".yaml"):
-        from xcore.kernel import yamlio
+        yamlio = _leaf("xcore.kernel.yamlio")
 
         with open(manifest_path, encoding="utf-8") as f:
             raw = yamlio.safe_load(f) or {}

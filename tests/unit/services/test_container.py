@@ -142,7 +142,7 @@ class TestServiceContainer:
     def test_load_default_providers(self):
         container = ServiceContainer(_make_config())
         container.load_default_providers()
-        assert len(container._providers) == 5
+        assert len(container._providers) == 7  # database, cache, keys, outbox, scheduler, xworker, extensions
 
     @pytest.mark.asyncio
     async def test_health_empty(self):

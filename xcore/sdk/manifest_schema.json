@@ -22,6 +22,47 @@
       "items": { "type": "string" },
       "description": "Liste des plugins dont ce plugin dépend"
     },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string", "examples": ["cryptography>=42", "httpx"] },
+      "description": "Paquets Python dont le plugin a besoin — comparés à ses imports par xcore-plugin-check et au chargement"
+    },
+    "requires_services": {
+      "type": "array",
+      "description": "Services attendus, vérifiés au chargement : le plugin est refusé si l'un manque ou si sa version ne satisfait pas la contrainte",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name":    { "type": "string" },
+              "version": { "type": "string", "examples": [">=2", ">=2.0,<3.0"] }
+            }
+          }
+        ]
+      }
+    },
+    "provides_services": {
+      "type": "array",
+      "description": "Services exportés par ce plugin, avec la version de leur contrat",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name":    { "type": "string" },
+              "version": { "type": "string", "examples": ["2.1"] }
+            }
+          }
+        ]
+      }
+    },
     "allowed_imports": {
       "type": "array",
       "items": { "type": "string" },

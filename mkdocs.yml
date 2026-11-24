@@ -88,6 +88,8 @@ nav:
       - Cache: services/cache.md
       - Scheduler: services/scheduler.md
       - XWorker: services/xworker.md
+      - Keys: services/keys.md
+      - Outbox: services/outbox.md
       - Custom Services: services/custom-services.md
   - Advanced Features:
       - Multi-Tenancy: advanced/multi-tenancy.md

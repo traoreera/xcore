@@ -103,6 +103,7 @@ class XcoreLogger:
         "apikey",
         "access_key",
         "private_key",
+        "master_key",
         "authorization",
         "auth",
         "cookie",
@@ -173,8 +174,13 @@ class XcoreLogger:
 
 def configure_logging(cfg: "LoggingConfig") -> None:
     """Configure le logger racine xcore selon la configuration."""
-    level = getattr(logging, cfg.level.upper(), logging.INFO)
     root = logging.getLogger("xcore")
+    if getattr(cfg, "enabled", True) is False:
+        # Coupé : un niveau au-dessus de CRITICAL, hérité par tous les `xcore.*` (dont le
+        # niveau propre est NOTSET) — `isEnabledFor` répond non avant tout formatage.
+        root.setLevel(logging.CRITICAL + 1)
+        return
+    level = getattr(logging, cfg.level.upper(), logging.INFO)
     root.setLevel(level)
 
     formatter: logging.Formatter
